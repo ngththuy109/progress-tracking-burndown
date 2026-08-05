@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  // Thư mục `test/` KHÔNG nằm trong `tsconfig.json` (project đó chỉ biên dịch
+  // `src/`), nên nếu không có file này thì `tsc --build` bỏ qua toàn bộ bộ golden
+  // dataset và test theo tính chất — cả nghìn dòng mã không được kiểm một chữ nào
+  // mà mọi lệnh vẫn báo xanh. Root `package.json` gọi thẳng project này.
+  "include": ["test/**/*.ts"]
+}

@@ -1,0 +1,30 @@
+{
+  "_how": "TÍNH TAY theo PRD §2.2.6. Project SHOP chỉ khai titlePatterns, mọi mảng khác để rỗng. Quy ước: mảng rỗng nghĩa là \"chưa ghi đè, kế thừa tiếp\". Vậy titlePatterns lấy của project (【{name}】, inherited = false) còn subtaskPatterns, phaseDefinitions, matchRules và signboardColumns đều lấy của bộ Mặc định (inherited = true). fallbackScanFullTitle là cờ đơn chứ không phải mảng nên project khai gì thì thắng — ở đây cả hai đều true nên kết quả là true.",
+  "titlePatterns": [
+    "【{name}】"
+  ],
+  "subtaskPatterns": [
+    "[{project}][{team}][{phase}][{function}]_{task}"
+  ],
+  "phaseCodes": [
+    "DESIGN",
+    "DEV",
+    "TEST"
+  ],
+  "ruleKeywords": [
+    "Design",
+    "開発"
+  ],
+  "taskColumns": [
+    "Create",
+    "BALReview"
+  ],
+  "fallbackScanFullTitle": true,
+  "inherited": {
+    "titlePatterns": false,
+    "subtaskPatterns": true,
+    "phaseDefinitions": true,
+    "matchRules": true,
+    "signboardColumns": true
+  }
+}

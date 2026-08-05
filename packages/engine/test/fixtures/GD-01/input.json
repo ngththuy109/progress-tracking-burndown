@@ -1,0 +1,313 @@
+{
+  "id": "GD-01",
+  "kind": "burndown",
+  "title": "Đường đi lý tưởng: 3 Phase, 10 Sub-task, mỗi ngày làm xong đúng một việc",
+  "asOfDate": "2026-03-13",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Ho_Chi_Minh",
+    "holidays": []
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-03-13T18:30:00+07:00",
+  "snapshotRange": {
+    "from": "2026-03-02",
+    "to": "2026-03-13"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-02",
+      "wbsEndDate": "2026-03-02",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-02T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-02T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-11",
+          "seconds": 28800,
+          "started": "2026-03-02T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-12",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-03",
+      "wbsEndDate": "2026-03-03",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-03T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-03T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-12",
+          "seconds": 28800,
+          "started": "2026-03-03T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-13",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-04",
+      "wbsEndDate": "2026-03-04",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-04T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-04T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-13",
+          "seconds": 28800,
+          "started": "2026-03-04T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-21",
+      "phaseCode": "DEV",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-05",
+      "wbsEndDate": "2026-03-05",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-05T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-05T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-21",
+          "seconds": 28800,
+          "started": "2026-03-05T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-22",
+      "phaseCode": "DEV",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-06",
+      "wbsEndDate": "2026-03-06",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-06T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-06T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-22",
+          "seconds": 28800,
+          "started": "2026-03-06T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-23",
+      "phaseCode": "DEV",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-09",
+      "wbsEndDate": "2026-03-09",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-09T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-09T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-23",
+          "seconds": 28800,
+          "started": "2026-03-09T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-24",
+      "phaseCode": "DEV",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-10",
+      "wbsEndDate": "2026-03-10",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-10T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-10T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-24",
+          "seconds": 28800,
+          "started": "2026-03-10T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-31",
+      "phaseCode": "TEST",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-11",
+      "wbsEndDate": "2026-03-11",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-11T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-11T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-31",
+          "seconds": 28800,
+          "started": "2026-03-11T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-32",
+      "phaseCode": "TEST",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-12",
+      "wbsEndDate": "2026-03-12",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-12T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-12T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-32",
+          "seconds": 28800,
+          "started": "2026-03-12T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-33",
+      "phaseCode": "TEST",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-13",
+      "wbsEndDate": "2026-03-13",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-13T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-13T18:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w-PAY-33",
+          "seconds": 28800,
+          "started": "2026-03-13T09:00:00+07:00"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@app/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "@app/engine": "workspace:*",
+    "@app/jira": "workspace:*",
+    "@app/shared": "workspace:*",
+    "fastify": "^5.2.1",
+    "zod": "^3.24.1"
+  }
+}

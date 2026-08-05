@@ -1,0 +1,120 @@
+{
+  "_how": "TÍNH TAY. Phase UNCLASSIFIED không có Sub-task nào điền wbs_* nên planStart, planEnd và planWorkdays đều null, và nó bị BỎ QUA khi tính đường Kế hoạch — plannedRemainingS của nó là null, không vẽ. Phase DESIGN có 28800s trên 2 ngày làm việc → 14400s/ngày, phần đã cháy 14400 rồi 28800. Đường Kế hoạch của Epic = tổng phạm vi 43200 trừ phần đã cháy: 28800 rồi 14400 — KHÔNG BAO GIỜ CHẠM 0 vì 14400 của UNCLASSIFIED không có mốc nào để cháy dần. Đường Thực tế vẫn vẽ đủ: PAY-11 còn 28800, PAY-12 đã log 7200 nên còn 14400 − 7200 = 7200, tổng 36000 cả hai ngày. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` lấy NGÀY WORKLOG CUỐI CÙNG và kèm cờ `actualEndIsProvisional = true` (PRD §2.7.2). Đó là một PHỎNG ĐOÁN có đánh dấu, không phải null — vì đội quên chuyển trạng thái là chuyện thường, và trả null sẽ làm mất luôn cả mốc kết thúc ước chừng.",
+  "workdays": [
+    "2026-03-02",
+    "2026-03-03"
+  ],
+  "rollups": [
+    {
+      "phaseCode": "DESIGN",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-03",
+      "planWorkdays": 2,
+      "actualStart": null,
+      "actualEnd": null,
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 28800,
+      "subtaskCount": 1,
+      "missingDateCount": 0,
+      "warnings": []
+    },
+    {
+      "phaseCode": "UNCLASSIFIED",
+      "planStart": null,
+      "planEnd": null,
+      "planWorkdays": null,
+      "actualStart": "2026-03-02",
+      "actualEnd": "2026-03-02",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 14400,
+      "subtaskCount": 1,
+      "missingDateCount": 1,
+      "warnings": []
+    }
+  ],
+  "planShifts": [],
+  "actualDates": [
+    {
+      "key": "PAY-11",
+      "actualStart": null,
+      "actualEnd": null
+    },
+    {
+      "key": "PAY-12",
+      "actualStart": "2026-03-02",
+      "actualEnd": "2026-03-02"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotDate": "2026-03-02",
+      "snapshotAtUtc": "2026-03-02T16:59:59.999Z",
+      "plannedRemainingS": 28800,
+      "actualRemainingS": 36000,
+      "totalScopeS": 43200,
+      "totalSpentS": 7200,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 2,
+      "countInProgress": 0,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 28800,
+          "spentS": 0,
+          "originalS": 28800,
+          "countTodo": 1,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 14400
+        },
+        {
+          "phaseCode": "UNCLASSIFIED",
+          "remainingS": 7200,
+          "spentS": 7200,
+          "originalS": 14400,
+          "countTodo": 1,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": null
+        }
+      ]
+    },
+    {
+      "snapshotDate": "2026-03-03",
+      "snapshotAtUtc": "2026-03-03T16:59:59.999Z",
+      "plannedRemainingS": 14400,
+      "actualRemainingS": 36000,
+      "totalScopeS": 43200,
+      "totalSpentS": 7200,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 2,
+      "countInProgress": 0,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 28800,
+          "spentS": 0,
+          "originalS": 28800,
+          "countTodo": 1,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 0
+        },
+        {
+          "phaseCode": "UNCLASSIFIED",
+          "remainingS": 7200,
+          "spentS": 7200,
+          "originalS": 14400,
+          "countTodo": 1,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": null
+        }
+      ]
+    }
+  ]
+}

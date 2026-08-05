@@ -1,0 +1,101 @@
+{
+  "id": "GD-15",
+  "kind": "burndown",
+  "title": "Tổng hợp ngày Phase: một Sub-task thiếu ngày, một cái bị mở lại",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Ho_Chi_Minh",
+    "holidays": []
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-03-16T18:00:00+07:00",
+  "asOfDate": "2026-03-09",
+  "snapshotRange": {
+    "from": "2026-03-02",
+    "to": "2026-03-04"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-02",
+      "wbsEndDate": "2026-03-04",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-02T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-03T17:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 28800,
+          "started": "2026-03-02T09:00:00+07:00"
+        }
+      ]
+    },
+    {
+      "key": "PAY-12",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 14400,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": null,
+      "wbsEndDate": null
+    },
+    {
+      "key": "PAY-13",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-03",
+      "wbsEndDate": "2026-03-06",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-03T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-05T17:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "6",
+          "to": "3",
+          "at": "2026-03-06T09:00:00+07:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "6",
+          "at": "2026-03-09T17:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 14400,
+          "started": "2026-03-03T09:00:00+07:00"
+        }
+      ]
+    }
+  ]
+}

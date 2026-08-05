@@ -1,0 +1,64 @@
+{
+  "id": "GD-07",
+  "kind": "burndown",
+  "title": "Trạng thái đặt tên tiếng Nhật — phân loại theo nhóm, không theo tên",
+  "asOfDate": "2026-03-04",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Tokyo",
+    "holidays": []
+  },
+  "statusIds": {
+    "3": "indeterminate",
+    "10000": "new",
+    "10001": "done",
+    "10003": "indeterminate"
+  },
+  "sourceReadAt": "2026-03-04T18:00:00+09:00",
+  "snapshotRange": {
+    "from": "2026-03-02",
+    "to": "2026-03-04"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+09:00",
+      "wbsStartDate": "2026-03-02",
+      "wbsEndDate": "2026-03-04",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "10000",
+          "to": "3",
+          "at": "2026-03-02T09:00:00+09:00"
+        },
+        {
+          "field": "status",
+          "from": "3",
+          "to": "10003",
+          "at": "2026-03-03T09:00:00+09:00"
+        },
+        {
+          "field": "status",
+          "from": "10003",
+          "to": "10001",
+          "at": "2026-03-04T17:00:00+09:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 14400,
+          "started": "2026-03-02T09:00:00+09:00"
+        },
+        {
+          "id": "w2",
+          "seconds": 14400,
+          "started": "2026-03-03T09:00:00+09:00"
+        }
+      ]
+    }
+  ]
+}

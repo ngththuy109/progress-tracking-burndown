@@ -1,0 +1,160 @@
+{
+  "_how": "TÍNH TAY. Kế hoạch 02/03 → 06/03 = 5 ngày làm việc, 28800/5 = 5760s mỗi ngày. Đường Kế hoạch = 28800 − 5760 × số ngày đã trôi: 23040, 17280, 11520, 5760, 0 — số lẻ, dùng để khẳng định engine KHÔNG làm tròn. Đường Thực tế theo quy tắc 3, cộng dồn worklog theo trường `started`: ngày 02/03 chưa có gì (28800), 03/03 nhận 14400 (còn 14400), 04/03 không có worklog nên giữ nguyên, 05/03 nhận thêm 7200 (còn 7200), 06/03 giữ nguyên. Trạng thái chuyển sang \"đang làm\" từ 03/03. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` lấy NGÀY WORKLOG CUỐI CÙNG và kèm cờ `actualEndIsProvisional = true` (PRD §2.7.2). Đó là một PHỎNG ĐOÁN có đánh dấu, không phải null — vì đội quên chuyển trạng thái là chuyện thường, và trả null sẽ làm mất luôn cả mốc kết thúc ước chừng.",
+  "workdays": [
+    "2026-03-02",
+    "2026-03-03",
+    "2026-03-04",
+    "2026-03-05",
+    "2026-03-06"
+  ],
+  "rollups": [
+    {
+      "phaseCode": "DESIGN",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-06",
+      "planWorkdays": 5,
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-05",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 28800,
+      "subtaskCount": 1,
+      "missingDateCount": 0,
+      "warnings": []
+    }
+  ],
+  "planShifts": [],
+  "actualDates": [
+    {
+      "key": "PAY-11",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-05"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotDate": "2026-03-02",
+      "snapshotAtUtc": "2026-03-02T16:59:59.999Z",
+      "plannedRemainingS": 23040,
+      "actualRemainingS": 28800,
+      "totalScopeS": 28800,
+      "totalSpentS": 0,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 1,
+      "countInProgress": 0,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 28800,
+          "spentS": 0,
+          "originalS": 28800,
+          "countTodo": 1,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 23040
+        }
+      ]
+    },
+    {
+      "snapshotDate": "2026-03-03",
+      "snapshotAtUtc": "2026-03-03T16:59:59.999Z",
+      "plannedRemainingS": 17280,
+      "actualRemainingS": 14400,
+      "totalScopeS": 28800,
+      "totalSpentS": 14400,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 0,
+      "countInProgress": 1,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 14400,
+          "spentS": 14400,
+          "originalS": 28800,
+          "countTodo": 0,
+          "countInProgress": 1,
+          "countDone": 0,
+          "plannedRemainingS": 17280
+        }
+      ]
+    },
+    {
+      "snapshotDate": "2026-03-04",
+      "snapshotAtUtc": "2026-03-04T16:59:59.999Z",
+      "plannedRemainingS": 11520,
+      "actualRemainingS": 14400,
+      "totalScopeS": 28800,
+      "totalSpentS": 14400,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 0,
+      "countInProgress": 1,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 14400,
+          "spentS": 14400,
+          "originalS": 28800,
+          "countTodo": 0,
+          "countInProgress": 1,
+          "countDone": 0,
+          "plannedRemainingS": 11520
+        }
+      ]
+    },
+    {
+      "snapshotDate": "2026-03-05",
+      "snapshotAtUtc": "2026-03-05T16:59:59.999Z",
+      "plannedRemainingS": 5760,
+      "actualRemainingS": 7200,
+      "totalScopeS": 28800,
+      "totalSpentS": 21600,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 0,
+      "countInProgress": 1,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 7200,
+          "spentS": 21600,
+          "originalS": 28800,
+          "countTodo": 0,
+          "countInProgress": 1,
+          "countDone": 0,
+          "plannedRemainingS": 5760
+        }
+      ]
+    },
+    {
+      "snapshotDate": "2026-03-06",
+      "snapshotAtUtc": "2026-03-06T16:59:59.999Z",
+      "plannedRemainingS": 0,
+      "actualRemainingS": 7200,
+      "totalScopeS": 28800,
+      "totalSpentS": 21600,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 0,
+      "countInProgress": 1,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "DESIGN",
+          "remainingS": 7200,
+          "spentS": 21600,
+          "originalS": 28800,
+          "countTodo": 0,
+          "countInProgress": 1,
+          "countDone": 0,
+          "plannedRemainingS": 0
+        }
+      ]
+    }
+  ]
+}

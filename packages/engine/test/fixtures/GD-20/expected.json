@@ -1,0 +1,225 @@
+{
+  "_how": "TÍNH TAY theo cây quyết định PRD §6.2, mốc so sánh là 10/03/2026. Ô 1 đã Done → COMPLETED (bước 1 chặn trước mọi bước khác). Ô 2 chưa tới ngày bắt đầu 12/03 → NYS. Ô 3 bắt đầu đúng ngày 09/03 và chưa quá hạn 12/03 → ON_SCHEDULE. Ô 4 thiếu cả hai ngày kế hoạch → NO_PLAN, không được ép vào NYS hay ON_SCHEDULE. Ô 5 quá ngày bắt đầu 05/03 mà chưa động → DELAY_START. Ô 6 đã quá ngày kết thúc 06/03 → DELAY_END. Ô 7 bắt đầu trễ (08/03 so với 05/03) nhưng chưa quá hạn 12/03 → DELAY_START. Ô 8 gộp COMPLETED (hạng 0) với NYS (hạng 1), lấy hạng xấu nhất → NYS. Ô 9 gộp DELAY_START (hạng 4) với DELAY_END (hạng 5) → DELAY_END. Ngày của ô gộp lấy MIN ngày bắt đầu và MAX ngày kết thúc. Ô 10 không có ticket nào → present = false, KHÁC HẲN NO_PLAN.",
+  "cells": [
+    {
+      "name": "1-COMPLETED",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-02",
+        "planEnd": "2026-03-03",
+        "actualStart": "2026-03-02",
+        "actualEnd": "2026-03-03",
+        "status": "COMPLETED",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-1",
+            "planStart": "2026-03-02",
+            "planEnd": "2026-03-03",
+            "actualStart": "2026-03-02",
+            "actualEnd": "2026-03-03",
+            "status": "COMPLETED"
+          }
+        ]
+      }
+    },
+    {
+      "name": "2-NYS",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-12",
+        "planEnd": "2026-03-13",
+        "actualStart": null,
+        "actualEnd": null,
+        "status": "NYS",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-2",
+            "planStart": "2026-03-12",
+            "planEnd": "2026-03-13",
+            "actualStart": null,
+            "actualEnd": null,
+            "status": "NYS"
+          }
+        ]
+      }
+    },
+    {
+      "name": "3-ON_SCHEDULE",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-09",
+        "planEnd": "2026-03-12",
+        "actualStart": "2026-03-09",
+        "actualEnd": null,
+        "status": "ON_SCHEDULE",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-3",
+            "planStart": "2026-03-09",
+            "planEnd": "2026-03-12",
+            "actualStart": "2026-03-09",
+            "actualEnd": null,
+            "status": "ON_SCHEDULE"
+          }
+        ]
+      }
+    },
+    {
+      "name": "4-NO_PLAN",
+      "cell": {
+        "present": true,
+        "planStart": null,
+        "planEnd": null,
+        "actualStart": "2026-03-05",
+        "actualEnd": null,
+        "status": "NO_PLAN",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-4",
+            "planStart": null,
+            "planEnd": null,
+            "actualStart": "2026-03-05",
+            "actualEnd": null,
+            "status": "NO_PLAN"
+          }
+        ]
+      }
+    },
+    {
+      "name": "5-DELAY_START-chua-bat-dau",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-05",
+        "planEnd": "2026-03-12",
+        "actualStart": null,
+        "actualEnd": null,
+        "status": "DELAY_START",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-5",
+            "planStart": "2026-03-05",
+            "planEnd": "2026-03-12",
+            "actualStart": null,
+            "actualEnd": null,
+            "status": "DELAY_START"
+          }
+        ]
+      }
+    },
+    {
+      "name": "6-DELAY_END",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-02",
+        "planEnd": "2026-03-06",
+        "actualStart": "2026-03-03",
+        "actualEnd": null,
+        "status": "DELAY_END",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-6",
+            "planStart": "2026-03-02",
+            "planEnd": "2026-03-06",
+            "actualStart": "2026-03-03",
+            "actualEnd": null,
+            "status": "DELAY_END"
+          }
+        ]
+      }
+    },
+    {
+      "name": "7-DELAY_START-bat-dau-tre-nhung-con-han",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-05",
+        "planEnd": "2026-03-12",
+        "actualStart": "2026-03-08",
+        "actualEnd": null,
+        "status": "DELAY_START",
+        "ticketCount": 1,
+        "tickets": [
+          {
+            "issueKey": "A-7",
+            "planStart": "2026-03-05",
+            "planEnd": "2026-03-12",
+            "actualStart": "2026-03-08",
+            "actualEnd": null,
+            "status": "DELAY_START"
+          }
+        ]
+      }
+    },
+    {
+      "name": "8-GOP-completed-va-nys",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-02",
+        "planEnd": "2026-03-13",
+        "actualStart": "2026-03-02",
+        "actualEnd": "2026-03-03",
+        "status": "NYS",
+        "ticketCount": 2,
+        "tickets": [
+          {
+            "issueKey": "B-1",
+            "planStart": "2026-03-02",
+            "planEnd": "2026-03-03",
+            "actualStart": "2026-03-02",
+            "actualEnd": "2026-03-03",
+            "status": "COMPLETED"
+          },
+          {
+            "issueKey": "B-2",
+            "planStart": "2026-03-12",
+            "planEnd": "2026-03-13",
+            "actualStart": null,
+            "actualEnd": null,
+            "status": "NYS"
+          }
+        ]
+      }
+    },
+    {
+      "name": "9-GOP-delay-start-va-delay-end",
+      "cell": {
+        "present": true,
+        "planStart": "2026-03-02",
+        "planEnd": "2026-03-12",
+        "actualStart": "2026-03-03",
+        "actualEnd": null,
+        "status": "DELAY_END",
+        "ticketCount": 2,
+        "tickets": [
+          {
+            "issueKey": "C-1",
+            "planStart": "2026-03-05",
+            "planEnd": "2026-03-12",
+            "actualStart": null,
+            "actualEnd": null,
+            "status": "DELAY_START"
+          },
+          {
+            "issueKey": "C-2",
+            "planStart": "2026-03-02",
+            "planEnd": "2026-03-06",
+            "actualStart": "2026-03-03",
+            "actualEnd": null,
+            "status": "DELAY_END"
+          }
+        ]
+      }
+    },
+    {
+      "name": "10-O-TRONG",
+      "cell": {
+        "present": false
+      }
+    }
+  ]
+}

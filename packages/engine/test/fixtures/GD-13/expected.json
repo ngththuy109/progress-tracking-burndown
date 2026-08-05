@@ -1,0 +1,48 @@
+{
+  "_how": "TÍNH TAY theo hai tầng của PRD §2.2. QUAN TRỌNG: mẫu tiêu đề được biên dịch thành regex neo hai đầu (`^...$`), nên nó phải khớp TOÀN BỘ tiêu đề chứ không phải một đoạn bên trong. Vì vậy quy ước là `[Phase] {name}` — chữ \"Phase\" nằm nguyên văn trong ngoặc, phần tên nằm sau. Tầng 1 bóc nhãn, tầng 2 tìm luật khớp với SỐ ƯU TIÊN NHỎ THẮNG TRƯỚC. T-1 chỉ khớp luật \"Design\" (ưu tiên 50). T-2 khớp cả \"Design Review\" (10) lẫn \"Design\" (50) nên luật ưu tiên 10 thắng → TESTING. T-3 khớp mẫu thứ hai, nhãn 開発 → DEV. T-4 dùng ngoặc và chữ toàn giác, sau chuẩn hoá NFKC thành \"[Phase] Design\" nên khớp y như T-1. T-5 không mẫu nào khớp nên bật quét toàn tiêu đề, tìm thấy 開発 → DEV; vì không qua mẫu nào nên matchedPattern lẫn extractedName đều null. T-6 bóc được nhãn \"Release\" nhưng không luật nào nhận → UNCLASSIFIED, winningKeyword null.",
+  "tasks": [
+    {
+      "key": "T-1",
+      "phaseCode": "DESIGN",
+      "matchedPattern": "[Phase] {name}",
+      "extractedName": "Design",
+      "winningKeyword": "Design"
+    },
+    {
+      "key": "T-2",
+      "phaseCode": "TESTING",
+      "matchedPattern": "[Phase] {name}",
+      "extractedName": "Design Review",
+      "winningKeyword": "Design Review"
+    },
+    {
+      "key": "T-3",
+      "phaseCode": "DEV",
+      "matchedPattern": "【{name}】",
+      "extractedName": "開発",
+      "winningKeyword": "開発"
+    },
+    {
+      "key": "T-4",
+      "phaseCode": "DESIGN",
+      "matchedPattern": "[Phase] {name}",
+      "extractedName": "Design",
+      "winningKeyword": "Design"
+    },
+    {
+      "key": "T-5",
+      "phaseCode": "DEV",
+      "matchedPattern": null,
+      "extractedName": null,
+      "winningKeyword": "開発"
+    },
+    {
+      "key": "T-6",
+      "phaseCode": "UNCLASSIFIED",
+      "matchedPattern": "[Phase] {name}",
+      "extractedName": "Release",
+      "winningKeyword": null
+    }
+  ],
+  "subtasks": []
+}

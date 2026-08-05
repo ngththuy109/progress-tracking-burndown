@@ -1,0 +1,80 @@
+{
+  "_how": "TÍNH TAY theo định dạng [Project][Team][Phase][FunctionName]_TaskName. S-1 là ca cơ bản. S-2 có gạch dưới trong tên Function nhưng ngoặc vuông đã tự phân tách nên không mơ hồ. S-3 dùng ngoặc toàn giác, chuẩn hoá NFKC xong là khớp. S-4 và S-5 khác hoa/thường và toàn giác/nửa giác so với S-1, nhưng functionKey của cả ba đều là \"login\" nên chúng GỘP THÀNH MỘT HÀNG trên Signboard. S-6 không có ngoặc nào nên UNPARSED, mọi trường bóc ra đều null. S-7 khớp định dạng nhưng TaskName \"Deploy\" không nằm trong 5 cột đã cấu hình nên taskType = null và trạng thái là UNKNOWN_TASK_TYPE — KHÔNG tự tạo cột mới. S-8 có [Phase] trong tiêu đề là \"Dev\" trong khi Task cha thuộc DESIGN, nên lấy Phase của Task cha và ghi cảnh báo PHASE_MISMATCH. phaseCode của MỌI dòng đều là DESIGN vì luôn lấy từ Task cha. GHI CHÚ: S-6 KHÔNG sinh cảnh báo nào. `NO_SUBTASK_PATTERN` là cảnh báo mức CẤU HÌNH (không có mẫu nào dùng được), không phải cảnh báo cho từng tiêu đề. Với một tiêu đề lẻ đặt sai, chính trạng thái `UNPARSED` đã là tín hiệu; đẩy thêm một cảnh báo cho mỗi Sub-task sẽ làm ngập log khi cả trăm cái cùng sai một kiểu.",
+  "tasks": [],
+  "subtasks": [
+    {
+      "key": "S-1",
+      "parseStatus": "OK",
+      "functionName": "Login",
+      "functionKey": "login",
+      "taskType": "Create",
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-2",
+      "parseStatus": "OK",
+      "functionName": "Login_Form",
+      "functionKey": "login_form",
+      "taskType": "BALReview",
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-3",
+      "parseStatus": "OK",
+      "functionName": "決済",
+      "functionKey": "決済",
+      "taskType": "JMReview",
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-4",
+      "parseStatus": "OK",
+      "functionName": "login",
+      "functionKey": "login",
+      "taskType": "Create",
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-5",
+      "parseStatus": "OK",
+      "functionName": "Login",
+      "functionKey": "login",
+      "taskType": "Create",
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-6",
+      "parseStatus": "UNPARSED",
+      "functionName": null,
+      "functionKey": null,
+      "taskType": null,
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-7",
+      "parseStatus": "UNKNOWN_TASK_TYPE",
+      "functionName": "Login",
+      "functionKey": "login",
+      "taskType": null,
+      "phaseCode": "DESIGN",
+      "warningCodes": []
+    },
+    {
+      "key": "S-8",
+      "parseStatus": "OK",
+      "functionName": "Login",
+      "functionKey": "login",
+      "taskType": "Create",
+      "phaseCode": "DESIGN",
+      "warningCodes": [
+        "PHASE_MISMATCH"
+      ]
+    }
+  ]
+}

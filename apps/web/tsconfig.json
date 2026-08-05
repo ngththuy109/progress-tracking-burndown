@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    // `vite/client` khai kiểu cho `import.meta.env` và cho phép `import './x.css'`.
+    "types": ["node", "vite/client"]
+  },
+  // Có cả `vite.config.ts` và `e2e/`: hai chỗ này cũng là mã nguồn, không kiểm
+  // thì một selector sai kiểu chỉ lộ ra lúc chạy Playwright.
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "e2e/**/*.ts"]
+}

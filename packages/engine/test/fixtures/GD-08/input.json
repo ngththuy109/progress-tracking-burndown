@@ -1,0 +1,36 @@
+{
+  "id": "GD-08",
+  "kind": "burndown",
+  "title": "Epic vắt qua Tết Nguyên đán — ngày nghỉ bị loại khỏi đường Kế hoạch",
+  "asOfDate": "2026-02-24",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Ho_Chi_Minh",
+    "holidays": [
+      "2026-02-17",
+      "2026-02-18",
+      "2026-02-19",
+      "2026-02-20"
+    ]
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-02-24T18:00:00+07:00",
+  "snapshotRange": {
+    "from": "2026-02-16",
+    "to": "2026-02-24"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-02-16T01:00:00+07:00",
+      "wbsStartDate": "2026-02-16",
+      "wbsEndDate": "2026-02-24"
+    }
+  ]
+}

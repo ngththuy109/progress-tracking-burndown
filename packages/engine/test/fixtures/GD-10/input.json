@@ -1,0 +1,52 @@
+{
+  "id": "GD-10",
+  "kind": "burndown",
+  "title": "Ước lượng còn lại bị xoá trắng — rơi đúng xuống quy tắc 3",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Ho_Chi_Minh",
+    "holidays": []
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-03-16T18:00:00+07:00",
+  "asOfDate": "2026-03-04",
+  "snapshotRange": {
+    "from": "2026-03-02",
+    "to": "2026-03-04"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-02",
+      "wbsEndDate": "2026-03-04",
+      "changelog": [
+        {
+          "field": "timeestimate",
+          "from": null,
+          "to": "18000",
+          "at": "2026-03-02T10:00:00+07:00"
+        },
+        {
+          "field": "timeestimate",
+          "from": "18000",
+          "to": null,
+          "at": "2026-03-03T10:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 7200,
+          "started": "2026-03-02T09:00:00+07:00"
+        }
+      ]
+    }
+  ]
+}

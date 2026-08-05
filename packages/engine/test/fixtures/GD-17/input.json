@@ -1,0 +1,46 @@
+{
+  "id": "GD-17",
+  "kind": "burndown",
+  "title": "Cả một Phase thiếu ngày kế hoạch — không vẽ đường Kế hoạch, không đoán bừa",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Ho_Chi_Minh",
+    "holidays": []
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-03-16T18:00:00+07:00",
+  "asOfDate": "2026-03-03",
+  "snapshotRange": {
+    "from": "2026-03-02",
+    "to": "2026-03-03"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-02",
+      "wbsEndDate": "2026-03-03"
+    },
+    {
+      "key": "PAY-12",
+      "phaseCode": "UNCLASSIFIED",
+      "originalEstimateSeconds": 14400,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": null,
+      "wbsEndDate": null,
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 7200,
+          "started": "2026-03-02T09:00:00+07:00"
+        }
+      ]
+    }
+  ]
+}

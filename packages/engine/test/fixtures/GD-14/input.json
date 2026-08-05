@@ -1,0 +1,43 @@
+{
+  "id": "GD-14",
+  "kind": "inherit",
+  "title": "Project ghi đè mẫu tiêu đề — ba phần kế thừa độc lập nhau",
+  "asOfDate": "2026-03-02",
+  "projectKey": "SHOP",
+  "globalVersion": 7,
+  "projectVersion": 2,
+  "globalConfig": {
+    "fallbackScanFullTitle": true,
+    "titlePatterns": [
+      "[{name}]"
+    ],
+    "subtaskPatterns": [
+      "[{project}][{team}][{phase}][{function}]_{task}"
+    ],
+    "phaseCodes": [
+      "DESIGN",
+      "DEV",
+      "TEST"
+    ],
+    "ruleKeywords": [
+      {
+        "keyword": "Design",
+        "phaseCode": "DESIGN"
+      },
+      {
+        "keyword": "開発",
+        "phaseCode": "DEV"
+      }
+    ],
+    "taskColumns": [
+      "Create",
+      "BALReview"
+    ]
+  },
+  "projectConfig": {
+    "projectKey": "SHOP",
+    "titlePatterns": [
+      "【{name}】"
+    ]
+  }
+}

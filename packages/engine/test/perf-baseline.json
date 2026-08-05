@@ -1,0 +1,11 @@
+{
+  "_note": "Ngưỡng hiệu năng của GD-09 (500 Sub-task, 5000 worklog). Đây là NGƯỠNG, không phải số đo — số đo in ra khi chạy test. Nới ngưỡng phải kèm lý do trong PR: engine chậm đi gấp đôi mà không ai biết là cách chắc chắn nhất để tới ngày job đêm chạy quá 4 tiếng.",
+  "fixtureId": "GD-09",
+  "subtaskCount": 500,
+  "worklogCount": 5000,
+  "maxDurationMs": 5000,
+  "maxHeapGrowthMb": 512,
+  "measuredOn": "2026-08-04",
+  "measuredDurationMs": 62,
+  "measuredHeapGrowthMb": 2.3
+}

@@ -1,0 +1,83 @@
+{
+  "id": "GD-19",
+  "kind": "parse",
+  "title": "Phân tách tiêu đề Sub-task: toàn giác, gạch dưới trong tên Function, Phase lệch",
+  "asOfDate": "2026-03-02",
+  "config": {
+    "titlePatterns": [
+      "[{name}]"
+    ],
+    "subtaskPatterns": [
+      "[{project}][{team}][{phase}][{function}]_{task}"
+    ],
+    "fallbackScanFullTitle": true,
+    "phaseCodes": [
+      "DESIGN",
+      "DEV"
+    ],
+    "rules": [
+      {
+        "keyword": "Design",
+        "matchMode": "CONTAINS",
+        "phaseCode": "DESIGN",
+        "matchPriority": 50
+      },
+      {
+        "keyword": "Dev",
+        "matchMode": "CONTAINS",
+        "phaseCode": "DEV",
+        "matchPriority": 50
+      }
+    ],
+    "taskColumns": [
+      "Create",
+      "BALReview",
+      "FixCommentBAL",
+      "JMReview",
+      "FixCommentJM"
+    ]
+  },
+  "tasks": [],
+  "subtasks": [
+    {
+      "key": "S-1",
+      "title": "[PAY][TeamA][Design][Login]_Create",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-2",
+      "title": "[PAY][TeamA][Design][Login_Form]_BALReview",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-3",
+      "title": "［PAY］［TeamA］［Design］［決済］_JMReview",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-4",
+      "title": "[PAY][TeamA][Design][login]_Create",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-5",
+      "title": "[PAY][TeamA][Design][Ｌｏｇｉｎ]_Create",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-6",
+      "title": "決済画面を作る",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-7",
+      "title": "[PAY][TeamA][Design][Login]_Deploy",
+      "parentPhaseCode": "DESIGN"
+    },
+    {
+      "key": "S-8",
+      "title": "[PAY][TeamA][Dev][Login]_Create",
+      "parentPhaseCode": "DESIGN"
+    }
+  ]
+}

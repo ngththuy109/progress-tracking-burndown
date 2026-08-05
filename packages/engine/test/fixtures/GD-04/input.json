@@ -1,0 +1,51 @@
+{
+  "id": "GD-04",
+  "kind": "burndown",
+  "title": "Log giờ lùi ngày — snapshot của những ngày đã qua được sửa lại đúng",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "Asia/Ho_Chi_Minh",
+    "holidays": []
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-03-16T18:00:00+07:00",
+  "asOfDate": "2026-03-06",
+  "snapshotRange": {
+    "from": "2026-03-02",
+    "to": "2026-03-06"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-02T01:00:00+07:00",
+      "wbsStartDate": "2026-03-02",
+      "wbsEndDate": "2026-03-06",
+      "changelog": [
+        {
+          "field": "status",
+          "from": "1",
+          "to": "3",
+          "at": "2026-03-03T09:00:00+07:00"
+        }
+      ],
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 14400,
+          "started": "2026-03-03T09:00:00+07:00"
+        },
+        {
+          "id": "w2",
+          "seconds": 7200,
+          "started": "2026-03-05T09:00:00+07:00"
+        }
+      ]
+    }
+  ]
+}

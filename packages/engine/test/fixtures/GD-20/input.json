@@ -1,0 +1,145 @@
+{
+  "id": "GD-20",
+  "kind": "signboard",
+  "title": "Cây quyết định Signboard: đủ 6 trạng thái, 2 ca gộp ô và 1 ô trống",
+  "asOfDate": "2026-03-10",
+  "cells": [
+    {
+      "name": "1-COMPLETED",
+      "tickets": [
+        {
+          "issueKey": "A-1",
+          "statusCategory": "done",
+          "planStart": "2026-03-02",
+          "planEnd": "2026-03-03",
+          "actualStart": "2026-03-02",
+          "actualEnd": "2026-03-03"
+        }
+      ]
+    },
+    {
+      "name": "2-NYS",
+      "tickets": [
+        {
+          "issueKey": "A-2",
+          "statusCategory": "new",
+          "planStart": "2026-03-12",
+          "planEnd": "2026-03-13",
+          "actualStart": null,
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "3-ON_SCHEDULE",
+      "tickets": [
+        {
+          "issueKey": "A-3",
+          "statusCategory": "indeterminate",
+          "planStart": "2026-03-09",
+          "planEnd": "2026-03-12",
+          "actualStart": "2026-03-09",
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "4-NO_PLAN",
+      "tickets": [
+        {
+          "issueKey": "A-4",
+          "statusCategory": "indeterminate",
+          "planStart": null,
+          "planEnd": null,
+          "actualStart": "2026-03-05",
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "5-DELAY_START-chua-bat-dau",
+      "tickets": [
+        {
+          "issueKey": "A-5",
+          "statusCategory": "new",
+          "planStart": "2026-03-05",
+          "planEnd": "2026-03-12",
+          "actualStart": null,
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "6-DELAY_END",
+      "tickets": [
+        {
+          "issueKey": "A-6",
+          "statusCategory": "indeterminate",
+          "planStart": "2026-03-02",
+          "planEnd": "2026-03-06",
+          "actualStart": "2026-03-03",
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "7-DELAY_START-bat-dau-tre-nhung-con-han",
+      "tickets": [
+        {
+          "issueKey": "A-7",
+          "statusCategory": "indeterminate",
+          "planStart": "2026-03-05",
+          "planEnd": "2026-03-12",
+          "actualStart": "2026-03-08",
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "8-GOP-completed-va-nys",
+      "tickets": [
+        {
+          "issueKey": "B-1",
+          "statusCategory": "done",
+          "planStart": "2026-03-02",
+          "planEnd": "2026-03-03",
+          "actualStart": "2026-03-02",
+          "actualEnd": "2026-03-03"
+        },
+        {
+          "issueKey": "B-2",
+          "statusCategory": "new",
+          "planStart": "2026-03-12",
+          "planEnd": "2026-03-13",
+          "actualStart": null,
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "9-GOP-delay-start-va-delay-end",
+      "tickets": [
+        {
+          "issueKey": "C-1",
+          "statusCategory": "new",
+          "planStart": "2026-03-05",
+          "planEnd": "2026-03-12",
+          "actualStart": null,
+          "actualEnd": null
+        },
+        {
+          "issueKey": "C-2",
+          "statusCategory": "indeterminate",
+          "planStart": "2026-03-02",
+          "planEnd": "2026-03-06",
+          "actualStart": "2026-03-03",
+          "actualEnd": null
+        }
+      ]
+    },
+    {
+      "name": "10-O-TRONG",
+      "tickets": []
+    }
+  ]
+}

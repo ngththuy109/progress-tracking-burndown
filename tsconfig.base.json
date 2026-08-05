@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true,
+
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@app/shared": ["packages/shared/src/index.ts"],
+      "@app/shared/*": ["packages/shared/src/*"],
+      "@app/engine": ["packages/engine/src/index.ts"],
+      "@app/engine/*": ["packages/engine/src/*"],
+      "@app/db": ["packages/db/src/index.ts"],
+      "@app/db/*": ["packages/db/src/*"],
+      "@app/jira": ["packages/jira/src/index.ts"],
+      "@app/jira/*": ["packages/jira/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist"]
+}

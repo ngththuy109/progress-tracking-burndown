@@ -1,0 +1,23 @@
+# Ánh xạ custom field chứa ngày kế hoạch của Sub-task — PRD §2.8
+#
+# Mã custom field KHÁC NHAU Ở MỖI JIRA, nên tuyệt đối không viết cứng trong mã
+# nguồn. Tra mã thật bằng:
+#     GET https://<site>.atlassian.net/rest/api/3/field
+# rồi tìm field có `name` là "wbs_start_date" / "wbs_end_date".
+
+fieldMapping:
+  wbsStartDate: customfield_10100 # tên hiển thị trên Jira: wbs_start_date
+  wbsEndDate: customfield_10101 # tên hiển thị trên Jira: wbs_end_date
+
+autoDetect:
+  # Bật thì hệ thống tự dò mã field theo tên lúc khởi động, rồi ĐỐI CHIẾU với
+  # giá trị khai ở trên. Lệch nhau → ghi cảnh báo, ưu tiên giá trị trong file.
+  enabled: true
+  startDateNames:
+    - wbs_start_date
+    - WBS Start Date
+    - 開始日
+  endDateNames:
+    - wbs_end_date
+    - WBS End Date
+    - 終了日

@@ -1,0 +1,38 @@
+{
+  "id": "GD-12",
+  "kind": "burndown",
+  "title": "Vắt qua ngày đổi giờ mùa hè — mốc chốt sổ không lệch một giờ",
+  "asOfDate": "2026-03-10",
+  "epicKey": "PAY-1",
+  "calendar": {
+    "timezone": "America/New_York",
+    "holidays": []
+  },
+  "statusIds": {
+    "1": "new",
+    "3": "indeterminate",
+    "6": "done"
+  },
+  "sourceReadAt": "2026-03-10T18:00:00-04:00",
+  "snapshotRange": {
+    "from": "2026-03-05",
+    "to": "2026-03-10"
+  },
+  "subtasks": [
+    {
+      "key": "PAY-11",
+      "phaseCode": "DESIGN",
+      "originalEstimateSeconds": 28800,
+      "createdAt": "2026-03-05T01:00:00-05:00",
+      "wbsStartDate": "2026-03-05",
+      "wbsEndDate": "2026-03-10",
+      "worklogs": [
+        {
+          "id": "w1",
+          "seconds": 3600,
+          "started": "2026-03-09T09:00:00-04:00"
+        }
+      ]
+    }
+  ]
+}

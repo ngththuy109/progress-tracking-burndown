@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  test:
+    runs-on: ubuntu-latest
+
+    # Máy dev có thể chưa có PostgreSQL nên nhóm test ràng buộc DB tự bỏ qua ở
+    # local. CI LUÔN có service này, nên ở đây chúng chạy đầy đủ — đó là chỗ
+    # thật sự kiểm chứng CHECK constraint và partial index.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: burndown
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/burndown?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm db:migrate
+      - run: pnpm test
+
+      # Nhóm test ràng buộc DB PHẢI chạy trong CI, không được lặng lẽ bỏ qua.
+      # Nếu DATABASE_URL hỏng thì test skip hết mà CI vẫn xanh — bước này chặn.
+      - name: Nhóm test ràng buộc DB phải thật sự chạy
+        run: |
+          out=$(pnpm test 2>&1)
+          echo "$out"
+          if echo "$out" | grep -q "chưa có DATABASE_URL"; then
+            echo "::error::Nhóm test ràng buộc DB bị bỏ qua trong CI — kiểm tra DATABASE_URL"
+            exit 1
+          fi
+
+      # Ngưỡng 10 giây tồn tại để dev thật sự chạy test thường xuyên
+      # (CONVENTIONS.md C-12). Vượt ngưỡng là CI đỏ, không phải cảnh báo.
+      - name: test:engine phải chạy dưới 10 giây
+        run: |
+          start=$(date +%s)
+          pnpm test:engine
+          elapsed=$(( $(date +%s) - start ))
+          echo "test:engine mất ${elapsed}s"
+          if [ "$elapsed" -gt 10 ]; then
+            echo "::error::test:engine mất ${elapsed}s, vượt ngưỡng 10s (CONVENTIONS.md C-12)"
+            exit 1
+          fi

@@ -1,0 +1,142 @@
+# Bắt đầu với dự án
+
+**Ai đọc file này:** lập trình viên vừa vào dự án, ngày đầu tiên.
+
+**Mục tiêu:** từ máy trắng tới `pnpm dev` chạy được, trong khoảng một giờ.
+
+---
+
+## 1. Cài đặt
+
+| Cần gì | Phiên bản | Kiểm bằng |
+|---|---|---|
+| Node.js | ≥ 20.11 | `node -v` |
+| pnpm | 9.x | `pnpm -v` |
+| PostgreSQL | ≥ 15 | `psql --version` |
+| Redis | ≥ 7 | `redis-server --version` |
+
+```bash
+git clone <repo>
+cd ProgressTracking
+pnpm install
+npx playwright install chromium     # trình duyệt cho test E2E, ~300MB
+```
+
+## 2. Biến môi trường
+
+```bash
+cp .env.example .env
+```
+
+Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đủ cả năm, không bắt chạy đi chạy lại:
+
+| Biến | Lấy ở đâu |
+|---|---|
+| `DATABASE_URL` | PostgreSQL cục bộ, ví dụ `postgres://postgres:postgres@localhost:5432/burndown` |
+| `REDIS_URL` | `redis://localhost:6379` |
+| `JIRA_BASE_URL` | `https://<công-ty>.atlassian.net` |
+| `JIRA_EMAIL` | Email tài khoản Jira |
+| `JIRA_API_TOKEN` | https://id.atlassian.com/manage-profile/security/api-tokens |
+
+> **Chỉ cần Jira thật khi muốn đồng bộ dữ liệu thật.** Toàn bộ test chạy được mà không cần Jira, PostgreSQL hay Redis — xem mục 5.
+
+## 3. Dựng database
+
+```bash
+pnpm db:migrate          # chạy migration
+pnpm db:generate         # sinh Prisma Client
+```
+
+## 4. Chạy
+
+```bash
+pnpm dev                 # chạy song song api + worker + web
+```
+
+| Ứng dụng | Cổng | Ghi chú |
+|---|---|---|
+| Web | 5180 | **Cố ý không dùng 5173** — đó là cổng mặc định của Vite mà mọi dự án khác đều nhắm vào |
+| API | 3000 | |
+| E2E | 5199 | Cổng riêng, để chạy test không phải tắt dev server |
+
+## 5. Chạy test
+
+```bash
+pnpm test                # toàn bộ (không cần hạ tầng)
+pnpm test:engine         # chỉ engine, PHẢI dưới 10 giây
+pnpm test:coverage       # độ phủ engine, ngưỡng 90%
+pnpm e2e                 # Playwright, tự bật web server
+pnpm typecheck && pnpm lint
+```
+
+**Vì sao test chạy được mà không cần hạ tầng.** Mọi thứ bên ngoài đi qua **cổng** (interface); tầng service chỉ nhìn thấy cổng, còn bộ chuyển đổi biết Prisma/Redis/Jira thì nằm riêng trong `adapters/`. Test dùng bản giả trong bộ nhớ.
+
+Một test cần PostgreSQL thật thì tự bỏ qua kèm lý do rõ ràng, không giả vờ xanh.
+
+---
+
+## 6. Bốn package và ranh giới giữa chúng
+
+```
+packages/shared   ← kiểu dữ liệu + schema zod. KHÔNG phụ thuộc ai.
+packages/engine   ← toàn bộ logic nghiệp vụ, THUẦN TÍNH TOÁN.
+packages/db       ← Prisma, repository.
+packages/jira     ← client gọi Jira, CHỈ ĐỌC.
+
+apps/api          ← REST API. Chỉ điều phối.
+apps/worker       ← job nền. Nơi DUY NHẤT gọi Jira.
+apps/web          ← giao diện. Chỉ import `shared`.
+```
+
+### Hai hàng rào có lint chặn
+
+Đây là phần quan trọng nhất của mục này. Hai luật dưới đây **không phải trang trí**; chúng có test riêng ở [tools/arch-tests](../tools/arch-tests/guardrails.test.ts) kiểm chính hàng rào.
+
+**1. `packages/engine` KHÔNG được import `@app/db` hoặc `@app/jira`.**
+
+Engine chứa logic được khoá bằng 20 golden dataset. Nếu nó phụ thuộc db hay jira thì muốn chạy test phải dựng PostgreSQL và Jira sandbox — bộ test từ vài giây thành vài phút, và **sẽ không ai chạy nó nữa**.
+
+**2. `packages/engine` KHÔNG được đọc đồng hồ.**
+
+Không `new Date()`, không `Date.now()`, không `DateTime.now()`. Hàm cần "hôm nay" phải nhận qua tham số `asOfDate`.
+
+Trạng thái Signboard phụ thuộc hôm nay là ngày nào. Test không đóng băng đồng hồ sẽ **xanh hôm nay và đỏ tuần sau** — loại lỗi tốn thời gian nhất.
+
+### `apps/web` chỉ có một cửa ra ngoài
+
+`apps/web/src/api/` là nơi **duy nhất** được gọi `fetch`. Component nhận dữ liệu qua hook.
+
+Lý do: mọi màn hình đều phải xử lý ba trạng thái giống nhau (đang tải / lỗi / rỗng). Để component tự gọi thì tới màn hình thứ ba mỗi chỗ sẽ xử lý lỗi một kiểu.
+
+---
+
+## 7. Đọc gì trước
+
+| Thứ tự | Tài liệu | Vì sao |
+|---|---|---|
+| 1 | [PRD](./PRD_Burndown_Engine.md) mục 1 và 2 | Hiểu bài toán trước khi đọc code |
+| 2 | [tasks/README.md](./tasks/README.md) | 34 card, sơ đồ phụ thuộc, và **hai mục "Điều rút ra"** |
+| 3 | [tasks/CONVENTIONS.md](./tasks/CONVENTIONS.md) | 14 quy ước bắt buộc |
+| 4 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Cấu trúc thư mục và quy tắc phụ thuộc |
+| 5 | `packages/engine/test/fixtures/GD-01/` | Bộ dữ liệu dễ đọc nhất; hiểu nó là hiểu engine làm gì |
+
+**Đọc kỹ hai mục "Điều rút ra".** Chúng ghi lại những lỗi đã thật sự xảy ra trong dự án này, phần lớn là **lỗi im lặng** — mọi lệnh báo xanh trong khi có thứ đang hỏng.
+
+---
+
+## 8. Quy trình một card
+
+1. Đọc card trong `docs/tasks/`, đọc **cả** `prd_refs` trong phần đầu file.
+2. Đổi `status` thành `in_progress`, điền `owner` và `started_at`.
+3. **Không đụng file ngoài `touches`.** Cần thêm thì dừng lại, báo, cập nhật card trước.
+4. Viết test **trước hoặc song song**, không viết sau.
+5. Xong: `status: review`, điền `finished_at`, ghi mục *Đã làm gì* — nêu rõ **chỗ nào làm khác card và vì sao**.
+6. Qua checklist **C-14** trong CONVENTIONS.md.
+
+---
+
+## 9. Ba điều dễ vấp trong tuần đầu
+
+1. **`pnpm typecheck` không tự động phủ hết.** Project `noEmit` không nằm trong `tsc --build`, nên `apps/web` và `packages/engine/test/` được gọi riêng trong script `typecheck` của root. Thêm project mới thì phải nối vào đó — nếu không, cả một app không được kiểm dòng nào mà mọi lệnh vẫn xanh.
+2. **Cổng E2E là 5199, không phải 5173.** Playwright **luôn tự bật** máy chủ riêng và không bao giờ mượn cổng đang mở — đã từng chạy nhầm trên app của một dự án khác trên cùng máy.
+3. **Trong `packages/engine`, mọi giá trị thời lượng là GIÂY.** Chỉ đổi sang giờ ở đúng biên trả về của API. Đổi ở nhiều chỗ thì sẽ có ngày hai chỗ làm tròn khác nhau và tổng không khớp.

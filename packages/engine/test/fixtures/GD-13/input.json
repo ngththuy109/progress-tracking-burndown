@@ -1,0 +1,69 @@
+{
+  "id": "GD-13",
+  "kind": "parse",
+  "title": "Nhiều mẫu tiêu đề, xung đột thứ tự ưu tiên, chuẩn hoá toàn giác NFKC",
+  "asOfDate": "2026-03-02",
+  "config": {
+    "titlePatterns": [
+      "[Phase] {name}",
+      "【{name}】"
+    ],
+    "subtaskPatterns": [
+      "[{project}][{team}][{phase}][{function}]_{task}"
+    ],
+    "fallbackScanFullTitle": true,
+    "phaseCodes": [
+      "DESIGN",
+      "TESTING",
+      "DEV"
+    ],
+    "rules": [
+      {
+        "keyword": "Design Review",
+        "matchMode": "CONTAINS",
+        "phaseCode": "TESTING",
+        "matchPriority": 10
+      },
+      {
+        "keyword": "Design",
+        "matchMode": "CONTAINS",
+        "phaseCode": "DESIGN",
+        "matchPriority": 50
+      },
+      {
+        "keyword": "開発",
+        "matchMode": "CONTAINS",
+        "phaseCode": "DEV",
+        "matchPriority": 50
+      }
+    ],
+    "taskColumns": []
+  },
+  "tasks": [
+    {
+      "key": "T-1",
+      "title": "[Phase] Design"
+    },
+    {
+      "key": "T-2",
+      "title": "[Phase] Design Review"
+    },
+    {
+      "key": "T-3",
+      "title": "【開発】"
+    },
+    {
+      "key": "T-4",
+      "title": "［Phase］ Ｄｅｓｉｇｎ"
+    },
+    {
+      "key": "T-5",
+      "title": "決済画面の開発作業"
+    },
+    {
+      "key": "T-6",
+      "title": "[Phase] Release"
+    }
+  ],
+  "subtasks": []
+}

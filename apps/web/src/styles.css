@@ -1,0 +1,625 @@
+/*
+ * Kiểu dáng chung.
+ *
+ * Sáu biến `--tone-*` bên dưới ứng đúng sáu trạng thái Signboard ở PRD §6.3.
+ * Đặt sẵn ở đây để bảng Signboard (GĐ 4) khỏi tự bịa thêm màu — cùng một trạng
+ * thái phải cùng một màu ở mọi màn hình.
+ */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e2e5ea;
+  --text: #1c2024;
+  --text-muted: #6b7280;
+  --accent: #2563eb;
+
+  /* Completed */
+  --tone-success: #16a34a;
+  --tone-success-bg: #eaf7ee;
+  /* OnSchedule */
+  --tone-info: #2563eb;
+  --tone-info-bg: #e8effd;
+  /* Delay Start */
+  --tone-warning: #b45309;
+  --tone-warning-bg: #fdf1e0;
+  /* Delay End */
+  --tone-danger: #dc2626;
+  --tone-danger-bg: #fdeaea;
+  /* NYS */
+  --tone-neutral: #4b5563;
+  --tone-neutral-bg: #eef0f3;
+  /* NoPlan */
+  --tone-muted: #7c3aed;
+  --tone-muted-bg: #f1ebfd;
+
+  --radius: 8px;
+  --gap: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, 'Segoe UI', 'Noto Sans', 'Noto Sans JP', sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.92em;
+  background: #eef0f3;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* --- Khung ------------------------------------------------------------- */
+
+.app {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+}
+
+/* Người dùng bàn phím bấm Tab lần đầu là gặp liên kết này — không phải Tab qua
+   cả bốn mục điều hướng ở mọi trang. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 8px;
+  top: 8px;
+  z-index: 10;
+  background: var(--surface);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 2px solid var(--accent);
+}
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 20px 12px;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  padding: 0 8px 20px;
+}
+.sidebar__brand-mark {
+  font-size: 20px;
+}
+
+.nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.nav__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+.nav__link:hover {
+  background: #f0f2f5;
+}
+.nav__link--active {
+  background: var(--tone-info-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+}
+.topbar__title {
+  margin: 0;
+  font-size: 18px;
+}
+.topbar__summary {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+}
+
+.main {
+  padding: 24px;
+  min-width: 0;
+}
+
+.stack {
+  display: grid;
+  gap: var(--gap);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.panel__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+/* --- Ba trạng thái ------------------------------------------------------ */
+
+.state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+.state--error {
+  border-color: var(--tone-danger);
+  background: var(--tone-danger-bg);
+}
+.state--empty {
+  text-align: center;
+}
+.state__icon {
+  font-size: 32px;
+}
+.state__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.state__description {
+  margin: 0;
+  color: var(--text-muted);
+}
+.state__label {
+  color: var(--text-muted);
+}
+.state__issues {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+.state__path {
+  background: #ffffff;
+}
+.state__code {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+}
+.state__action {
+  margin-top: 16px;
+}
+.state__technical {
+  margin-top: 16px;
+  color: var(--text-muted);
+}
+.state__technical pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 8px 0 0;
+}
+
+.skeleton {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.skeleton__bar {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #eceef1, #f6f7f9, #eceef1);
+  background-size: 200% 100%;
+  animation: skeleton-slide 1.2s linear infinite;
+}
+@keyframes skeleton-slide {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+/* Người bật "giảm chuyển động" trong hệ điều hành có thể bị chóng mặt vì hiệu
+   ứng chạy liên tục. Tắt hẳn thay vì làm chậm lại. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__bar {
+    animation: none;
+  }
+}
+
+/* --- Thành phần nhỏ ----------------------------------------------------- */
+
+.button {
+  font: inherit;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.badge--neutral {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral);
+}
+.badge--info {
+  background: var(--tone-info-bg);
+  color: var(--tone-info);
+}
+.badge--success {
+  background: var(--tone-success-bg);
+  color: var(--tone-success);
+}
+.badge--warning {
+  background: var(--tone-warning-bg);
+  color: var(--tone-warning);
+}
+.badge--danger {
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger);
+}
+.badge--muted {
+  background: var(--tone-muted-bg);
+  color: var(--tone-muted);
+}
+
+/* --- Màn hình cấu hình Phase -------------------------------------------- */
+
+.panel__hint {
+  margin: -6px 0 12px;
+  color: var(--text-muted);
+}
+
+.scope,
+.statusbar,
+.actions,
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.statusbar {
+  justify-content: space-between;
+}
+.actions {
+  justify-content: flex-end;
+}
+.actions--sticky {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.tab {
+  font: inherit;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.tab--active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rows {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.row__order {
+  min-width: 34px;
+}
+
+.move {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.move__grip {
+  color: var(--text-muted);
+  cursor: default;
+  padding-right: 2px;
+}
+
+.input {
+  font: inherit;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  min-width: 0;
+}
+.input--wide {
+  flex: 1 1 240px;
+}
+.input--code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  width: 150px;
+}
+.input--number {
+  width: 84px;
+}
+.input--color {
+  width: 44px;
+  padding: 2px;
+}
+.input:disabled {
+  background: #f2f3f5;
+  color: var(--text-muted);
+}
+
+.button--icon {
+  padding: 4px 8px;
+}
+.button--danger {
+  background: var(--tone-danger);
+  border-color: var(--tone-danger);
+  color: #ffffff;
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.check,
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.field {
+  flex-wrap: wrap;
+}
+
+.inherit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--tone-neutral-bg);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.inherit__text {
+  color: var(--text-muted);
+}
+
+.issues {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  flex-basis: 100%;
+}
+.issues__item {
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.issues__item--error {
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger);
+}
+.issues__item--warning {
+  background: var(--tone-warning-bg);
+  color: var(--tone-warning);
+}
+
+.notice {
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 0;
+}
+.notice--ok {
+  background: var(--tone-success-bg);
+  color: var(--tone-success);
+}
+.notice--error {
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger);
+}
+.notice--warning {
+  background: var(--tone-warning-bg);
+  color: var(--tone-warning);
+  border: 1px solid var(--tone-warning);
+}
+
+/* Một lựa chọn trong nhóm nút chọn: ô tròn canh theo DÒNG ĐẦU của phần chữ, không
+   canh giữa — phần mô tả dài hai dòng sẽ đẩy ô tròn xuống lửng lơ. */
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+.choice input {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+fieldset.field {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px 12px;
+}
+fieldset.field > legend {
+  padding: 0 6px;
+  color: var(--text-muted);
+}
+
+.confirm {
+  background: var(--tone-warning-bg);
+  border: 1px solid var(--tone-warning);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+.confirm--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.preview__summary {
+  font-size: 15px;
+}
+
+/* --- Bảng --------------------------------------------------------------- */
+
+/* Bảng Signboard sẽ rất rộng (một cột cho mỗi loại task). Cho cuộn ngang TRONG
+   khung này, đừng để cả trang cuộn ngang. */
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table__caption {
+  text-align: left;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+}
+.table__th,
+.table__td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.table__th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.table__th--right,
+.table__td--right {
+  text-align: right;
+}
+.table__th--center,
+.table__td--center {
+  text-align: center;
+}
+.table__sort {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+
+/* --- Bảng Signboard ------------------------------------------------------ */
+
+.signboard__sticky {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+}
+
+.cell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  white-space: nowrap;
+}
+.cell__dates {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.cell__count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.cell--empty {
+  color: var(--border);
+}
+.cell--dimmed {
+  color: var(--border);
+}
+
+/* `NO_PLAN` có KẺ SỌC + biểu tượng ⚠, không chỉ đổi màu — người mù màu và bản
+   in đen trắng vẫn phải phân biệt được. */
+.cell--no-plan {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    var(--tone-muted-bg) 4px,
+    var(--tone-muted-bg) 8px
+  );
+  padding: 2px 4px;
+  border-radius: 4px;
+}

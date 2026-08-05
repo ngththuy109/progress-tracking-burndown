@@ -1,0 +1,2709 @@
+{
+  "_how": "TÍNH TAY, không cần liệt kê 500 dòng vì dữ liệu đều tăm tắp. Mỗi Phase có 100 Sub-task × 3600s = 360000s; 5 Phase = 1.800.000s. Kế hoạch 02/03 → 06/03 = 5 ngày làm việc → mỗi Phase cháy 360000/5 = 72000s/ngày. Ngày 02/03: đã cháy 5 × 72000 = 360000 → Kế hoạch 1.440.000; chưa log giờ nào nên Thực tế còn nguyên 1.800.000. Ngày 03/03: đã cháy 5 × 144000 = 720000 → Kế hoạch 1.080.000; mỗi Sub-task log đủ 10 × 360 = 3600s bằng đúng ước lượng nên quy tắc 3 cho 0 → Thực tế 0. Ngày thực tế bắt đầu của cả 500 cái đều là 03/03 vì đó là ngày worklog đầu tiên. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` lấy NGÀY WORKLOG CUỐI CÙNG và kèm cờ `actualEndIsProvisional = true` (PRD §2.7.2). Đó là một PHỎNG ĐOÁN có đánh dấu, không phải null — vì đội quên chuyển trạng thái là chuyện thường, và trả null sẽ làm mất luôn cả mốc kết thúc ước chừng.",
+  "workdays": [
+    "2026-03-02",
+    "2026-03-03"
+  ],
+  "rollups": [
+    {
+      "phaseCode": "P1",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-06",
+      "planWorkdays": 5,
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 360000,
+      "subtaskCount": 100,
+      "missingDateCount": 0,
+      "warnings": []
+    },
+    {
+      "phaseCode": "P2",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-06",
+      "planWorkdays": 5,
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 360000,
+      "subtaskCount": 100,
+      "missingDateCount": 0,
+      "warnings": []
+    },
+    {
+      "phaseCode": "P3",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-06",
+      "planWorkdays": 5,
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 360000,
+      "subtaskCount": 100,
+      "missingDateCount": 0,
+      "warnings": []
+    },
+    {
+      "phaseCode": "P4",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-06",
+      "planWorkdays": 5,
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 360000,
+      "subtaskCount": 100,
+      "missingDateCount": 0,
+      "warnings": []
+    },
+    {
+      "phaseCode": "P5",
+      "planStart": "2026-03-02",
+      "planEnd": "2026-03-06",
+      "planWorkdays": 5,
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03",
+      "actualEndIsProvisional": true,
+      "totalOriginalS": 360000,
+      "subtaskCount": 100,
+      "missingDateCount": 0,
+      "warnings": []
+    }
+  ],
+  "planShifts": [],
+  "actualDates": [
+    {
+      "key": "PERF-1",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-2",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-3",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-4",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-5",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-6",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-7",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-8",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-9",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-10",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-11",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-12",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-13",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-14",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-15",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-16",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-17",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-18",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-19",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-20",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-21",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-22",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-23",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-24",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-25",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-26",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-27",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-28",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-29",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-30",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-31",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-32",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-33",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-34",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-35",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-36",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-37",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-38",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-39",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-40",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-41",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-42",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-43",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-44",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-45",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-46",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-47",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-48",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-49",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-50",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-51",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-52",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-53",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-54",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-55",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-56",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-57",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-58",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-59",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-60",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-61",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-62",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-63",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-64",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-65",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-66",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-67",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-68",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-69",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-70",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-71",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-72",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-73",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-74",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-75",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-76",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-77",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-78",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-79",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-80",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-81",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-82",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-83",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-84",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-85",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-86",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-87",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-88",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-89",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-90",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-91",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-92",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-93",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-94",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-95",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-96",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-97",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-98",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-99",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-100",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-101",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-102",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-103",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-104",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-105",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-106",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-107",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-108",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-109",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-110",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-111",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-112",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-113",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-114",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-115",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-116",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-117",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-118",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-119",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-120",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-121",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-122",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-123",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-124",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-125",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-126",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-127",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-128",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-129",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-130",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-131",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-132",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-133",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-134",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-135",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-136",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-137",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-138",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-139",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-140",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-141",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-142",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-143",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-144",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-145",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-146",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-147",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-148",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-149",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-150",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-151",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-152",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-153",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-154",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-155",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-156",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-157",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-158",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-159",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-160",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-161",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-162",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-163",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-164",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-165",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-166",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-167",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-168",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-169",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-170",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-171",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-172",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-173",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-174",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-175",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-176",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-177",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-178",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-179",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-180",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-181",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-182",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-183",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-184",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-185",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-186",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-187",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-188",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-189",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-190",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-191",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-192",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-193",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-194",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-195",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-196",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-197",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-198",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-199",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-200",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-201",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-202",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-203",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-204",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-205",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-206",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-207",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-208",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-209",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-210",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-211",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-212",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-213",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-214",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-215",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-216",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-217",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-218",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-219",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-220",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-221",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-222",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-223",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-224",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-225",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-226",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-227",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-228",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-229",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-230",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-231",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-232",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-233",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-234",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-235",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-236",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-237",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-238",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-239",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-240",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-241",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-242",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-243",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-244",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-245",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-246",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-247",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-248",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-249",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-250",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-251",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-252",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-253",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-254",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-255",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-256",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-257",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-258",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-259",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-260",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-261",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-262",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-263",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-264",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-265",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-266",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-267",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-268",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-269",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-270",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-271",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-272",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-273",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-274",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-275",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-276",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-277",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-278",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-279",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-280",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-281",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-282",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-283",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-284",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-285",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-286",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-287",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-288",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-289",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-290",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-291",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-292",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-293",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-294",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-295",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-296",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-297",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-298",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-299",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-300",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-301",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-302",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-303",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-304",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-305",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-306",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-307",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-308",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-309",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-310",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-311",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-312",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-313",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-314",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-315",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-316",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-317",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-318",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-319",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-320",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-321",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-322",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-323",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-324",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-325",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-326",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-327",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-328",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-329",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-330",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-331",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-332",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-333",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-334",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-335",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-336",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-337",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-338",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-339",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-340",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-341",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-342",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-343",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-344",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-345",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-346",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-347",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-348",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-349",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-350",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-351",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-352",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-353",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-354",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-355",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-356",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-357",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-358",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-359",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-360",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-361",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-362",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-363",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-364",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-365",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-366",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-367",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-368",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-369",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-370",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-371",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-372",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-373",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-374",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-375",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-376",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-377",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-378",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-379",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-380",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-381",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-382",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-383",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-384",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-385",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-386",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-387",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-388",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-389",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-390",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-391",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-392",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-393",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-394",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-395",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-396",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-397",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-398",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-399",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-400",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-401",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-402",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-403",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-404",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-405",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-406",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-407",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-408",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-409",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-410",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-411",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-412",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-413",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-414",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-415",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-416",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-417",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-418",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-419",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-420",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-421",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-422",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-423",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-424",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-425",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-426",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-427",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-428",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-429",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-430",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-431",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-432",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-433",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-434",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-435",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-436",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-437",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-438",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-439",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-440",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-441",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-442",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-443",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-444",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-445",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-446",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-447",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-448",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-449",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-450",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-451",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-452",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-453",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-454",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-455",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-456",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-457",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-458",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-459",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-460",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-461",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-462",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-463",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-464",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-465",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-466",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-467",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-468",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-469",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-470",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-471",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-472",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-473",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-474",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-475",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-476",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-477",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-478",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-479",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-480",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-481",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-482",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-483",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-484",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-485",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-486",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-487",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-488",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-489",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-490",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-491",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-492",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-493",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-494",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-495",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-496",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-497",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-498",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-499",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    },
+    {
+      "key": "PERF-500",
+      "actualStart": "2026-03-03",
+      "actualEnd": "2026-03-03"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotDate": "2026-03-02",
+      "snapshotAtUtc": "2026-03-02T16:59:59.999Z",
+      "plannedRemainingS": 1440000,
+      "actualRemainingS": 1800000,
+      "totalScopeS": 1800000,
+      "totalSpentS": 0,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 500,
+      "countInProgress": 0,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "P1",
+          "remainingS": 360000,
+          "spentS": 0,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 288000
+        },
+        {
+          "phaseCode": "P2",
+          "remainingS": 360000,
+          "spentS": 0,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 288000
+        },
+        {
+          "phaseCode": "P3",
+          "remainingS": 360000,
+          "spentS": 0,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 288000
+        },
+        {
+          "phaseCode": "P4",
+          "remainingS": 360000,
+          "spentS": 0,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 288000
+        },
+        {
+          "phaseCode": "P5",
+          "remainingS": 360000,
+          "spentS": 0,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 288000
+        }
+      ]
+    },
+    {
+      "snapshotDate": "2026-03-03",
+      "snapshotAtUtc": "2026-03-03T16:59:59.999Z",
+      "plannedRemainingS": 1080000,
+      "actualRemainingS": 0,
+      "totalScopeS": 1800000,
+      "totalSpentS": 1800000,
+      "scopeAddedS": 0,
+      "scopeRemovedS": 0,
+      "countTodo": 500,
+      "countInProgress": 0,
+      "countDone": 0,
+      "perPhase": [
+        {
+          "phaseCode": "P1",
+          "remainingS": 0,
+          "spentS": 360000,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 216000
+        },
+        {
+          "phaseCode": "P2",
+          "remainingS": 0,
+          "spentS": 360000,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 216000
+        },
+        {
+          "phaseCode": "P3",
+          "remainingS": 0,
+          "spentS": 360000,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 216000
+        },
+        {
+          "phaseCode": "P4",
+          "remainingS": 0,
+          "spentS": 360000,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 216000
+        },
+        {
+          "phaseCode": "P5",
+          "remainingS": 0,
+          "spentS": 360000,
+          "originalS": 360000,
+          "countTodo": 100,
+          "countInProgress": 0,
+          "countDone": 0,
+          "plannedRemainingS": 216000
+        }
+      ]
+    }
+  ]
+}

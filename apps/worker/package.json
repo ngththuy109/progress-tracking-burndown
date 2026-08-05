@@ -1,0 +1,22 @@
+{
+  "name": "@app/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "@app/engine": "workspace:*",
+    "@app/jira": "workspace:*",
+    "@app/shared": "workspace:*",
+    "bullmq": "^5.34.10",
+    "ioredis": "^5.4.2",
+    "luxon": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.4.2"
+  }
+}

@@ -1,0 +1,145 @@
+import { useState } from 'react';
+import { RECOMPUTE_SECONDS_PER_EPIC, type AddEpicsRequest } from '@app/shared';
+import { useAddEpics, useValidateEpics } from '../../api/use-epics.js';
+import { Badge, ErrorState } from '../../components/ui/index.js';
+
+/**
+ * Thêm Epic — LUÔN qua hai bước: Kiểm tra rồi mới Thêm.
+ *
+ * Thêm thẳng là cách nhanh nhất để PM thêm nhầm 20 Epic. Backfill 20 Epic mất
+ * hàng chục phút và không có nút huỷ, nên bước `/validate` tồn tại chính vì lý
+ * do đó (PRD §2.6).
+ */
+
+export const DEFAULT_TIMEZONE = 'Asia/Tokyo';
+export const DEFAULT_CALENDAR_ID = 'default';
+
+/** Tách theo dấu phẩy, xuống dòng hoặc khoảng trắng — PM hay dán từ Excel. */
+export function parseKeys(raw: string): string[] {
+  return [...new Set(raw.split(/[\s,;]+/).map((k) => k.trim()).filter((k) => k !== ''))];
+}
+
+/**
+ * Ước tính thời gian dựng lịch sử.
+ *
+ * Là ƯỚC TÍNH THÔ, không phải cam kết. Cố ý làm tròn lên phút và không bao giờ
+ * hiển thị dạng đồng hồ đếm ngược — đếm ngược sẽ sai và làm mất lòng tin vào
+ * mọi con số khác trên màn hình.
+ */
+export function estimateMinutes(epicCount: number): number {
+  return Math.max(1, Math.ceil((epicCount * RECOMPUTE_SECONDS_PER_EPIC) / 60));
+}
+
+export function AddEpicsPanel() {
+  const [raw, setRaw] = useState('');
+  const validate = useValidateEpics();
+  const add = useAddEpics();
+
+  const keys = parseKeys(raw);
+  const results = validate.data?.results ?? [];
+  const addable = results.filter((r) => r.valid).map((r) => r.key);
+
+  const confirm = (): void => {
+    const body: AddEpicsRequest = {
+      keys: addable,
+      timezone: DEFAULT_TIMEZONE,
+      calendarId: DEFAULT_CALENDAR_ID,
+      note: null,
+    };
+    add.mutate(body);
+  };
+
+  return (
+    <section className="panel" aria-labelledby="add-epics-title">
+      <h2 className="panel__title" id="add-epics-title">
+        Track new Epics
+      </h2>
+
+      <label className="field">
+        <span>Paste Epic keys, separated by commas or new lines</span>
+        <input
+          className="input input--wide"
+          value={raw}
+          placeholder="PAY-100, PAY-200"
+          aria-label="Epic keys"
+          onChange={(e) => setRaw(e.target.value)}
+        />
+      </label>
+
+      <div className="actions">
+        <button
+          type="button"
+          className="button button--primary"
+          disabled={keys.length === 0 || validate.isPending}
+          onClick={() => validate.mutate(keys)}
+        >
+          {validate.isPending ? 'Checking…' : `Check ${keys.length} keys`}
+        </button>
+      </div>
+
+      {validate.isError && <ErrorState error={validate.error} title="Could not check these keys" />}
+
+      {validate.isSuccess && (
+        <>
+          <ul className="rows" aria-label="Check results">
+            {results.map((r) => (
+              <li className="row" key={r.key}>
+                <code>{r.key}</code>
+                {r.valid ? (
+                  <>
+                    <Badge tone="success">can add</Badge>
+                    <span>{r.displayName}</span>
+                    <span className="muted">
+                      {r.subtaskCount} sub-tasks · {r.totalEstimateHours}h
+                    </span>
+                    {/* Cảnh báo KHÁC HẲN lý do từ chối: vẫn thêm được, nhưng PM
+                        cần biết trước để khỏi ngạc nhiên khi biểu đồ thiếu dữ liệu. */}
+                    {r.warnings.includes('NO_CHILD_TASK') && (
+                      <Badge tone="warning">no child tasks yet</Badge>
+                    )}
+                    {r.warnings.includes('MISSING_WBS_DATES') && (
+                      <Badge tone="warning">{r.missingWbsDateCount} sub-tasks missing dates</Badge>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Badge tone="danger">cannot add</Badge>
+                    {/* Hiện LÝ DO ĐỌC ĐƯỢC, không hiện mã lỗi. */}
+                    <span>{r.message}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {addable.length > 0 && (
+            <div className="notice notice--ok" role="status">
+              Will add <strong>{addable.length} Epics</strong>. Rebuilding their history takes{' '}
+              <strong>about {estimateMinutes(addable.length)} minutes</strong>. Until it finishes they
+              show as <em>building history</em> and have no chart yet.
+            </div>
+          )}
+
+          <div className="actions">
+            <button
+              type="button"
+              className="button button--primary"
+              disabled={addable.length === 0 || add.isPending}
+              onClick={confirm}
+            >
+              {add.isPending ? 'Adding…' : `Add ${addable.length} Epics`}
+            </button>
+          </div>
+        </>
+      )}
+
+      {add.isError && <ErrorState error={add.error} title="Could not add Epics" />}
+      {add.isSuccess && (
+        <p className="notice notice--ok" role="status">
+          Added {add.data.added.length} Epics
+          {add.data.skipped.length > 0 && `, skipped ${add.data.skipped.length} already tracked`}.
+        </p>
+      )}
+    </section>
+  );
+}

@@ -1,0 +1,452 @@
+// Schema PostgreSQL — nguồn sự thật là PRD §4.6.
+//
+// THỨ TỰ TẠO BẢNG khi viết migration (PRD §4.6 có ghi chú riêng):
+//   work_calendar → calendar_holiday → tracked_epic → còn lại
+// Có hai khoá ngoại đi ngược thứ tự đọc:
+//   - tracked_epic  → work_calendar
+//   - phase_rollup  → tracked_epic
+//
+// Quy ước (CONVENTIONS.md):
+//   C-1  mốc thời gian dùng TIMESTAMPTZ lưu UTC; ngày thuần dùng DATE
+//   C-2  thời lượng lưu bằng GIÂY, kiểu BigInt, hậu tố cột _s
+//   C-3  bảng và cột snake_case số ít; đổi sang camelCase ở tầng repository
+//   C-13 CẤM sửa migration đã merge — cần đổi schema thì tạo migration mới
+
+// Dùng vị trí sinh mặc định (node_modules/.prisma/client).
+// Custom `output` gây lỗi "Could not resolve @prisma/client" với pnpm workspace:
+// Prisma dò package theo đường dẫn thật của thư mục output, không đi qua symlink.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Bảng 1: Cây issue (Epic / Phase Task / Sub-task chung 1 bảng)
+// ============================================================================
+model JiraIssue {
+  issueKey  String @id @map("issue_key") @db.VarChar(32)
+  issueId   BigInt @unique @map("issue_id")
+  issueType String @map("issue_type") @db.VarChar(16) // EPIC | TASK | SUBTASK
+
+  parentKey String? @map("parent_key") @db.VarChar(32)
+  epicKey   String? @map("epic_key") @db.VarChar(32)
+  summary   String
+
+  // Kết quả phân tách tiêu đề Task (PRD §2.2)
+  phaseCode     String? @map("phase_code") @db.VarChar(24)
+  rawPhaseLabel String? @map("raw_phase_label")
+
+  statusId       String @map("status_id") @db.VarChar(16)
+  statusCategory String @map("status_category") @db.VarChar(16) // new | indeterminate | done
+
+  originalEstimateS  BigInt @default(0) @map("original_estimate_s")
+  remainingEstimateS BigInt @default(0) @map("remaining_estimate_s")
+  timeSpentS         BigInt @default(0) @map("time_spent_s")
+
+  // ---- Ngày kế hoạch của RIÊNG issue này (PRD §2.7, §2.8) ----
+  // Đọc từ 2 custom field `wbs_start_date` / `wbs_end_date`; mã field khác nhau
+  // ở mỗi Jira nên do T-05 dò ra, không viết cứng.
+  //
+  // Chỉ Sub-task mới có. Đây là NGUỒN của `phase_rollup.plan_start/plan_end`
+  // (MIN/MAX) và của từng ô Signboard. Không lưu ở đây thì không tổng hợp được
+  // và cũng không chỉ ra được Sub-task nào còn thiếu ngày.
+  //
+  // NULL = chưa điền trên Jira → ô Signboard là `NoPlan`, và cộng vào
+  // `missing_date_count`. Rủi ro R-08 nói ca này chắc chắn xảy ra thật.
+  wbsStartDate DateTime? @map("wbs_start_date") @db.Date
+  wbsEndDate   DateTime? @map("wbs_end_date") @db.Date
+
+  jiraCreatedAt DateTime  @map("jira_created_at") @db.Timestamptz(6)
+  jiraUpdatedAt DateTime  @map("jira_updated_at") @db.Timestamptz(6)
+  // NULL = còn trong Epic. KHÔNG BAO GIỜ xoá cứng — snapshot của những ngày
+  // trước khi gỡ vẫn phải nhìn thấy issue này.
+  removedAt     DateTime? @map("removed_at") @db.Timestamptz(6)
+  syncedAt      DateTime  @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  // ---- Kết quả phân tách tiêu đề Sub-task (PRD §2.9) ----
+  // Phân tách MỘT LẦN lúc đồng bộ, không phân tách lại mỗi lần đọc.
+  // Chỉ có giá trị với issueType = SUBTASK.
+  sbProject String? @map("sb_project") @db.VarChar(64)
+  sbTeam    String? @map("sb_team") @db.VarChar(64)
+  // [Phase] trong TIÊU ĐỀ — chỉ để đối chiếu, KHÔNG dùng để phân loại.
+  // Phase của Task cha luôn thắng (PRD §2.9.2).
+  sbPhaseRaw String? @map("sb_phase_raw") @db.VarChar(64)
+
+  functionName String? @map("function_name") @db.VarChar(128) // dạng hiển thị, giữ nguyên gốc
+  functionKey  String? @map("function_key") @db.VarChar(128) // NFKC + lowercase, để GỘP HÀNG
+  taskType     String? @map("task_type") @db.VarChar(32) // NULL nếu không khớp cột nào
+
+  sbParseStatus String @default("UNPARSED") @map("sb_parse_status") @db.VarChar(24)
+
+  parent   JiraIssue?  @relation("IssueTree", fields: [parentKey], references: [issueKey], onDelete: NoAction, onUpdate: NoAction)
+  children JiraIssue[] @relation("IssueTree")
+
+  @@index([epicKey, issueType], map: "idx_issue_epic")
+  @@index([parentKey], map: "idx_issue_parent")
+  @@index([jiraUpdatedAt(sort: Desc)], map: "idx_issue_updated")
+  @@map("jira_issue")
+}
+
+// ============================================================================
+// Bảng 2: Nhật ký thay đổi (chỉ giữ những trường ta quan tâm)
+// ============================================================================
+model IssueChangelogEvent {
+  id            BigInt   @id @default(autoincrement())
+  issueKey      String   @map("issue_key") @db.VarChar(32)
+  jiraHistoryId BigInt   @map("jira_history_id")
+  // status | timeestimate | timeoriginalestimate | parent | summary
+  fieldName     String   @map("field_name") @db.VarChar(48)
+  fromValue     String?  @map("from_value")
+  toValue       String?  @map("to_value")
+  changedAt     DateTime @map("changed_at") @db.Timestamptz(6)
+  authorId      String?  @map("author_id") @db.VarChar(64)
+
+  // Chống ghi trùng khi job chạy lại (C-6)
+  @@unique([issueKey, jiraHistoryId, fieldName], map: "uq_changelog")
+  // Index phục vụ truy vấn nóng nhất của engine:
+  // "sự kiện gần nhất của trường X, trước thời điểm T"
+  @@index([issueKey, fieldName, changedAt(sort: Desc)], map: "idx_changelog_lookup")
+  @@map("issue_changelog_event")
+}
+
+// ============================================================================
+// Bảng 3: Nhật ký log giờ
+// ============================================================================
+model WorklogEntry {
+  worklogId BigInt @id @map("worklog_id") // ID gốc từ Jira → tự chống trùng
+  issueKey  String @map("issue_key") @db.VarChar(32)
+  epicKey   String @map("epic_key") @db.VarChar(32)
+  authorId  String? @map("author_id") @db.VarChar(64)
+
+  timeSpentS BigInt @map("time_spent_s")
+
+  // started = ngày NGƯỜI DÙNG khai đã làm. Engine LUÔN lọc theo trường này,
+  // không theo createdAt (PRD E-03).
+  startedAt DateTime @map("started_at") @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @db.Timestamptz(6) // ngày BẤM NÚT log
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+
+  isDeleted Boolean @default(false) @map("is_deleted")
+
+  @@index([issueKey, startedAt], map: "idx_worklog_issue_started")
+  @@index([epicKey, startedAt], map: "idx_worklog_epic_started")
+  @@map("worklog_entry")
+}
+
+// ============================================================================
+// Bảng 4: Sổ đăng ký Epic đang theo dõi (PRD §2.6)
+// Nguồn DUY NHẤT trả lời "job đêm phải chạy cho Epic nào".
+// ============================================================================
+model TrackedEpic {
+  epicKey     String @id @map("epic_key") @db.VarChar(32)
+  epicId      BigInt @unique @map("epic_id")
+  projectKey  String @map("project_key") @db.VarChar(32)
+  displayName String @map("display_name")
+
+  // PENDING | BACKFILLING | ACTIVE | PAUSED | ERROR
+  status String @default("PENDING") @db.VarChar(16)
+
+  // Hai trường này trước đây nằm ở bảng epic_baseline (đã bỏ từ PRD v1.2)
+  timezone   String @db.VarChar(48) // IANA, ví dụ Asia/Ho_Chi_Minh
+  calendarId String @map("calendar_id") @db.VarChar(32)
+
+  addedBy      String    @map("added_by") @db.VarChar(64)
+  addedAt      DateTime  @default(now()) @map("added_at") @db.Timestamptz(6)
+  lastSyncedAt DateTime? @map("last_synced_at") @db.Timestamptz(6)
+  lastError    String?   @map("last_error")
+  note         String?
+
+  calendar     WorkCalendar @relation(fields: [calendarId], references: [calendarId])
+  phaseRollups PhaseRollup[]
+
+  @@index([projectKey], map: "idx_tracked_project")
+  @@map("tracked_epic")
+}
+
+// ============================================================================
+// Bảng 5: Snapshot chốt sổ hằng ngày (bảng chính để vẽ biểu đồ)
+// ============================================================================
+model DailySnapshot {
+  id            BigInt   @id @default(autoincrement())
+  epicKey       String   @map("epic_key") @db.VarChar(32)
+  snapshotDate  DateTime @map("snapshot_date") @db.Date // theo giờ ĐỊA PHƯƠNG
+  snapshotAtUtc DateTime @map("snapshot_at_utc") @db.Timestamptz(6) // 23:59:59 quy về UTC
+
+  plannedRemainingS BigInt @map("planned_remaining_s")
+  actualRemainingS  BigInt @map("actual_remaining_s")
+
+  // Tổng ước lượng của các Sub-task ĐANG HOẠT ĐỘNG tại T_d.
+  // KHÔNG còn là "scope đóng băng" — baseline đã bị bỏ (PRD §4.3).
+  totalScopeS BigInt @map("total_scope_s")
+  totalSpentS BigInt @map("total_spent_s")
+
+  // Chênh lệch so với snapshot NGÀY HÔM TRƯỚC (không so với baseline).
+  scopeAddedS   BigInt @default(0) @map("scope_added_s")
+  scopeRemovedS BigInt @default(0) @map("scope_removed_s")
+
+  countTodo       Int @default(0) @map("count_todo")
+  countInProgress Int @default(0) @map("count_in_progress")
+  countDone       Int @default(0) @map("count_done")
+
+  perPhase     Json     @map("per_phase")
+  isRecomputed Boolean  @default(false) @map("is_recomputed")
+  computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  // Mốc job ĐỌC dữ liệu từ Jira (khác computedAt là lúc TÍNH xong).
+  // Dùng để chống ghi đè bằng dữ liệu cũ — xem E-19.
+  sourceReadAt DateTime @map("source_read_at") @db.Timestamptz(6)
+
+  // Khoá này chính là thứ đảm bảo chạy lại không nhân đôi (C-6)
+  @@unique([epicKey, snapshotDate], map: "uq_snapshot")
+  @@index([epicKey, snapshotDate(sort: Asc)], map: "idx_snapshot_chart")
+  @@map("daily_snapshot")
+}
+
+// ============================================================================
+// Bảng 6: Nhật ký chạy job (để vận hành và điều tra sự cố)
+// ============================================================================
+model SyncRun {
+  id      BigInt @id @default(autoincrement())
+  epicKey String @map("epic_key") @db.VarChar(32)
+  runType String @map("run_type") @db.VarChar(16) // DAILY | BACKFILL | RECOMPUTE | MANUAL
+  status  String @db.VarChar(16) // RUNNING | SUCCESS | FAILED | SKIPPED
+
+  watermarkBefore DateTime? @map("watermark_before") @db.Timestamptz(6)
+  watermarkAfter  DateTime? @map("watermark_after") @db.Timestamptz(6)
+
+  daysComputed  Int  @default(0) @map("days_computed")
+  apiCallsMade  Int  @default(0) @map("api_calls_made")
+  rateLimitHits Int  @default(0) @map("rate_limit_hits")
+  durationMs    Int? @map("duration_ms")
+  errorMessage  String? @map("error_message")
+
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([epicKey, startedAt(sort: Desc)], map: "idx_syncrun_recent")
+  @@map("sync_run")
+}
+
+// ============================================================================
+// Bảng 7A: Bộ cấu hình nhận diện Phase (có version, quay lại được)
+// PM tự sửa qua màn hình quản trị — xem PRD §2.2
+// ============================================================================
+model PhaseConfigSet {
+  id         BigInt  @id @default(autoincrement())
+  scope      String  @db.VarChar(16) // GLOBAL | PROJECT
+  projectKey String? @map("project_key") @db.VarChar(32) // NULL khi scope = GLOBAL
+  version    Int
+  isActive   Boolean @default(false) @map("is_active")
+
+  // Ô tích "nếu không mẫu nào khớp thì tìm từ khoá trên cả tiêu đề"
+  fallbackScanFullTitle Boolean @default(true) @map("fallback_scan_full_title")
+
+  createdBy String   @map("created_by") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  note      String? // PM ghi lý do sửa
+
+  titlePatterns        PhaseTitlePattern[]
+  subtaskTitlePatterns SubtaskTitlePattern[]
+  phaseDefinitions     PhaseDefinition[]
+  matchRules           PhaseMatchRule[]
+  signboardColumns     SignboardColumn[]
+
+  @@unique([scope, projectKey, version], map: "uq_config_version")
+  @@map("phase_config_set")
+}
+
+// ============================================================================
+// Bảng 7B: TẦNG 1 — Mẫu tiêu đề Task (bóc tên Phase ra khỏi summary)
+// ============================================================================
+model PhaseTitlePattern {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @map("config_set_id")
+
+  patternText String @map("pattern_text") // PM gõ: '[Phase] {name}'
+  // Regex hệ thống TỰ SINH từ patternText. Lưu để tra khi debug,
+  // KHÔNG cho PM sửa trực tiếp.
+  compiledRegex String @map("compiled_regex")
+
+  sortOrder Int @map("sort_order") // thử lần lượt từ nhỏ đến lớn
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@index([configSetId, sortOrder], map: "idx_pattern_set")
+  @@map("phase_title_pattern")
+}
+
+// ============================================================================
+// Bảng 7C: Định nghĩa Phase chuẩn (mã, tên hiển thị, màu, thứ tự)
+// ============================================================================
+model PhaseDefinition {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @map("config_set_id")
+
+  phaseCode String  @map("phase_code") @db.VarChar(24)
+  labelVi   String  @map("label_vi")
+  labelJa   String? @map("label_ja")
+  colorHex  String? @map("color_hex") @db.Char(7)
+
+  // Thứ tự HIỂN THỊ trên biểu đồ. KHÁC với matchPriority ở bảng 7D.
+  // Xem giải thích ở PRD §2.2.3.
+  displayOrder Int @map("display_order")
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@unique([configSetId, phaseCode], map: "uq_phase_code")
+  @@map("phase_definition")
+}
+
+// ============================================================================
+// Bảng 7D: TẦNG 2 — Luật khớp từ khoá → Phase
+// ============================================================================
+model PhaseMatchRule {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @map("config_set_id")
+
+  keyword   String // '基本設計' hoặc '^SP-\d+' nếu là regex
+  matchMode String @default("CONTAINS") @map("match_mode") @db.VarChar(16) // CONTAINS | REGEX
+  phaseCode String @map("phase_code") @db.VarChar(24)
+
+  // Thứ tự ƯU TIÊN KHI KHỚP, số nhỏ thắng. KHÁC với displayOrder.
+  // Khi bằng nhau: từ khoá DÀI HƠN thắng (PRD §2.2.3).
+  matchPriority Int @default(50) @map("match_priority")
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@index([configSetId, matchPriority], map: "idx_rule_set")
+  @@map("phase_match_rule")
+}
+
+// ============================================================================
+// Bảng 7E: Mẫu tiêu đề SUB-TASK (PRD §2.9)
+// Khác bảng 7B — bảng đó dành cho tiêu đề Task (Phase).
+// ============================================================================
+model SubtaskTitlePattern {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @map("config_set_id")
+
+  // PM gõ: '[{project}][{team}][{phase}][{function}]_{task}'
+  patternText   String @map("pattern_text")
+  compiledRegex String @map("compiled_regex")
+
+  sortOrder Int @map("sort_order")
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@index([configSetId, sortOrder], map: "idx_subtask_pattern_set")
+  @@map("subtask_title_pattern")
+}
+
+// ============================================================================
+// Bảng 7F: Cột của bảng Signboard (PRD §2.9.3)
+// Danh sách loại task: Create, BALReview, FixCommentBAL, ...
+// ============================================================================
+model SignboardColumn {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @map("config_set_id")
+
+  // KHỚP CHÍNH XÁC, không phải từ khoá kiểu "chứa" (PRD §2.9.3)
+  taskCode String  @map("task_code") @db.VarChar(32)
+  labelVi  String  @map("label_vi")
+  labelJa  String? @map("label_ja")
+
+  displayOrder Int @map("display_order") // thứ tự cột, trái sang phải
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@unique([configSetId, taskCode], map: "uq_task_code")
+  @@index([configSetId, displayOrder], map: "idx_sbcolumn_set")
+  @@map("signboard_column")
+}
+
+// ============================================================================
+// Bảng 8: Lịch làm việc & ngày nghỉ
+// ============================================================================
+model WorkCalendar {
+  calendarId String @id @map("calendar_id") @db.VarChar(32) // VN_STANDARD | JP_STANDARD
+  timezone   String @db.VarChar(48)
+  // Bitmask 7 bit. Bit 0 = Thứ Hai … bit 6 = Chủ nhật (theo luxon: T2=1..CN=7).
+  // KHÔNG giống Date.getDay() của JavaScript (CN=0) — nhầm chỗ này lệch cả tuần.
+  workdaysMask Int      @map("workdays_mask") @db.SmallInt
+  hoursPerDay  Decimal  @default(8.0) @map("hours_per_day") @db.Decimal(4, 2)
+
+  holidays     CalendarHoliday[]
+  trackedEpics TrackedEpic[]
+
+  @@map("work_calendar")
+}
+
+model CalendarHoliday {
+  calendarId  String   @map("calendar_id") @db.VarChar(32)
+  holidayDate DateTime @map("holiday_date") @db.Date
+  label       String?
+
+  calendar WorkCalendar @relation(fields: [calendarId], references: [calendarId], onDelete: Cascade)
+
+  @@id([calendarId, holidayDate])
+  @@map("calendar_holiday")
+}
+
+// ============================================================================
+// Bảng 9: Ngày plan/actual của từng Phase, tổng hợp từ Sub-task (PRD §2.7)
+// Tính lại sau MỖI LẦN đồng bộ — KHÔNG đóng băng.
+// ============================================================================
+model PhaseRollup {
+  epicKey   String @map("epic_key") @db.VarChar(32)
+  phaseCode String @map("phase_code") @db.VarChar(24)
+
+  // MIN(wbs_start_date) / MAX(wbs_end_date) của các Sub-task đang hoạt động.
+  // NULL = mọi Sub-task đều thiếu ngày → KHÔNG vẽ đường Kế hoạch cho Phase này.
+  planStart    DateTime? @map("plan_start") @db.Date
+  planEnd      DateTime? @map("plan_end") @db.Date
+  planWorkdays Int?      @map("plan_workdays")
+
+  // MIN/MAX ngày thực tế, suy ra từ changelog + worklog (PRD §2.7.2)
+  actualStart DateTime? @map("actual_start") @db.Date
+  actualEnd   DateTime? @map("actual_end") @db.Date
+  // true = Phase chưa xong hết, actualEnd mới chỉ là tạm tính
+  actualEndIsProvisional Boolean @default(false) @map("actual_end_is_provisional")
+
+  totalOriginalS   BigInt @default(0) @map("total_original_s")
+  subtaskCount     Int    @default(0) @map("subtask_count")
+  missingDateCount Int    @default(0) @map("missing_date_count") // số Sub-task thiếu wbs_*
+
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  epic TrackedEpic @relation(fields: [epicKey], references: [epicKey], onDelete: Cascade)
+
+  @@id([epicKey, phaseCode])
+  @@map("phase_rollup")
+}
+
+// ============================================================================
+// Bảng 10: Lịch sử dịch chuyển kế hoạch
+//
+// Vì đã bỏ baseline, đường Kế hoạch tự trôi theo dữ liệu Jira. Bảng này là
+// tuyến phòng thủ chính cho rủi ro R-11: ghi lại MỌI lần ngày kết thúc của một
+// Phase bị đẩy lùi, để độ trễ không bị giấu đi.
+// ============================================================================
+model PlanShiftHistory {
+  id        BigInt @id @default(autoincrement())
+  epicKey   String @map("epic_key") @db.VarChar(32)
+  phaseCode String @map("phase_code") @db.VarChar(24)
+
+  shiftType String   @map("shift_type") @db.VarChar(16) // START_MOVED | END_MOVED
+  fromDate  DateTime @map("from_date") @db.Date
+  toDate    DateTime @map("to_date") @db.Date
+  // số dương = bị lùi, âm = kéo sớm lên
+  shiftedWorkdays Int @map("shifted_workdays")
+
+  // Sub-task nào gây ra thay đổi này (để PM truy nguyên)
+  causedByKeys String[] @default([]) @map("caused_by_keys")
+
+  detectedAt DateTime @default(now()) @map("detected_at") @db.Timestamptz(6)
+
+  @@index([epicKey, detectedAt(sort: Desc)], map: "idx_planshift_epic")
+  @@map("plan_shift_history")
+}
