@@ -1,4 +1,4 @@
-﻿-- CreateSchema
+-- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 -- CreateTable
 CREATE TABLE "jira_issue" (
@@ -334,6 +334,16 @@ CREATE INDEX "idx_issue_unparsed"
 
 -- Phát hiện log giờ lùi ngày: started_at cách created_at quá xa
 -- nghĩa là cần tính lại quá khứ (PRD E-03)
+--
+-- Vị ngữ PHẢI viết dạng (created_at - started_at) > INTERVAL '1 day', KHÔNG
+-- được viết started_at < created_at - INTERVAL '1 day'. Lý do: phép TIMESTAMPTZ
+-- trừ INTERVAL (timestamptz_mi_interval) chỉ là STABLE — cộng/trừ 'ngày' vào
+-- timestamptz phụ thuộc múi giờ (DST) — trong khi index predicate bắt buộc chỉ
+-- gọi hàm IMMUTABLE, nếu không PostgreSQL báo lỗi 42P17
+-- ("functions in index predicate must be marked IMMUTABLE"). Ngược lại,
+-- TIMESTAMPTZ trừ TIMESTAMPTZ (timestamptz_mi) là IMMUTABLE nên hợp lệ. Dạng
+-- này cũng khớp đúng ngưỡng 24h của hasRetroLog() bên apps/worker
+-- (RETRO_LOG_THRESHOLD_MS), nên SQL và code đọc cùng một định nghĩa.
 CREATE INDEX "idx_worklog_retro"
   ON "worklog_entry" (epic_key, created_at)
-  WHERE started_at < created_at - INTERVAL '1 day';
+  WHERE created_at - started_at > INTERVAL '1 day';

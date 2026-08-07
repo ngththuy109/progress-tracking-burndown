@@ -85,7 +85,9 @@ Migration phải tạo theo thứ tự **`work_calendar` → `calendar_holiday` 
        WHERE issue_type = 'SUBTASK' AND removed_at IS NULL;
    CREATE INDEX idx_worklog_retro
        ON worklog_entry (epic_key, created_at)
-       WHERE started_at < created_at - INTERVAL '1 day';
+       -- (created_at - started_at) chứ không phải created_at - INTERVAL '1 day':
+       -- TIMESTAMPTZ trừ INTERVAL chỉ STABLE nên vướng lỗi 42P17 trong index.
+       WHERE created_at - started_at > INTERVAL '1 day';
    ```
 4. Xuất enum sang `packages/shared/src/enums.ts`: `StatusCategory`, `TrackedEpicStatus`, `SbParseStatus`, `SignboardStatus`, `MatchMode`, `ConfigScope`, `ShiftType`, `SyncRunType`, `SyncRunStatus`.
 5. Seed `work_calendar` 2 dòng: `VN_STANDARD` (`Asia/Ho_Chi_Minh`) và `JP_STANDARD` (`Asia/Tokyo`), `workdays_mask` = T2–T6, `hours_per_day` = 8.
