@@ -68,11 +68,14 @@ pnpm install
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:generate
 pnpm db:migrate
-pnpm dev                      # API on :3000, web on :5180
+pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
 ```
 
-`pnpm dev` starts the API and the web app in parallel. The web dev server uses port **5180**, not
-Vite's default 5173 — deliberately, so it never collides with another project on the same machine.
+`pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
+**worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default
+5173 — deliberately, so it never collides with another project on the same machine. The API and
+worker each need PostgreSQL, Redis and reachable Jira credentials to start; missing any of them
+stops the process with a clear message rather than a half-running server.
 
 > **Why the API and worker run through [`tsx`](https://tsx.is) and not `node --watch`:** Node's
 > built-in TypeScript support is *strip-only* — it deletes type annotations but refuses syntax that
@@ -170,9 +173,12 @@ label no longer exists. Documentation that nothing checks rots within three mont
 
 Stated plainly, because a green test suite can hide this:
 
-- **The worker's `main()` is not wired.** Job logic, queues and shutdown are all tested behind
-  ports, but the final assembly with real Prisma, ioredis and a Jira client needs live
-  infrastructure to write against.
+- **The worker's job processors are not wired.** Both apps now have a real composition root
+  (`main.ts`): the API listens and serves, and the worker connects Prisma + ioredis, creates the
+  BullMQ queues and consumes the `sync` queue with graceful shutdown. What is still missing is the
+  production adapter layer binding the job ports to `@app/db`/`@app/jira`/`@app/engine` (PRD §4.2
+  phases 4–5, cards T-15/T-18). Until it lands the worker starts and reports ready, but each job
+  fails loudly with a "pending adapter layer" error rather than silently succeeding.
 - **Prisma adapters for reconciliation and ops health** are not implemented, for the same reason.
   The logic behind those ports is tested; the SQL is not written.
 - **The p95 ≤ 800 ms target is unmeasured.** It needs PostgreSQL loaded with realistic volume.

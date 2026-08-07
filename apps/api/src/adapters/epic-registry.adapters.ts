@@ -19,6 +19,7 @@ import type {
 /**
  * Bộ chuyển đổi cho sổ đăng ký Epic.
  *
+ * Ngoài điểm lắp ráp `main.ts` (composition root, nơi dựng `JiraClient` thật),
  * ĐÂY LÀ FILE DUY NHẤT trong `apps/api` được import `@app/jira`
  * (ARCHITECTURE.md §2). Tầng service chỉ nhìn thấy cổng, nên vẫn test được mà
  * không cần Jira sandbox.

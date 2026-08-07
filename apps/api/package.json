@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -12,7 +12,10 @@
     "@app/engine": "workspace:*",
     "@app/jira": "workspace:*",
     "@app/shared": "workspace:*",
+    "bullmq": "^5.34.10",
     "fastify": "^5.2.1",
+    "ioredis": "^5.4.2",
+    "yaml": "^2.6.0",
     "zod": "^3.24.1"
   }
 }
