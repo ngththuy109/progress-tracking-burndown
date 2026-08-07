@@ -66,8 +66,11 @@ describe('migration init — các lớp bảo vệ Prisma không tự sinh đư�
   });
 
   it('có partial index phát hiện log giờ lùi ngày', () => {
+    // Vị ngữ dùng (created_at - started_at) vì TIMESTAMPTZ trừ TIMESTAMPTZ là
+    // IMMUTABLE; viết created_at - INTERVAL '1 day' sẽ vướng lỗi 42P17 vì phép
+    // trừ INTERVAL khỏi TIMESTAMPTZ chỉ là STABLE.
     expect(sql).toMatch(
-      /CREATE INDEX "idx_worklog_retro"[\s\S]*?WHERE started_at < created_at - INTERVAL '1 day'/,
+      /CREATE INDEX "idx_worklog_retro"[\s\S]*?WHERE created_at - started_at > INTERVAL '1 day'/,
     );
   });
 

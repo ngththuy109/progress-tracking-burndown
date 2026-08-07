@@ -1983,10 +1983,13 @@ CREATE INDEX idx_worklog_issue_started ON worklog_entry (issue_key, started_at);
 CREATE INDEX idx_worklog_epic_started  ON worklog_entry (epic_key, started_at);
 
 -- Index này để phát hiện log lùi ngày:
--- started_at cách created_at quá xa = cần tính lại quá khứ
+-- started_at cách created_at quá xa = cần tính lại quá khứ.
+-- Vị ngữ viết (created_at - started_at) > INTERVAL '1 day' vì TIMESTAMPTZ trừ
+-- TIMESTAMPTZ là IMMUTABLE; viết created_at - INTERVAL '1 day' sẽ lỗi 42P17
+-- (phép trừ INTERVAL khỏi TIMESTAMPTZ chỉ STABLE, không dùng được trong index).
 CREATE INDEX idx_worklog_retro
     ON worklog_entry (epic_key, created_at)
-    WHERE started_at < created_at - INTERVAL '1 day';
+    WHERE created_at - started_at > INTERVAL '1 day';
 
 -- ============================================================
 -- Bảng 4: Sổ đăng ký Epic đang theo dõi
