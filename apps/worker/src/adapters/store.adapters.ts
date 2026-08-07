@@ -17,6 +17,7 @@ import {
   upsertIssues,
   upsertPhaseRollups,
   upsertSnapshots,
+  upsertSubtaskActualDates,
   upsertWorklogs,
 } from '@app/db';
 import type { IssueTotals, StatusIdMap, TrackedEpicStatus } from '@app/shared';
@@ -163,6 +164,7 @@ export function createReconstructPorts(
     savePhaseRollups: (epicKey, rollups) => upsertPhaseRollups(prisma, epicKey, rollups, now()),
     deleteObsoleteRollups: (epicKey, livePhaseCodes) =>
       deleteObsoleteRollups(prisma, epicKey, livePhaseCodes),
+    saveSubtaskActualDates: (rows) => upsertSubtaskActualDates(prisma, rows, now()),
     savePlanShifts: async (epicKey, shifts) => {
       const r = await insertPlanShifts(prisma, epicKey, shifts, now());
       return { skippedNullBoundary: r.skippedNullBoundary };

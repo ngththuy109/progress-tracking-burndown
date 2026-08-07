@@ -38,6 +38,7 @@ export interface IssueRecord {
   functionName: string | null;
   functionKey: string | null;
   taskType: string | null;
+  sbTaskRaw: string | null;
   sbParseStatus: string;
 }
 
@@ -135,6 +136,7 @@ export function buildRecords(args: {
       functionName: parsed.functionName,
       functionKey: parsed.functionKey,
       taskType: parsed.taskType,
+      sbTaskRaw: parsed.sbTaskRaw,
       sbParseStatus: parsed.sbParseStatus,
     });
   }
@@ -226,6 +228,7 @@ function baseRecord(
     functionName: null,
     functionKey: null,
     taskType: null,
+    sbTaskRaw: null,
     sbParseStatus: 'UNPARSED',
   };
 }

@@ -95,6 +95,11 @@ export {
 } from './repositories/explain.repository.js';
 
 export {
+  upsertSubtaskActualDates,
+  type SubtaskActualDatesRow,
+} from './repositories/subtask-actual-dates.repository.js';
+
+export {
   insertPlanShifts,
   summarizePlanShifts,
   listPlanShifts,
