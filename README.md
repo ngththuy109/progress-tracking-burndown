@@ -74,6 +74,12 @@ pnpm dev                      # API on :3000, web on :5180
 `pnpm dev` starts the API and the web app in parallel. The web dev server uses port **5180**, not
 Vite's default 5173 — deliberately, so it never collides with another project on the same machine.
 
+> **Why the API and worker run through [`tsx`](https://tsx.is) and not `node --watch`:** Node's
+> built-in TypeScript support is *strip-only* — it deletes type annotations but refuses syntax that
+> compiles to runtime code, such as constructor parameter properties (`constructor(readonly x)`). So
+> `node --watch src/*.ts` crashes with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on Node 22+/24. `tsx`
+> fully transpiles the TypeScript, so the dev entry points run on any supported Node.
+
 Full setup instructions, including seeding, are in
 [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) *(Vietnamese)*.
 
