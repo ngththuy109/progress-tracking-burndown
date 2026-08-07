@@ -142,6 +142,9 @@ importers:
       luxon:
         specifier: ^3.5.0
         version: 3.7.2
+      yaml:
+        specifier: ^2.6.0
+        version: 2.9.0
     devDependencies:
       '@types/luxon':
         specifier: ^3.4.2

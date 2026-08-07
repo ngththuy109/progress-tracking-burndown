@@ -56,22 +56,23 @@ export async function loadExplainBundle(
 ): Promise<ExplainBundle> {
   const [issues, changelog, worklogs] = await Promise.all([
     prisma.$queryRawUnsafe<IssueRow[]>(
-      `SELECT issue_key, summary, phase_code, original_estimate_seconds,
-              created_at, removed_at, wbs_start_date, wbs_end_date
+      `SELECT issue_key, summary, phase_code, original_estimate_s AS original_estimate_seconds,
+              jira_created_at AS created_at, removed_at, wbs_start_date, wbs_end_date
          FROM jira_issue
         WHERE epic_key = $1 AND issue_type = 'SUBTASK'`,
       epicKey,
     ),
     prisma.$queryRawUnsafe<ChangelogRow[]>(
-      `SELECT c.issue_key, c.field_name, c.from_value, c.to_value, c.created_at, c.author
+      `SELECT c.issue_key, c.field_name, c.from_value, c.to_value,
+              c.changed_at AS created_at, c.author_id AS author
          FROM issue_changelog_event c
          JOIN jira_issue i ON i.issue_key = c.issue_key
         WHERE i.epic_key = $1 AND i.issue_type = 'SUBTASK'
-        ORDER BY c.created_at ASC`,
+        ORDER BY c.changed_at ASC`,
       epicKey,
     ),
     prisma.$queryRawUnsafe<WorklogRow[]>(
-      `SELECT w.worklog_id, w.issue_key, w.time_spent_seconds, w.started_at, w.is_deleted
+      `SELECT w.worklog_id, w.issue_key, w.time_spent_s AS time_spent_seconds, w.started_at, w.is_deleted
          FROM worklog_entry w
          JOIN jira_issue i ON i.issue_key = w.issue_key
         WHERE i.epic_key = $1 AND i.issue_type = 'SUBTASK'
@@ -163,7 +164,7 @@ export async function loadHealthRatios(
     { total: bigint; no_estimate: bigint; unclassified: bigint; no_wbs: bigint; unparsed: bigint }[]
   >(
     `SELECT COUNT(*)::bigint AS total,
-            COUNT(*) FILTER (WHERE original_estimate_seconds IS NULL OR original_estimate_seconds = 0)::bigint AS no_estimate,
+            COUNT(*) FILTER (WHERE original_estimate_s IS NULL OR original_estimate_s = 0)::bigint AS no_estimate,
             COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
             COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
             COUNT(*) FILTER (WHERE sb_parse_status <> 'OK')::bigint AS unparsed

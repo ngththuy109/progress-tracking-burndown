@@ -1,11 +1,10 @@
 import { pathToFileURL } from 'node:url';
 import { Redis } from 'ioredis';
-import { TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
+import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
 import { disconnectPrisma, getPrisma } from '@app/db';
 import { RedisTokenBucketStore, type EvalRedis } from './queue/redis-token-bucket.js';
-import { createQueues, SYNC_CONCURRENCY } from './queue/queues.js';
-import { JOB_NAME, createSyncWorker, type HandlerMap, type JobHandler } from './queue/worker.js';
 import { createShutdown, registerSignalHandlers } from './queue/shutdown.js';
+import { wireWorker } from './wire.js';
 
 /**
  * Điểm lắp ráp của worker.
@@ -173,30 +172,8 @@ export function buildJiraRateLimiter(redis: EvalRedis, now?: () => number): Rate
 // ---------------------------------------------------------------------------
 
 /**
- * Bộ xử lý tạm cho job chưa có tầng adapter production.
- *
- * Vòng đời worker — kết nối Redis, tạo hàng đợi, chạy BullMQ Worker, tắt sạch —
- * đã đủ ở dưới. Nhưng phần ĐẤU NỐI cổng job vào `@app/db`/`@app/jira`/`@app/engine`
- * (giai đoạn 4–5 của PRD §4.2, thuộc thẻ T-15/T-18) thì chưa dựng.
- *
- * Ở đây NÉM LỖI rõ ràng thay vì lặng lẽ báo thành công — cùng triết lý với
- * `UnknownJobError`. Job báo "xong" mà không làm gì là kiểu hỏng tệ nhất: Epic
- * vĩnh viễn không được đồng bộ mà không một dòng lỗi nào báo ra.
- */
-function pendingProcessor(jobName: string): JobHandler {
-  return () =>
-    Promise.reject(
-      new Error(
-        `Bộ xử lý job "${jobName}" chưa được đấu nối. Worker đã kết nối và sẵn sàng, ` +
-          'nhưng tầng adapter production (gắn cổng job vào @app/db/@app/jira/@app/engine — ' +
-          'thẻ T-15/T-18) chưa dựng nên chưa xử lý được job này.',
-      ),
-    );
-}
-
-/**
- * Điểm lắp ráp thật của worker: mở Redis/Prisma thật, dựng hàng đợi và chạy
- * BullMQ Worker.
+ * Điểm lắp ráp thật của worker: mở Redis/Prisma/Jira thật, đấu nối bộ xử lý job
+ * (qua `wireWorker`) rồi chạy một BullMQ Worker cho mỗi hàng đợi.
  *
  * Chạy dưới `tsx watch src/main.ts`. Được bảo vệ bằng kiểm "gọi trực tiếp" ở cuối
  * file để test import các hàm export phía trên KHÔNG vô tình mở kết nối.
@@ -219,21 +196,29 @@ async function bootstrap(): Promise<void> {
   const prisma = getPrisma();
   await prisma.$queryRaw`SELECT 1`;
 
-  const queues = createQueues(redis.queue);
+  // JiraClient dùng token bucket Redis DÙNG CHUNG (C-7): 40 req/s toàn hệ thống,
+  // chứ không phải mỗi worker một hạn riêng — nếu không bốn worker thành 160 req/s
+  // và Jira chặn cả tổ chức (R-04).
+  const { limiter } = buildJiraRateLimiter(redis.general as unknown as EvalRedis);
+  const jira = new JiraClient({ rateLimiter: limiter, logger: (e) => log(e) });
 
-  const handlers: HandlerMap = {
-    [JOB_NAME.syncEpic]: pendingProcessor(JOB_NAME.syncEpic),
-    [JOB_NAME.reconstructEpic]: pendingProcessor(JOB_NAME.reconstructEpic),
-    [JOB_NAME.backfillEpic]: pendingProcessor(JOB_NAME.backfillEpic),
-    [JOB_NAME.reconcileEpic]: pendingProcessor(JOB_NAME.reconcileEpic),
-  };
-
-  const worker = createSyncWorker({ connection: redis.worker, handlers, log });
+  // Nạp field mapping + status map, dựng bảng điều phối, chạy Worker cho cả ba
+  // hàng đợi. Ném lỗi (→ worker.fatal) nếu Jira sai/không tới được.
+  const { workers, queues } = await wireWorker({
+    prisma,
+    queueConn: redis.queue,
+    workerConn: redis.worker,
+    generalConn: redis.general,
+    jira,
+    log,
+    nightlyCron: NIGHTLY_CRON,
+    weeklyReconcileCron: WEEKLY_RECONCILE_CRON,
+  });
 
   // Tắt sạch (PRD §9.5): đóng worker TRƯỚC (chờ job đang chạy), rồi hàng đợi,
   // Redis, cuối cùng Prisma. Đảo thứ tự là cắt chân job đang cố hoàn tất.
   const shutdown = createShutdown({
-    workers: [worker],
+    workers: [...workers],
     connections: [
       { close: () => queues.closeAll() },
       ...redis.all.map((conn) => ({
@@ -250,12 +235,7 @@ async function bootstrap(): Promise<void> {
   });
   registerSignalHandlers(shutdown, process);
 
-  log({
-    event: 'worker.ready',
-    queue: 'sync',
-    concurrency: SYNC_CONCURRENCY,
-    note: 'Đã kết nối và sẵn sàng. Bộ xử lý job chờ tầng adapter T-15/T-18.',
-  });
+  log({ event: 'worker.ready', queues: ['sync', 'backfill', 'reconcile'] });
 }
 
 // Chỉ tự chạy khi được gọi TRỰC TIẾP (`tsx watch src/main.ts`), KHÔNG chạy khi

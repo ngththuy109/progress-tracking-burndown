@@ -173,14 +173,14 @@ label no longer exists. Documentation that nothing checks rots within three mont
 
 Stated plainly, because a green test suite can hide this:
 
-- **The worker's job processors are not wired.** Both apps now have a real composition root
-  (`main.ts`): the API listens and serves, and the worker connects Prisma + ioredis, creates the
-  BullMQ queues and consumes the `sync` queue with graceful shutdown. What is still missing is the
-  production adapter layer binding the job ports to `@app/db`/`@app/jira`/`@app/engine` (PRD §4.2
-  phases 4–5, cards T-15/T-18). Until it lands the worker starts and reports ready, but each job
-  fails loudly with a "pending adapter layer" error rather than silently succeeding.
-- **Prisma adapters for reconciliation and ops health** are not implemented, for the same reason.
-  The logic behind those ports is tested; the SQL is not written.
+- **`GET /api/signboard/...` is broken.** Its read adapter joins a `subtask_actual_dates` table that
+  the migrations never create, so the endpoint 500s. Everything else on the worker→burndown path is
+  wired and verified end-to-end (add Epic → backfill → sync from Jira → phase rollups → daily
+  snapshots → burndown chart); this one adapter needs that table (a view over issues + changelog) or
+  a rewrite.
+- **The ops endpoints (`/metrics`, `/api/ops/health`) are not mounted.** The route module and its
+  ports exist and are tested, but `createServer` does not register them yet — the composition root
+  exposes a lightweight `/healthz` liveness check (pinging Postgres + Redis) instead.
 - **The p95 ≤ 800 ms target is unmeasured.** It needs PostgreSQL loaded with realistic volume.
 - **`ONBOARDING.md` has never been followed on a clean machine** by someone new. File-scanning tests
   catch documentation that has gone stale; they cannot catch documentation that was never complete.

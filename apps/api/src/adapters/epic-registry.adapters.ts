@@ -235,8 +235,9 @@ export function createBackfillQueue(queue: QueueLike): BackfillQueue {
     async enqueue(epicKeys) {
       for (const epicKey of epicKeys) {
         // `jobId` theo Epic để bấm "Thêm" hai lần không tạo hai job backfill
-        // cùng chạy trên một Epic (C-6).
-        await queue.add(BACKFILL_JOB_NAME, { epicKey }, { jobId: `${BACKFILL_JOB_NAME}:${epicKey}` });
+        // cùng chạy trên một Epic (C-6). Dấu `__` chứ không phải `:` — BullMQ cấm
+        // `:` trong jobId tuỳ biến.
+        await queue.add(BACKFILL_JOB_NAME, { epicKey }, { jobId: `${BACKFILL_JOB_NAME}__${epicKey}` });
       }
     },
   };

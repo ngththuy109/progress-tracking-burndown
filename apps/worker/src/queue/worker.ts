@@ -1,6 +1,6 @@
 import { Worker, type Job, type WorkerOptions } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { QUEUE_NAME, QUEUE_PREFIX, SYNC_CONCURRENCY } from './queues.js';
+import { QUEUE_NAME, QUEUE_PREFIX, SYNC_CONCURRENCY, type QueueName } from './queues.js';
 
 /**
  * Vòng đời worker.
@@ -69,6 +69,15 @@ export interface WorkerDeps {
   readonly handlers: HandlerMap;
   readonly concurrency?: number;
   readonly log?: (event: Record<string, unknown>) => void;
+  /**
+   * Hàng đợi để tiêu thụ. Mặc định `sync`.
+   *
+   * Ba hàng đợi (sync / backfill / reconcile) cố ý tách nhau (PRD §4.1) để một
+   * lượt chạy bù 500 Sub-task không chặn job đêm. Mỗi hàng đợi có một Worker
+   * riêng nhưng dùng CHUNG bảng điều phối `handlers` — job tự tìm bộ xử lý theo
+   * tên, không theo hàng đợi.
+   */
+  readonly queueName?: QueueName;
 }
 
 export function createSyncWorker(deps: WorkerDeps): Worker {
@@ -81,7 +90,7 @@ export function createSyncWorker(deps: WorkerDeps): Worker {
   };
 
   const worker = new Worker(
-    QUEUE_NAME.sync,
+    deps.queueName ?? QUEUE_NAME.sync,
     async (job: Job) => {
       // `job.data` KHÔNG được ép kiểu ở đây. Nó là JSON do tiến trình khác ghi
       // vào Redis; bộ xử lý phải tự kiểm bằng `parseSyncJobPayload`.

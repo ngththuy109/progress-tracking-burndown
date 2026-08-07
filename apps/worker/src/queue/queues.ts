@@ -65,7 +65,10 @@ export function backoffWithJitter(attemptsMade: number, random: () => number = M
  * bấm "Thêm Epic" hai lần không tạo hai lần chạy bù trên cùng một Epic (C-6).
  */
 export function jobIdFor(jobName: string, epicKey: string): string {
-  return `${jobName}:${epicKey}`;
+  // Dấu `__` chứ KHÔNG phải `:`. BullMQ cấm dấu hai chấm trong jobId tuỳ biến
+  // ("Custom Id cannot contain :") vì `:` là dấu phân tách key của Redis — dùng
+  // `:` thì mọi lần đẩy job đều ném lỗi ngay khi tạo.
+  return `${jobName}__${epicKey}`;
 }
 
 export interface QueueSet {

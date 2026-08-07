@@ -101,7 +101,8 @@ export function createEpicOpsWritePort(prisma: PrismaClient, queue: QueueLike): 
 
     async enqueueSync(epicKey, args) {
       // `jobId` theo Epic để bấm hai lần không tạo hai job cùng chạy (C-6).
-      const jobId = `${SYNC_JOB_NAME}:${epicKey}`;
+      // Dấu `__` chứ không phải `:` — BullMQ cấm `:` trong jobId tuỳ biến.
+      const jobId = `${SYNC_JOB_NAME}__${epicKey}`;
       await queue.add(SYNC_JOB_NAME, { epicKey, ...args }, { jobId });
       return jobId;
     },
