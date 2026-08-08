@@ -86,6 +86,30 @@ stops the process with a clear message rather than a half-running server.
 Full setup instructions, including seeding, are in
 [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) *(Vietnamese)*.
 
+### No Prisma engine download — runs behind a blocked network
+
+Prisma normally downloads a native Rust **query engine** and **schema engine** from its CDN
+(`binaries.prisma.sh`) during `pnpm install` and `prisma generate`. On a machine that can't reach
+that CDN both steps fail — `postinstall` cannot fetch the binary, and `prisma generate` then dies
+asking for the schema engine. This project is configured to need **no native engine at all**, so the
+quick-start above works fully offline:
+
+- **`packages/db/prisma/schema.prisma`** sets `engineType = "client"`: the client runs on the WASM
+  **query compiler** bundled inside `@prisma/client` and talks to PostgreSQL through the
+  [`pg`](https://node-postgres.com) driver adapter — see `packages/db/src/client.ts`.
+- **`prisma.config.ts`** registers that same `pg` adapter for the CLI, which lets `prisma generate`
+  skip the schema-engine download.
+- **`package.json` → `pnpm.neverBuiltDependencies`** stops the `@prisma/engines` postinstall from
+  reaching the CDN, so `pnpm install` never blocks on it.
+- **`pnpm db:migrate`** applies the SQL migration files directly through `pg`
+  (`tools/db/apply-migrations.mjs`) instead of `prisma migrate deploy`, which would need the schema
+  engine. It records into Prisma's own `_prisma_migrations` table, so migration history stays
+  compatible with the Prisma CLI.
+
+The one thing this setup gives up is `prisma migrate dev` for **authoring** migrations (that command
+needs the schema engine). Add a new migration by hand: create
+`packages/db/prisma/migrations/<timestamp>_<name>/migration.sql`, then apply it with `pnpm db:migrate`.
+
 ### Everyday commands
 
 | Command | What it does |

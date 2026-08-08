@@ -15,7 +15,7 @@ export default tseslint.config(
   // `process`, `console`, `fetch` — toàn biến toàn cục của Node, mà cấu hình
   // mặc định của eslint không biết.
   {
-    files: ['tools/smoke/**/*.mjs'],
+    files: ['tools/**/*.mjs'],
     languageOptions: {
       globals: {
         process: 'readonly',

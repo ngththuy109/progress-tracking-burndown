@@ -43,9 +43,27 @@ Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đ�
 ## 3. Dựng database
 
 ```bash
-pnpm db:migrate          # chạy migration
-pnpm db:generate         # sinh Prisma Client
+pnpm db:migrate          # áp migration (chạy SQL trực tiếp qua driver pg)
+pnpm db:generate         # sinh Prisma Client (query compiler WASM)
 ```
+
+> **Không tải engine của Prisma — chạy được cả khi máy chặn mạng.** Bình thường Prisma tải hai
+> binary Rust (query engine + schema engine) từ CDN `binaries.prisma.sh` lúc `pnpm install` và
+> `prisma generate`; máy chặn mạng ra ngoài sẽ chết ở cả hai bước. Dự án đã cấu hình để **không cần
+> binary native nào**:
+>
+> - `packages/db/prisma/schema.prisma` đặt `engineType = "client"` → client dùng query compiler WASM
+>   đóng gói sẵn trong `@prisma/client`, nối PostgreSQL qua driver adapter `pg` (`packages/db/src/client.ts`).
+> - `prisma.config.ts` khai adapter `pg` cho CLI → `prisma generate` bỏ qua bước tải schema engine.
+> - `package.json` → `pnpm.neverBuiltDependencies` chặn postinstall của `@prisma/engines` gọi CDN,
+>   nên `pnpm install` không kẹt.
+> - `pnpm db:migrate` chạy thẳng các file `migration.sql` qua `pg` (`tools/db/apply-migrations.mjs`)
+>   thay cho `prisma migrate deploy` (vốn cần schema engine), và vẫn ghi vào bảng `_prisma_migrations`
+>   của Prisma nên tương thích ngược.
+>
+> Đánh đổi duy nhất: KHÔNG dùng `prisma migrate dev` để **tạo** migration mới được nữa (lệnh đó cần
+> schema engine). Muốn thêm migration thì tự viết tay: tạo
+> `packages/db/prisma/migrations/<timestamp>_<tên>/migration.sql` rồi chạy `pnpm db:migrate`.
 
 ## 4. Chạy
 

@@ -15,8 +15,24 @@
 // Dùng vị trí sinh mặc định (node_modules/.prisma/client).
 // Custom `output` gây lỗi "Could not resolve @prisma/client" với pnpm workspace:
 // Prisma dò package theo đường dẫn thật của thư mục output, không đi qua symlink.
+//
+// KHÔNG dùng native query engine (binary Rust tải từ CDN binaries.prisma.sh).
+// Máy dev chặn mạng ra ngoài không tải được binary đó → `pnpm install` và
+// `prisma generate` cùng chết.
+//
+// `engineType = "client"` chuyển client sang query compiler WASM (đóng gói sẵn
+// trong @prisma/client, không tải gì) và thực thi truy vấn qua driver adapter —
+// ở đây là `pg` thuần JS, xem client.ts. Không cần binary native nào.
+//
+// Ràng buộc đi kèm: engine "client" BẮT BUỘC `new PrismaClient()` nhận một
+// `adapter`; client trần sẽ ném lỗi lúc chạy. Mọi nơi tạo client đi qua
+// getPrisma()/createPrismaClient().
+//
+// (Ở 6.19.3, `driverAdapters` và `queryCompiler` đã rời preview nên KHÔNG khai
+// trong previewFeatures nữa — khai vào sẽ bị cảnh báo "deprecated".)
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "client"
 }
 
 datasource db {

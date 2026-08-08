@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@app/shared": "workspace:*",
-    "@prisma/client": "6.19.3"
+    "@prisma/adapter-pg": "6.19.3",
+    "@prisma/client": "6.19.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10"
   }
 }

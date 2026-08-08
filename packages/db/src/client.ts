@@ -1,7 +1,45 @@
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
 export { PrismaClient };
 export type { Prisma } from '@prisma/client';
+
+/**
+ * Tạo một `PrismaClient` chạy qua **driver adapter `pg`** thay cho native query
+ * engine.
+ *
+ * Vì sao: engine mặc định của Prisma là binary Rust tải từ CDN
+ * (`binaries.prisma.sh`) lúc `postinstall`/`prisma generate`. Máy chặn mạng ra
+ * ngoài không tải được → cài đặt và sinh client cùng chết. Schema đã đặt
+ * `engineType = "client"`: Prisma biên dịch truy vấn bằng query compiler WASM
+ * (đóng gói sẵn trong `@prisma/client`, không tải gì) và thực thi qua driver
+ * `pg` thuần JavaScript — KHÔNG cần binary native.
+ *
+ * Ràng buộc đi kèm: engine "client" BẮT BUỘC `new PrismaClient()` nhận
+ * `adapter`; client trần sẽ ném lỗi lúc chạy. Vì thế mọi nơi đều đi qua hàm này
+ * (và `getPrisma()`), không tự `new PrismaClient()`.
+ */
+export function createPrismaClient(): PrismaClient {
+  const connectionString = process.env['DATABASE_URL'];
+  if (!connectionString) {
+    // Cùng tinh thần với README: thiếu hạ tầng thì dừng sớm với thông báo rõ,
+    // đừng để lỗi nổ mơ hồ ở tận trong tầng adapter.
+    throw new Error('Thiếu DATABASE_URL — không thể khởi tạo PrismaClient.');
+  }
+  // Engine native của Prisma đọc `?schema=` trong URL để đặt search_path; driver
+  // `pg` lại bỏ qua tham số đó. Tự bóc ra rồi truyền vào adapter để giữ NGUYÊN
+  // hành vi cũ (mặc định `public` khi URL không ghi).
+  const adapter = new PrismaPg({ connectionString }, { schema: schemaFromUrl(connectionString) });
+  return new PrismaClient({ adapter });
+}
+
+function schemaFromUrl(connectionString: string): string {
+  try {
+    return new URL(connectionString).searchParams.get('schema') ?? 'public';
+  } catch {
+    return 'public';
+  }
+}
 
 /**
  * Prisma client dùng chung.
@@ -16,7 +54,7 @@ export type { Prisma } from '@prisma/client';
 let singleton: PrismaClient | undefined;
 
 export function getPrisma(): PrismaClient {
-  singleton ??= new PrismaClient();
+  singleton ??= createPrismaClient();
   return singleton;
 }
 
