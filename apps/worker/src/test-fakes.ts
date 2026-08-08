@@ -113,11 +113,12 @@ export class FakeJira {
       return new Response('rate limited', { status: 429, headers: { 'retry-after': '0' } });
     }
 
-    if (u.pathname === '/rest/api/3/search') {
+    if (u.pathname === '/rest/api/3/search/jql') {
       const body = JSON.parse(String(init?.body ?? '{}')) as { jql: string };
       this.jqls.push(body.jql);
       const issues = this.resolveJql(body.jql).map((i) => this.toJiraIssue(i));
-      return json({ issues, startAt: 0, maxResults: 100, total: issues.length });
+      // Enhanced search: một trang, không còn nextPageToken → searchIssues dừng.
+      return json({ issues, isLast: true });
     }
 
     const worklogMatch = /^\/rest\/api\/3\/issue\/([^/]+)\/worklog$/.exec(u.pathname);

@@ -197,16 +197,22 @@ describe('giới hạn tốc độ', () => {
 });
 
 describe('phân trang', () => {
-  it('gộp đủ 250 issue từ 3 trang', async () => {
+  it('gộp đủ 250 issue từ 3 trang bằng nextPageToken', async () => {
     const mkIssues = (n: number, off: number) =>
       Array.from({ length: n }, (_, i) => ({ id: String(off + i), key: `X-${off + i}`, fields: {} }));
 
+    const sentTokens: (string | undefined)[] = [];
+    const paths: string[] = [];
     let call = 0;
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       call++;
-      if (call === 1) return jsonResponse({ issues: mkIssues(100, 0), total: 250 });
-      if (call === 2) return jsonResponse({ issues: mkIssues(100, 100), total: 250 });
-      return jsonResponse({ issues: mkIssues(50, 200), total: 250 });
+      paths.push(new URL(String(url)).pathname);
+      const body = JSON.parse(String(init?.body ?? '{}')) as { nextPageToken?: string };
+      sentTokens.push(body.nextPageToken);
+      // Enhanced search phân trang bằng token, không phải startAt/total.
+      if (call === 1) return jsonResponse({ issues: mkIssues(100, 0), nextPageToken: 'tok-1' });
+      if (call === 2) return jsonResponse({ issues: mkIssues(100, 100), nextPageToken: 'tok-2' });
+      return jsonResponse({ issues: mkIssues(50, 200), isLast: true });
     });
 
     const client = makeClient(fetchImpl as unknown as typeof fetch);
@@ -214,6 +220,20 @@ describe('phân trang', () => {
 
     expect(issues).toHaveLength(250);
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    // Đúng endpoint mới, và token được truyền tiếp từ trang thứ hai.
+    expect(paths).toEqual(['/rest/api/3/search/jql', '/rest/api/3/search/jql', '/rest/api/3/search/jql']);
+    expect(sentTokens).toEqual([undefined, 'tok-1', 'tok-2']);
+  });
+
+  it('không lặp vô hạn khi Jira trả nextPageToken không tiến', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ issues: [{ id: '1', key: 'X-1', fields: {} }], nextPageToken: 'stuck' }),
+    );
+    const client = makeClient(fetchImpl as unknown as typeof fetch);
+    const issues = await searchIssues(client, { jql: 'parent = X-1', fields: ['summary'] });
+    // Trang đầu gửi token=undefined, trang hai gửi 'stuck' rồi nhận lại 'stuck' → dừng.
+    expect(issues).toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('worklog/updated phân trang theo since, dừng khi lastPage', async () => {

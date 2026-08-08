@@ -90,7 +90,7 @@ function fakeFetch(c: Counters): typeof fetch {
     const method = init?.method ?? 'GET';
     const path = url.pathname;
 
-    if (method === 'POST' && path === '/rest/api/3/search') {
+    if (method === 'POST' && path === '/rest/api/3/search/jql') {
       c.search++;
       const jql = (JSON.parse(String(init?.body ?? '{}')) as { jql: string }).jql;
 
@@ -98,21 +98,22 @@ function fakeFetch(c: Counters): typeof fetch {
         const keys = quotedKeys(jql);
         const bad = keys.find((k) => !(k in VISIBLE));
         if (bad !== undefined) {
+          // Enhanced search VẪN trả 400 khi tham chiếu key không tồn tại.
           return json(
             { errorMessages: [`An issue with key '${bad}' does not exist for field 'issueKey'.`], errors: {} },
             400,
           );
         }
         const issues = keys.map((k) => VISIBLE[k]);
-        return json({ issues, total: issues.length });
+        return json({ issues, isLast: true });
       }
 
       if (jql.startsWith('parent IN')) {
         const issues = quotedKeys(jql).flatMap((p) => CHILDREN[p] ?? []);
-        return json({ issues, total: issues.length });
+        return json({ issues, isLast: true });
       }
 
-      return json({ issues: [], total: 0 });
+      return json({ issues: [], isLast: true });
     }
 
     if (method === 'GET' && path.startsWith('/rest/api/3/issue/')) {
