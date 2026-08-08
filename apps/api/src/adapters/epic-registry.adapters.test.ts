@@ -54,12 +54,17 @@ const VISIBLE: Record<string, unknown> = {
   },
 };
 
-/** Con trực tiếp cho các câu `parent IN (...)`. */
-const CHILDREN: Record<string, unknown[]> = {
+/**
+ * TOÀN BỘ cây con cho câu `parentEpic IN (...)` — cả Task LẪN Sub-task.
+ *
+ * `parentEpic` trả Task con trực tiếp và Sub-task lồng dưới trong CÙNG một kết
+ * quả (khác `parent` chỉ đi một tầng). Adapter phân loại lại theo `parent`.
+ */
+const SUBTREE: Record<string, unknown[]> = {
   'PAY-100': [
+    // Task (Phase) — parent là Epic.
     { id: '10101', key: 'PAY-101', fields: { parent: { key: 'PAY-100' }, issuetype: { name: 'Task' } } },
-  ],
-  'PAY-101': [
+    // Sub-task — parent là Task, KHÔNG phải Epic.
     {
       id: '10131',
       key: 'PAY-131',
@@ -71,6 +76,7 @@ const CHILDREN: Record<string, unknown[]> = {
       },
     },
   ],
+  // PAY-500: không có mục nào → Epic chưa có Task/Sub-task.
 };
 
 /** Key tồn tại nhưng KHÔNG có quyền đọc — GET issue → 403. */
@@ -83,6 +89,7 @@ function quotedKeys(jql: string): string[] {
 interface Counters {
   search: number;
   getIssue: number;
+  jqls: string[];
 }
 
 /**
@@ -99,6 +106,7 @@ function fakeFetch(c: Counters): typeof fetch {
     if (method === 'POST' && path === '/rest/api/3/search/jql') {
       c.search++;
       const jql = (JSON.parse(String(init?.body ?? '{}')) as { jql: string }).jql;
+      c.jqls.push(jql);
 
       if (jql.startsWith('key IN')) {
         const keys = quotedKeys(jql);
@@ -114,8 +122,8 @@ function fakeFetch(c: Counters): typeof fetch {
         return json({ issues, isLast: true });
       }
 
-      if (jql.startsWith('parent IN')) {
-        const issues = quotedKeys(jql).flatMap((p) => CHILDREN[p] ?? []);
+      if (jql.startsWith('parentEpic IN')) {
+        const issues = quotedKeys(jql).flatMap((e) => SUBTREE[e] ?? []);
         return json({ issues, isLast: true });
       }
 
@@ -134,7 +142,7 @@ function fakeFetch(c: Counters): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-function makePort(c: Counters = { search: 0, getIssue: 0 }) {
+function makePort(c: Counters = { search: 0, getIssue: 0, jqls: [] }) {
   const client = new JiraClient({
     credentials: new BasicAuthProvider(CREDS),
     fetchImpl: fakeFetch(c),
@@ -160,7 +168,10 @@ describe('createJiraEpicPort.lookup — chịu được key không tồn tại',
       expect(pay.meta.issueType).toBe('EPIC');
       expect(pay.meta.displayName).toBe('Cổng thanh toán');
       expect(pay.meta.phaseCount).toBe(1);
+      // PAY-131 là Sub-task LỒNG dưới Task PAY-101 (parent là Task, không phải
+      // Epic) — chỉ đếm được nhờ `parentEpic`, `parent = epic` sẽ bỏ sót.
       expect(pay.meta.subtaskCount).toBe(1);
+      expect(pay.meta.totalEstimateSeconds).toBe(3600);
     }
     expect(out.get('abc-1000')).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
@@ -169,6 +180,16 @@ describe('createJiraEpicPort.lookup — chịu được key không tồn tại',
     const { port } = makePort();
     const out = await port.lookup(['HR-1']);
     expect(out.get('HR-1')).toEqual({ ok: false, reason: 'NO_PERMISSION' });
+  });
+
+  it('lấy cây con bằng parentEpic (đủ cả Sub-task lồng), không phải parent một tầng', async () => {
+    const { port, counters } = makePort();
+    await port.lookup(['PAY-100']);
+
+    const childQueries = counters.jqls.filter((q) => !q.startsWith('key IN'));
+    expect(childQueries.some((q) => q.startsWith('parentEpic IN'))).toBe(true);
+    // KHÔNG còn bắc thang `parent IN (...)` — cách cũ bỏ sót Sub-task lồng.
+    expect(childQueries.some((q) => q.startsWith('parent IN'))).toBe(false);
   });
 
   it('Epic hợp lệ nhưng CHƯA có Task/Sub-task → vẫn ok, đếm về 0 (không 500)', async () => {
