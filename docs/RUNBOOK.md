@@ -40,6 +40,47 @@ PM báo số liệu sai — đây là thứ tự kiểm tra:
 
 ---
 
+## Trang hiện lỗi 500, hoặc API/worker không khởi động được
+
+**Triệu chứng.** Mọi `/api/*` trả 500 rỗng, màn hình chỉ hiện **SERVER_ERROR** chung chung; hoặc `pnpm dev` chạy nhưng API **không bao giờ "ready"**.
+
+**Nguyên nhân số một: Redis "treo".** Redis accept TCP nhưng **không trả lời lệnh nào** (thường do OOM / `maxmemory`, hoặc `BGSAVE` kẹt khi đĩa đầy). Bước nạp status map lúc khởi động gọi `redis.get()`; Redis không trả lời thì API **không bind được cổng 3000**, và Vite proxy trả 500 rỗng cho mọi `/api/*`.
+
+**Kiểm tra ngay — API còn lắng nghe không:**
+
+```bash
+pnpm smoke
+curl -s localhost:3000/healthz | jq      # treo hoặc "connection refused" = API chưa bind cổng
+```
+
+**Đọc log `api.fatal` / `worker.fatal`.** Từ nay khởi động **KHÔNG treo vô hạn**: quá `REDIS_READY_TIMEOUT_MS` (mặc định 10s) hoặc `BOOTSTRAP_TIMEOUT_MS` (mặc định 60s) thì tiến trình **thoát hẳn (exit 1)** kèm dòng log có `hint` chỉ thẳng nguyên nhân — để trình giám sát dựng lại thay vì để PID "sống mà không lắng nghe". Ba `hint` hay gặp:
+
+| `hint` trong log | Nguyên nhân | Xử lý |
+|---|---|---|
+| "…Redis treo… `redis-cli … ping`" | Redis không phản hồi | Xem khối Redis bên dưới |
+| "Cổng 3000 đang bận…" | Tiến trình API cũ chưa nhả cổng | `kill` tiến trình cũ rồi chạy lại |
+| "…quá 60000ms…" (không nêu Redis) | DB / Jira / phụ thuộc khác treo | Kiểm DB qua `/healthz`, rồi tới Jira |
+
+**Xác nhận & sửa Redis treo:**
+
+```bash
+redis-cli -u "$REDIS_URL" ping        # phải trả PONG NGAY; treo hơn 1 giây = Redis hỏng
+```
+
+Nếu lệnh trên **treo**: kill instance Redis đang treo rồi bật lại, sau đó khởi động lại API/worker (hoặc để trình giám sát tự làm):
+
+```bash
+redis-cli -u "$REDIS_URL" shutdown nosave   # hoặc kill PID Redis rồi khởi động lại dịch vụ Redis
+```
+
+Kiểm chứng: `redis-cli -u "$REDIS_URL" ping` trả `PONG`, rồi `curl -s localhost:3000/api/epics` trả JSON (ví dụ `{"epics":[]}`).
+
+**Nếu trang vẫn 500 sau khi API đã ready:** nhiều khả năng **trình duyệt cache** bản 500 cũ qua Vite proxy. Thử **Ctrl+Shift+R** (hard refresh) hoặc mở cửa sổ ẩn danh.
+
+**Môi trường khởi động chậm:** nới `REDIS_READY_TIMEOUT_MS` / `BOOTSTRAP_TIMEOUT_MS` — xem `.env.example`.
+
+---
+
 ## [P1] `JOB_FAILED` — Job đêm thất bại
 
 **Triệu chứng.** Slack và email báo Epic nào đó thất bại sau khi đã thử hết 5 lần.
