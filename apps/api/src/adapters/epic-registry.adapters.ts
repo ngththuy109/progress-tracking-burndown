@@ -7,7 +7,14 @@ import {
   removeEpic,
   updateEpic,
 } from '@app/db';
-import { JiraHttpError, searchIssues, type JiraClient, type ResolvedFieldMapping } from '@app/jira';
+import {
+  JiraHttpError,
+  getIssue,
+  searchIssues,
+  type JiraClient,
+  type JiraIssue,
+  type ResolvedFieldMapping,
+} from '@app/jira';
 import type { TrackedEpicStatus } from '@app/shared';
 import type {
   BackfillQueue,
@@ -56,61 +63,63 @@ export function createJiraEpicPort(
 ): JiraEpicPort {
   return {
     /**
-     * Tra nhiều key bằng ĐÚNG 3 lần gọi `/search`, bất kể 1 hay 100 key.
+     * Tra nhiều key: đường nhanh chỉ 2 lần gọi `/search` (tra key + lấy cây con
+     * bằng `parentEpic`), bất kể 1 hay 100 key.
      *
      * Gọi từng key một sẽ là 100 request cho một hộp thoại — đúng vấn đề N+1 mà
-     * PRD §4.5 cảnh báo, chỉ là ở chỗ khác.
+     * PRD §4.5 cảnh báo, chỉ là ở chỗ khác. Khi có key sai, tầng (1) buộc phải
+     * lùi về tra lẻ (xem `resolveEpicKeys`) — đó là cái giá không tránh được để
+     * một key hỏng không kéo sập cả lượt.
      */
     async lookup(keys) {
       const out = new Map<string, JiraLookupResult>();
       const wanted = [...new Set(keys)].slice(0, MAX_KEYS_PER_LOOKUP);
       if (wanted.length === 0) return out;
 
-      // (1) Bản thân các key
-      const epics = await searchIssues(client, {
-        jql: `key IN (${wanted.map(quote).join(',')})`,
-        fields: ['summary', 'issuetype', 'project'],
-      });
+      // (1) Bản thân các key — CHỊU ĐƯỢC key sai (xem `resolveEpicKeys`).
+      const epics = await resolveEpicKeys(client, wanted);
       const foundKeys = new Set(epics.map((e) => e.key));
 
-      // (2) Con trực tiếp — Task (Phase)
-      const tasks =
+      // (2) TOÀN BỘ cây con của các Epic bằng MỘT truy vấn `parentEpic`.
+      //
+      // `parent = epic` chỉ đi ĐÚNG MỘT tầng: trả về Task con trực tiếp, KHÔNG có
+      // Sub-task lồng dưới Task. Muốn đủ cả cây phải bắc thang `parent IN (task)`
+      // thêm một tầng nữa — mà vẫn hụt nếu cấu trúc sâu hơn. `parentEpic = epic`
+      // trả CẢ Task lẫn Sub-task của toàn cây trong một lần (tài liệu Jira Cloud),
+      // nên vừa đúng vừa bớt được một vòng gọi.
+      const descendants =
         foundKeys.size === 0
           ? []
           : await searchIssues(client, {
-              jql: `parent IN (${[...foundKeys].map(quote).join(',')})`,
-              fields: ['parent', 'issuetype'],
-            });
-
-      // (3) Cháu — Sub-task, nơi có estimate và ngày kế hoạch
-      const taskKeys = tasks.map((t) => t.key);
-      const subtasks =
-        taskKeys.length === 0
-          ? []
-          : await searchIssues(client, {
-              jql: `parent IN (${taskKeys.map(quote).join(',')})`,
+              jql: `parentEpic IN (${[...foundKeys].map(quote).join(',')})`,
               fields: ['parent', 'timeoriginalestimate', fields.wbsStartDate, fields.wbsEndDate],
             });
 
+      // Con TRỰC TIẾP của Epic là Task (Phase); mọi thứ còn lại là Sub-task nằm
+      // dưới một Task. Phân loại theo `parent`: parent là Epic ⇒ Task, ngược lại
+      // ⇒ Sub-task (và quy về Epic qua Task cha của nó).
       const taskToEpic = new Map<string, string>();
       const phaseCount = new Map<string, number>();
-      for (const t of tasks) {
-        const epicKey = parentKeyOf(t.fields);
-        if (!epicKey) continue;
-        taskToEpic.set(t.key, epicKey);
-        phaseCount.set(epicKey, (phaseCount.get(epicKey) ?? 0) + 1);
+      for (const d of descendants) {
+        const parentKey = parentKeyOf(d.fields);
+        if (parentKey === null || !foundKeys.has(parentKey)) continue;
+        taskToEpic.set(d.key, parentKey);
+        phaseCount.set(parentKey, (phaseCount.get(parentKey) ?? 0) + 1);
       }
 
       const subtaskCount = new Map<string, number>();
       const estimate = new Map<string, number>();
       const missingDates = new Map<string, number>();
-      for (const s of subtasks) {
-        const epicKey = taskToEpic.get(parentKeyOf(s.fields) ?? '');
-        if (!epicKey) continue;
+      for (const d of descendants) {
+        const parentKey = parentKeyOf(d.fields);
+        // Con trực tiếp của Epic đã đếm ở vòng trên — ở đây chỉ xét Sub-task.
+        if (parentKey === null || foundKeys.has(parentKey)) continue;
+        const epicKey = taskToEpic.get(parentKey);
+        if (epicKey === undefined) continue;
         subtaskCount.set(epicKey, (subtaskCount.get(epicKey) ?? 0) + 1);
-        estimate.set(epicKey, (estimate.get(epicKey) ?? 0) + numberOf(s.fields['timeoriginalestimate']));
+        estimate.set(epicKey, (estimate.get(epicKey) ?? 0) + numberOf(d.fields['timeoriginalestimate']));
         // Thiếu MỘT trong hai ngày đã là không so sánh được sớm/trễ.
-        if (s.fields[fields.wbsStartDate] == null || s.fields[fields.wbsEndDate] == null) {
+        if (d.fields[fields.wbsStartDate] == null || d.fields[fields.wbsEndDate] == null) {
           missingDates.set(epicKey, (missingDates.get(epicKey) ?? 0) + 1);
         }
       }
@@ -164,6 +173,51 @@ export function createJiraEpicPort(
       };
     },
   };
+}
+
+/** Trường lấy về khi tra Epic — đủ để phân loại và hiển thị. */
+const EPIC_LOOKUP_FIELDS = ['summary', 'issuetype', 'project'] as const;
+
+/**
+ * Tra các key Epic, CHỊU ĐƯỢC key không tồn tại.
+ *
+ * Đường nhanh là MỘT câu JQL `key IN (...)` cho cả lô — đúng "3 lần gọi bất kể 1
+ * hay 100 key" mà `lookup` hướng tới, và là đường đi khi mọi key đều hợp lệ
+ * (Epic chọn từ màn hình duyệt, hoặc lượt tra lại toàn key hợp lệ trong `addEpics`).
+ *
+ * NHƯNG Jira Cloud trả **HTTP 400** ngay khi CHỈ MỘT key trong `key IN (...)`
+ * không tồn tại / không đọc được ("... does not exist for field 'issueKey'") —
+ * mà kiểm key thì key sai chính là ca thường gặp nhất. Không bắt lỗi này thì cả
+ * lượt kiểm 500 (đúng bug đang gặp). Khi trúng 400 thì LÙI về tra từng key một
+ * qua endpoint issue: chỉ những key đọc được mới lọt vào kết quả, phần còn lại
+ * để `probeMissingKey` phân loại NOT_FOUND / NO_PERMISSION.
+ *
+ * Chỉ 400 mới lùi — lỗi khác (xác thực, 5xx) vẫn ném lên để lộ đúng nguyên nhân.
+ */
+async function resolveEpicKeys(
+  client: JiraClient,
+  keys: readonly string[],
+): Promise<readonly JiraIssue[]> {
+  try {
+    return await searchIssues(client, {
+      jql: `key IN (${keys.map(quote).join(',')})`,
+      fields: [...EPIC_LOOKUP_FIELDS],
+    });
+  } catch (err) {
+    if (!(err instanceof JiraHttpError) || err.status !== 400) throw err;
+    const resolved = await Promise.all(keys.map((k) => getEpicIssueOrNull(client, k)));
+    return resolved.filter((issue): issue is JiraIssue => issue !== null);
+  }
+}
+
+/** GET một issue, trả `null` khi 404/403 để `probeMissingKey` phân loại tiếp. */
+async function getEpicIssueOrNull(client: JiraClient, key: string): Promise<JiraIssue | null> {
+  try {
+    return await getIssue(client, key, EPIC_LOOKUP_FIELDS);
+  } catch (err) {
+    if (err instanceof JiraHttpError && (err.status === 404 || err.status === 403)) return null;
+    throw err;
+  }
 }
 
 /** Phân biệt "không tồn tại" với "không có quyền" bằng một lần GET issue. */

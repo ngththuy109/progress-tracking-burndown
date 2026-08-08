@@ -126,7 +126,18 @@ export type JiraChangelogEntry = z.infer<typeof changelogEntrySchema>;
 // --------------------------------------------------------------------------
 
 /**
- * Tìm issue theo JQL.
+ * Tìm issue theo JQL — endpoint "enhanced search" `/rest/api/3/search/jql`.
+ *
+ * KHÔNG dùng `/rest/api/3/search` cũ: Atlassian đã GỠ HẲN endpoint đó khỏi Jira
+ * Cloud (chặn từ tháng 10/2025), mọi lời gọi trả `410 Gone`. Vì tra key Epic,
+ * duyệt Epic và cả job đồng bộ đều đi qua đây, gọi endpoint đã gỡ khiến MỌI lần
+ * tìm — kể cả một key hợp lệ — chết thành 500. (Lúc khởi động chỉ chạm
+ * `/field` và `/status`, hai endpoint không bị gỡ, nên app vẫn lên được và lỗi
+ * chỉ lộ ra khi tìm issue.)
+ *
+ * Khác biệt lớn nhất so với endpoint cũ là PHÂN TRANG BẰNG TOKEN, không phải
+ * `startAt`/`total`: mỗi trang trả `nextPageToken` nếu còn nữa, và endpoint này
+ * KHÔNG trả `total`. Hết trang khi không còn `nextPageToken` (hoặc `isLast`).
  *
  * `fields` là THAM SỐ BẮT BUỘC — không cho gọi thiếu. Truyền đủ trường cần giảm
  * ~70% dung lượng phản hồi (CONVENTIONS.md C-7).
@@ -136,28 +147,52 @@ export async function searchIssues(
   params: { jql: string; fields: readonly string[]; maxResults?: number },
 ): Promise<JiraIssue[]> {
   const all: JiraIssue[] = [];
-  let startAt = 0;
   const maxResults = params.maxResults ?? 100;
+  let nextPageToken: string | undefined;
 
   for (;;) {
-    const raw = await client.request<unknown>('/rest/api/3/search', {
+    const raw = await client.request<unknown>('/rest/api/3/search/jql', {
       method: 'POST',
       body: {
         jql: params.jql,
         fields: [...params.fields],
-        startAt,
         maxResults,
+        // Chỉ gửi token từ trang thứ hai trở đi — trang đầu không có.
+        ...(nextPageToken !== undefined ? { nextPageToken } : {}),
       },
     });
     const page = searchResultSchema.parse(raw);
     all.push(...page.issues);
 
-    const total = page.total ?? all.length;
-    startAt += page.issues.length;
-    if (page.issues.length === 0 || startAt >= total) break;
+    // Dừng khi hết trang. So token trả về với token vừa gửi để chặn vòng lặp vô
+    // hạn nếu Jira trả một token không tiến.
+    if (page.isLast === true) break;
+    if (page.nextPageToken === undefined || page.nextPageToken === nextPageToken) break;
+    nextPageToken = page.nextPageToken;
   }
 
   return all;
+}
+
+/**
+ * Lấy MỘT issue theo key.
+ *
+ * Khác `searchIssues` một điểm sống còn khi kiểm key: JQL `key IN (...)` bị Jira
+ * Cloud trả **HTTP 400** ngay khi CHỈ MỘT key trong danh sách không tồn tại
+ * ("An issue with key 'X' does not exist for field 'issueKey'."). Endpoint issue
+ * trực tiếp thì trả lời RÀNH MẠCH từng key: 200 khi đọc được, 404 khi không có,
+ * 403 khi thiếu quyền — nhờ đó tra được cả những key do người dùng dán vào có
+ * thể sai mà không làm hỏng cả lượt.
+ */
+export async function getIssue(
+  client: JiraClient,
+  issueKey: string,
+  fields: readonly string[],
+): Promise<JiraIssue> {
+  const raw = await client.request<unknown>(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`, {
+    query: { fields: fields.join(',') },
+  });
+  return jiraIssueSchema.parse(raw);
 }
 
 export async function getStatuses(client: JiraClient): Promise<JiraStatus[]> {
