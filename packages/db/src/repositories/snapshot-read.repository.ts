@@ -119,7 +119,7 @@ export async function loadDataQualityRatios(
     { total: bigint; no_estimate: bigint; unclassified: bigint; no_wbs: bigint }[]
   >(
     `SELECT COUNT(*)::bigint AS total,
-            COUNT(*) FILTER (WHERE original_estimate_seconds IS NULL OR original_estimate_seconds = 0)::bigint AS no_estimate,
+            COUNT(*) FILTER (WHERE original_estimate_s IS NULL OR original_estimate_s = 0)::bigint AS no_estimate,
             COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
             COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs
        FROM jira_issue

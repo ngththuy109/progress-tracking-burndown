@@ -9,7 +9,11 @@ import {
   type SubtaskRecord,
   type WorkCalendar,
 } from '@app/shared';
-import { reconstructEpic, type ReconstructPorts } from './reconstruct-epic.job.js';
+import {
+  reconstructEpic,
+  type ReconstructPorts,
+  type SubtaskActualRecord,
+} from './reconstruct-epic.job.js';
 import { FakeLockRedis } from '../lock/fake-redis.js';
 import { lockKeyFor } from '../lock/redis-lock.js';
 
@@ -56,6 +60,7 @@ class FakePorts implements ReconstructPorts {
   readonly callOrder: string[] = [];
   readonly savedSnapshots: DailySnapshotData[] = [];
   readonly savedShifts: PlanShiftRecord[] = [];
+  readonly savedActualDates: SubtaskActualRecord[] = [];
   savedRollups: PhaseRollup[] = [];
   readonly dirty = new Set<string>();
   cacheInvalidations = 0;
@@ -86,6 +91,12 @@ class FakePorts implements ReconstructPorts {
   deleteObsoleteRollups(): Promise<number> {
     this.callOrder.push('deleteObsoleteRollups');
     return Promise.resolve(this.obsoleteRemoved);
+  }
+
+  saveSubtaskActualDates(rows: readonly SubtaskActualRecord[]): Promise<void> {
+    this.callOrder.push('saveSubtaskActualDates');
+    this.savedActualDates.push(...rows);
+    return Promise.resolve();
   }
 
   savePlanShifts(

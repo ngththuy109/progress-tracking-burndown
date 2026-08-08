@@ -31,6 +31,7 @@ export interface IssueUpsertRow {
   functionName: string | null;
   functionKey: string | null;
   taskType: string | null;
+  sbTaskRaw: string | null;
   sbParseStatus: string;
 }
 
@@ -73,6 +74,7 @@ export async function upsertIssues(
       functionName: r.functionName,
       functionKey: r.functionKey,
       taskType: r.taskType,
+      sbTaskRaw: r.sbTaskRaw,
       sbParseStatus: r.sbParseStatus,
       // Issue xuất hiện lại sau khi từng bị gỡ thì phải bỏ cờ, nếu không nó sẽ
       // vĩnh viễn bị coi là đã biến mất.

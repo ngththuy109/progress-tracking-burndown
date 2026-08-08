@@ -28,7 +28,7 @@ export function createBurndownReadPort(prisma: PrismaClient): BurndownReadPort {
       const [row] = await prisma.$queryRawUnsafe<EpicMetaRow[]>(
         `SELECT e.project_key, c.timezone, c.workdays_mask, c.hours_per_day
            FROM tracked_epic e
-           LEFT JOIN work_calendar c ON c.id = e.calendar_id
+           LEFT JOIN work_calendar c ON c.calendar_id = e.calendar_id
           WHERE e.epic_key = $1`,
         epicKey,
       );

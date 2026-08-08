@@ -1,5 +1,10 @@
-import { TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
+import { pathToFileURL } from 'node:url';
+import { Redis } from 'ioredis';
+import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
+import { disconnectPrisma, getPrisma } from '@app/db';
 import { RedisTokenBucketStore, type EvalRedis } from './queue/redis-token-bucket.js';
+import { createShutdown, registerSignalHandlers } from './queue/shutdown.js';
+import { wireWorker } from './wire.js';
 
 /**
  * Điểm lắp ráp của worker.
@@ -160,4 +165,92 @@ export interface RateLimiterBuild {
 export function buildJiraRateLimiter(redis: EvalRedis, now?: () => number): RateLimiterBuild {
   const store = new RedisTokenBucketStore(redis, now);
   return { store, limiter: new TokenBucketRateLimiter({ store }) };
+}
+
+// ---------------------------------------------------------------------------
+// Điểm vào tiến trình
+// ---------------------------------------------------------------------------
+
+/**
+ * Điểm lắp ráp thật của worker: mở Redis/Prisma/Jira thật, đấu nối bộ xử lý job
+ * (qua `wireWorker`) rồi chạy một BullMQ Worker cho mỗi hàng đợi.
+ *
+ * Chạy dưới `tsx watch src/main.ts`. Được bảo vệ bằng kiểm "gọi trực tiếp" ở cuối
+ * file để test import các hàm export phía trên KHÔNG vô tình mở kết nối.
+ */
+async function bootstrap(): Promise<void> {
+  const env = readEnv(process.env);
+  const log = (event: Record<string, unknown>): void =>
+    console.log(JSON.stringify({ level: 'info', name: 'worker', ...event }));
+  log({ event: 'worker.starting', ...loggableEnv(env) });
+
+  // Ba kết nối RIÊNG BIỆT (xem `createRedisConnections`): dùng chung một kết nối
+  // cho Queue lẫn Worker sẽ làm treo mọi lệnh Redis khác.
+  const redis = createRedisConnections((url, _role, options) => new Redis(url, options), env.redisUrl);
+  for (const conn of redis.all) {
+    conn.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
+  }
+
+  // Kiểm DB ngay lúc khởi động: thà chết sớm với lỗi rõ còn hơn để mọi job đổ vì
+  // không có database.
+  const prisma = getPrisma();
+  await prisma.$queryRaw`SELECT 1`;
+
+  // JiraClient dùng token bucket Redis DÙNG CHUNG (C-7): 40 req/s toàn hệ thống,
+  // chứ không phải mỗi worker một hạn riêng — nếu không bốn worker thành 160 req/s
+  // và Jira chặn cả tổ chức (R-04).
+  const { limiter } = buildJiraRateLimiter(redis.general as unknown as EvalRedis);
+  const jira = new JiraClient({ rateLimiter: limiter, logger: (e) => log(e) });
+
+  // Nạp field mapping + status map, dựng bảng điều phối, chạy Worker cho cả ba
+  // hàng đợi. Ném lỗi (→ worker.fatal) nếu Jira sai/không tới được.
+  const { workers, queues } = await wireWorker({
+    prisma,
+    queueConn: redis.queue,
+    workerConn: redis.worker,
+    generalConn: redis.general,
+    jira,
+    log,
+    nightlyCron: NIGHTLY_CRON,
+    weeklyReconcileCron: WEEKLY_RECONCILE_CRON,
+  });
+
+  // Tắt sạch (PRD §9.5): đóng worker TRƯỚC (chờ job đang chạy), rồi hàng đợi,
+  // Redis, cuối cùng Prisma. Đảo thứ tự là cắt chân job đang cố hoàn tất.
+  const shutdown = createShutdown({
+    workers: [...workers],
+    connections: [
+      { close: () => queues.closeAll() },
+      ...redis.all.map((conn) => ({
+        close: async () => {
+          await conn.quit().catch(() => {
+            conn.disconnect();
+          });
+        },
+      })),
+      { close: () => disconnectPrisma() },
+    ],
+    log,
+    onExit: (code) => process.exit(code),
+  });
+  registerSignalHandlers(shutdown, process);
+
+  log({ event: 'worker.ready', queues: ['sync', 'backfill', 'reconcile'] });
+}
+
+// Chỉ tự chạy khi được gọi TRỰC TIẾP (`tsx watch src/main.ts`), KHÔNG chạy khi
+// test import các hàm export ở trên (vd queue.test.ts) — nếu không mỗi lần chạy
+// test lại mở kết nối Redis/Prisma thật.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  bootstrap().catch((err: unknown) => {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        name: 'worker',
+        event: 'worker.fatal',
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    process.exitCode = 1;
+  });
 }

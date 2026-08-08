@@ -4,6 +4,7 @@ import type {
   PhaseRollup,
   PlanShiftRecord,
   StatusIdMap,
+  SubtaskActualDates,
   SubtaskRecord,
   WorkCalendar,
 } from '@app/shared';
@@ -12,6 +13,7 @@ import {
   computePhaseRollups,
   detectPlanShift,
   listWorkdays,
+  resolveSubtaskActualDates,
 } from '@app/engine';
 import {
   acquireLock,
@@ -29,6 +31,11 @@ import {
  * lượt đồng bộ — lỗi im lặng, chỉ lộ ra khi so hai lần chạy liên tiếp.
  */
 
+/** Ngày thực tế của một Sub-task, kèm khoá để ghi xuống bảng chi tiết. */
+export interface SubtaskActualRecord extends SubtaskActualDates {
+  readonly issueKey: string;
+}
+
 export interface ReconstructPorts {
   /** Toàn bộ Sub-task kèm lịch sử. Hàm tự lọc theo mốc thời gian từng ngày. */
   loadSubtasks(epicKey: string): Promise<readonly SubtaskRecord[]>;
@@ -36,6 +43,8 @@ export interface ReconstructPorts {
   savePhaseRollups(epicKey: string, rollups: readonly PhaseRollup[]): Promise<void>;
   /** Xoá bản rollup của Phase không còn Sub-task nào (E-24). */
   deleteObsoleteRollups(epicKey: string, livePhaseCodes: readonly string[]): Promise<number>;
+  /** Ghi ngày thực tế CHI TIẾT theo từng Sub-task cho Signboard (PRD §2.7.2). */
+  saveSubtaskActualDates(rows: readonly SubtaskActualRecord[]): Promise<void>;
   savePlanShifts(epicKey: string, shifts: readonly PlanShiftRecord[]): Promise<{ skippedNullBoundary: number }>;
   /** Ngày đã có snapshot — để dò ngày thiếu (E-12). */
   existingSnapshotDates(epicKey: string): Promise<ReadonlySet<string>>;
@@ -122,6 +131,16 @@ export async function reconstructEpic(
     const obsoleteRollupsRemoved = await deps.ports.deleteObsoleteRollups(
       epicKey,
       rollups.map((r) => r.phaseCode),
+    );
+
+    // Ngày thực tế CHI TIẾT theo ticket cho Signboard. Engine đã tính đúng giá
+    // trị này ở trên để tổng hợp rollup (MIN/MAX) rồi bỏ đi — ở đây giữ lại bản
+    // per Sub-task. Cùng nguồn sự thật nên bảng chi tiết và bản tổng hợp luôn khớp.
+    await deps.ports.saveSubtaskActualDates(
+      subtasks.map((s) => ({
+        issueKey: s.key,
+        ...resolveSubtaskActualDates(s, deps.statusIdMap, deps.calendar.timezone),
+      })),
     );
     if (shifts.length > 0) {
       const { skippedNullBoundary } = await deps.ports.savePlanShifts(epicKey, shifts);

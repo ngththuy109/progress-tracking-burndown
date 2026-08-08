@@ -47,6 +47,11 @@ export interface SubtaskParseResult {
   readonly functionKey: string | null;
   /** `null` khi `TaskName` không khớp cột nào — KHÔNG tự tạo cột mới (C-10). */
   readonly taskType: string | null;
+  /**
+   * `TaskName` THÔ bóc từ tiêu đề, TRƯỚC khi khớp cột. Giữ lại kể cả khi
+   * `taskType` là `null` — chính là thứ để màn hình gợi ý cột mới (E-29).
+   */
+  readonly sbTaskRaw: string | null;
 
   readonly sbParseStatus: SbParseStatus;
   /** Mẫu nào đã khớp — màn hình Xem thử hiển thị cột này. */

@@ -68,11 +68,20 @@ pnpm install
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:generate
 pnpm db:migrate
-pnpm dev                      # API on :3000, web on :5180
+pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
 ```
 
-`pnpm dev` starts the API and the web app in parallel. The web dev server uses port **5180**, not
-Vite's default 5173 — deliberately, so it never collides with another project on the same machine.
+`pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
+**worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default
+5173 — deliberately, so it never collides with another project on the same machine. The API and
+worker each need PostgreSQL, Redis and reachable Jira credentials to start; missing any of them
+stops the process with a clear message rather than a half-running server.
+
+> **Why the API and worker run through [`tsx`](https://tsx.is) and not `node --watch`:** Node's
+> built-in TypeScript support is *strip-only* — it deletes type annotations but refuses syntax that
+> compiles to runtime code, such as constructor parameter properties (`constructor(readonly x)`). So
+> `node --watch src/*.ts` crashes with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on Node 22+/24. `tsx`
+> fully transpiles the TypeScript, so the dev entry points run on any supported Node.
 
 Full setup instructions, including seeding, are in
 [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) *(Vietnamese)*.
@@ -164,11 +173,14 @@ label no longer exists. Documentation that nothing checks rots within three mont
 
 Stated plainly, because a green test suite can hide this:
 
-- **The worker's `main()` is not wired.** Job logic, queues and shutdown are all tested behind
-  ports, but the final assembly with real Prisma, ioredis and a Jira client needs live
-  infrastructure to write against.
-- **Prisma adapters for reconciliation and ops health** are not implemented, for the same reason.
-  The logic behind those ports is tested; the SQL is not written.
+- **`GET /api/signboard/...` is broken.** Its read adapter joins a `subtask_actual_dates` table that
+  the migrations never create, so the endpoint 500s. Everything else on the worker→burndown path is
+  wired and verified end-to-end (add Epic → backfill → sync from Jira → phase rollups → daily
+  snapshots → burndown chart); this one adapter needs that table (a view over issues + changelog) or
+  a rewrite.
+- **The ops endpoints (`/metrics`, `/api/ops/health`) are not mounted.** The route module and its
+  ports exist and are tested, but `createServer` does not register them yet — the composition root
+  exposes a lightweight `/healthz` liveness check (pinging Postgres + Redis) instead.
 - **The p95 ≤ 800 ms target is unmeasured.** It needs PostgreSQL loaded with realistic volume.
 - **`ONBOARDING.md` has never been followed on a clean machine** by someone new. File-scanning tests
   catch documentation that has gone stale; they cannot catch documentation that was never complete.

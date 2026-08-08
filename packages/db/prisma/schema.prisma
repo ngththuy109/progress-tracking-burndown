@@ -79,11 +79,15 @@ model JiraIssue {
   functionName String? @map("function_name") @db.VarChar(128) // dạng hiển thị, giữ nguyên gốc
   functionKey  String? @map("function_key") @db.VarChar(128) // NFKC + lowercase, để GỘP HÀNG
   taskType     String? @map("task_type") @db.VarChar(32) // NULL nếu không khớp cột nào
+  // TaskName THÔ bóc từ tiêu đề, giữ nguyên kể cả khi không khớp cột nào —
+  // nguồn để màn hình gợi ý cột Signboard mới (PRD E-29).
+  sbTaskRaw    String? @map("sb_task_raw") @db.VarChar(64)
 
   sbParseStatus String @default("UNPARSED") @map("sb_parse_status") @db.VarChar(24)
 
-  parent   JiraIssue?  @relation("IssueTree", fields: [parentKey], references: [issueKey], onDelete: NoAction, onUpdate: NoAction)
-  children JiraIssue[] @relation("IssueTree")
+  parent      JiraIssue?          @relation("IssueTree", fields: [parentKey], references: [issueKey], onDelete: NoAction, onUpdate: NoAction)
+  children    JiraIssue[]         @relation("IssueTree")
+  actualDates SubtaskActualDates?
 
   @@index([epicKey, issueType], map: "idx_issue_epic")
   @@index([parentKey], map: "idx_issue_parent")
@@ -449,4 +453,28 @@ model PlanShiftHistory {
 
   @@index([epicKey, detectedAt(sort: Desc)], map: "idx_planshift_epic")
   @@map("plan_shift_history")
+}
+
+// ============================================================================
+// Bảng 11: Ngày plan/actual của TỪNG Sub-task (PRD §2.7.2, §6)
+//
+// `phase_rollup` giữ bản TỔNG HỢP theo Phase; bảng này giữ bản CHI TIẾT theo
+// ticket mà mỗi ô Signboard cần để so kế hoạch↔thực tế của chính nó. `actual_*`
+// suy ra từ changelog + worklog nên do job dựng lại GHI (dùng lại
+// engine.resolveSubtaskActualDates) — KHÔNG phải view SQL, vì việc tra
+// status_id → nhóm trạng thái cần bảng nằm ở Redis.
+// ============================================================================
+model SubtaskActualDates {
+  issueKey String @id @map("issue_key") @db.VarChar(32)
+
+  actualStart DateTime? @map("actual_start") @db.Date
+  actualEnd   DateTime? @map("actual_end") @db.Date
+  // true = chưa từng Done; actual_end mới chỉ là ngày worklog cuối, tạm tính.
+  actualEndIsProvisional Boolean @default(false) @map("actual_end_is_provisional")
+
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  issue JiraIssue @relation(fields: [issueKey], references: [issueKey], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("subtask_actual_dates")
 }

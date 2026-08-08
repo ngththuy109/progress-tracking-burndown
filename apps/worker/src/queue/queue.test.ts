@@ -93,7 +93,7 @@ describe('chống trùng job', () => {
   it('cùng một Epic cho ra cùng một jobId', () => {
     // BullMQ bỏ qua job có jobId trùng khi job cũ còn trong hàng đợi. Nhờ vậy
     // PM bấm "Thêm" hai lần không tạo hai lần chạy bù (C-6).
-    expect(jobIdFor(JOB_NAME.backfillEpic, 'PAY-1')).toBe('backfill-epic:PAY-1');
+    expect(jobIdFor(JOB_NAME.backfillEpic, 'PAY-1')).toBe('backfill-epic__PAY-1');
     expect(jobIdFor(JOB_NAME.backfillEpic, 'PAY-1')).toBe(jobIdFor(JOB_NAME.backfillEpic, 'PAY-1'));
   });
 

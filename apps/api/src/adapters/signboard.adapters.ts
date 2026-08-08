@@ -41,8 +41,8 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
       // Dùng index `(epic_key, phase_code, function_name, task_type)` của T-02.
       const rows = await prisma.$queryRawUnsafe<SubtaskRow[]>(
         `SELECT i.issue_key, i.summary, i.function_key, i.function_name, i.task_type,
-                i.sb_parse_status, i.wbs_start_date, i.wbs_end_date,
-                a.actual_start, a.actual_end, a.status_category
+                i.sb_parse_status, i.wbs_start_date, i.wbs_end_date, i.status_category,
+                a.actual_start, a.actual_end
            FROM jira_issue i
            LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
           WHERE i.epic_key = $1 AND i.phase_code = $2
