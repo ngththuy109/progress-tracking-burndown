@@ -46,6 +46,12 @@ const VISIBLE: Record<string, unknown> = {
     key: 'PAY-7',
     fields: { summary: 'Một Task', issuetype: { name: 'Task' }, project: { key: 'PAY' } },
   },
+  // Epic CÓ THẬT nhưng CHƯA có Task/Sub-task nào (không nằm trong CHILDREN).
+  'PAY-500': {
+    id: '10500',
+    key: 'PAY-500',
+    fields: { summary: 'Epic mới toanh', issuetype: { name: 'Epic' }, project: { key: 'PAY' } },
+  },
 };
 
 /** Con trực tiếp cho các câu `parent IN (...)`. */
@@ -163,6 +169,23 @@ describe('createJiraEpicPort.lookup — chịu được key không tồn tại',
     const { port } = makePort();
     const out = await port.lookup(['HR-1']);
     expect(out.get('HR-1')).toEqual({ ok: false, reason: 'NO_PERMISSION' });
+  });
+
+  it('Epic hợp lệ nhưng CHƯA có Task/Sub-task → vẫn ok, đếm về 0 (không 500)', async () => {
+    const { port, counters } = makePort();
+    const out = await port.lookup(['PAY-500']);
+
+    const epic = out.get('PAY-500');
+    expect(epic?.ok).toBe(true);
+    if (epic?.ok) {
+      expect(epic.meta.issueType).toBe('EPIC');
+      expect(epic.meta.phaseCount).toBe(0);
+      expect(epic.meta.subtaskCount).toBe(0);
+      expect(epic.meta.totalEstimateSeconds).toBe(0);
+      expect(epic.meta.missingWbsDateCount).toBe(0);
+    }
+    // Mọi key hợp lệ → đi đường JQL gộp, không rơi vào tra lẻ.
+    expect(counters.getIssue).toBe(0);
   });
 
   it('mọi key hợp lệ thì vẫn đi đường JQL gộp, không tra lẻ từng key', async () => {
