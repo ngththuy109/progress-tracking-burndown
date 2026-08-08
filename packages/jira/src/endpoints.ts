@@ -160,6 +160,27 @@ export async function searchIssues(
   return all;
 }
 
+/**
+ * Lấy MỘT issue theo key.
+ *
+ * Khác `searchIssues` một điểm sống còn khi kiểm key: JQL `key IN (...)` bị Jira
+ * Cloud trả **HTTP 400** ngay khi CHỈ MỘT key trong danh sách không tồn tại
+ * ("An issue with key 'X' does not exist for field 'issueKey'."). Endpoint issue
+ * trực tiếp thì trả lời RÀNH MẠCH từng key: 200 khi đọc được, 404 khi không có,
+ * 403 khi thiếu quyền — nhờ đó tra được cả những key do người dùng dán vào có
+ * thể sai mà không làm hỏng cả lượt.
+ */
+export async function getIssue(
+  client: JiraClient,
+  issueKey: string,
+  fields: readonly string[],
+): Promise<JiraIssue> {
+  const raw = await client.request<unknown>(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`, {
+    query: { fields: fields.join(',') },
+  });
+  return jiraIssueSchema.parse(raw);
+}
+
 export async function getStatuses(client: JiraClient): Promise<JiraStatus[]> {
   const raw = await client.request<unknown>('/rest/api/3/status');
   return z.array(jiraStatusSchema).parse(raw);
