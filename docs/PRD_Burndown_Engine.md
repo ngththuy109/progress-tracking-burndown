@@ -454,7 +454,7 @@ Các số liệu được cộng dồn:
 | Lấy chi tiết worklog theo lô | `POST /rest/api/3/worklog/list` | Lấy tối đa 1000 worklog trong 1 lần gọi. |
 | **Lấy worklog vừa bị xoá** | `GET /rest/api/3/worklog/deleted` | Để phát hiện worklog bị xoá trên Jira — xem tình huống **E-17**. Cùng cơ chế phân trang theo `since` như `/worklog/updated`. |
 | Bảng trạng thái | `GET /rest/api/3/status` | Để dựng bảng tra `status_id → statusCategory`. |
-| **Danh sách field** | `GET /rest/api/3/field` | Để **tự dò mã custom field** `wbs_start_date` / `wbs_end_date` theo tên — xem mục 2.8. Gọi 1 lần lúc khởi động, cache 24 giờ. |
+| **Danh sách field** | `GET /rest/api/3/field` | Để **kiểm tra** mã custom field `wbs_start_date` / `wbs_end_date` khai trong `config/jira-fields.yaml` có **tồn tại** và **đúng kiểu** `date`/`datetime` — xem mục 2.8. Gọi 1 lần lúc khởi động. |
 
 **JQL mẫu để lấy toàn bộ cây của một Epic:**
 
@@ -690,26 +690,28 @@ Mã custom field của `wbs_start_date` và `wbs_end_date` **khác nhau ở mỗ
 
 ```yaml
 fieldMapping:
-  # Mã custom field trên Jira của bạn.
+  # Mã custom field trên Jira của bạn — khai TRỰC TIẾP, đây là nguồn DUY NHẤT.
   # Tra bằng: GET /rest/api/3/field
   wbsStartDate: customfield_10100    # tên hiển thị: wbs_start_date
   wbsEndDate:   customfield_10101    # tên hiển thị: wbs_end_date
-
-autoDetect:
-  # Nếu bật, hệ thống tự dò mã field theo tên khi khởi động.
-  # Dò được thì lấy kết quả dò, đối chiếu với giá trị khai ở trên.
-  enabled: true
-  startDateNames: ["wbs_start_date", "WBS Start Date", "開始日"]
-  endDateNames:   ["wbs_end_date",   "WBS End Date",   "終了日"]
 ```
+
+> **Không tự dò field theo tên.** Mã field khai thẳng trong file là nguồn duy
+> nhất. Bản trước có khối `autoDetect` (tự dò theo tên rồi đối chiếu với file)
+> nhưng đã **bỏ**: nó vẫn buộc phải khai mã field trong file nên không giảm được
+> công vận hành, mà lại thêm một nguồn "đoán sai trong im lặng".
 
 **Quy trình lúc khởi động:**
 
-1. Gọi `GET /rest/api/3/field` lấy toàn bộ danh sách field của Jira.
-2. Nếu bật `autoDetect` → tìm field có tên khớp `startDateNames` / `endDateNames`.
-3. Đối chiếu với `fieldMapping` trong file. Lệch nhau → ghi cảnh báo, **ưu tiên giá trị trong file**.
+1. Đọc `config/jira-fields.yaml`, kiểm cấu trúc bằng schema zod.
+2. Gọi `GET /rest/api/3/field` lấy toàn bộ danh sách field của Jira.
+3. Field khai trong file **không tồn tại** trên Jira → **chặn khởi động**, gợi ý danh sách custom field gần đúng để sửa ngay.
 4. Kiểm tra kiểu field phải là `date` hoặc `datetime`. Sai kiểu → **chặn khởi động**, báo lỗi rõ ràng thay vì chạy rồi cho ra số sai.
-5. Lưu kết quả vào Redis `meta:fieldmapping` (TTL 24 giờ).
+
+Mọi chỗ trong code **đọc giá trị** hay **dựng danh sách field** để gọi Jira đều đi
+qua hai hàm chung của mục này — `readWbsDates()` (đọc ngày từ một issue) và
+`fieldIdsForSearch()` (dựng tham số `fields=`) — để mã field WBS chỉ có **một
+nguồn** là file cấu hình, không rải rác mỗi nơi một kiểu.
 
 **Ghi đè trên màn hình quản trị:** tận dụng màn hình cấu hình đã có ở mục 2.2, thêm một khu **"Ánh xạ trường ngày"** để PM chọn field từ danh sách field có thật trên Jira — không phải gõ tay mã `customfield_10100`.
 
@@ -2584,7 +2586,7 @@ Nếu cùng một `TaskName` lạ xuất hiện **≥ 3 lần**, hiện gợi ý
 | **E-20** | **Regex do PM tự nhập gây treo hệ thống (ReDoS)** — ví dụ `(a+)+$` gặp chuỗi dài sẽ chạy hàng phút | Giới hạn độ dài regex ≤ 200 ký tự. Chạy mỗi regex với **timeout 100ms cho mỗi tiêu đề**. Ngay lúc PM bấm Lưu, thử biên dịch và chạy trên bộ chuỗi mẫu để bắt sớm. | Một regex xấu có thể làm treo cả job đêm, khiến toàn bộ Epic không có snapshot. Đây là rủi ro thật vì regex do người dùng nhập, không phải dev viết. | Quá timeout → coi như **không khớp**, ghi cảnh báo `REGEX_TIMEOUT` kèm tên luật, **không làm sập job**. Nếu một luật timeout > 5 lần thì tự tắt luật đó và báo PM. Khuyến nghị dùng thư viện `re2` (không có backtracking) thay cho regex gốc của JavaScript. |
 | **E-21** | **Đổi cấu hình làm hàng loạt Task đổi Phase** | Tự tìm mọi Epic bị ảnh hưởng, đẩy vào `dirty:epics`, tính lại phân loại Phase cho **toàn bộ lịch sử**. Không gọi lại Jira (dữ liệu gốc đã có trong DB). | Nếu chỉ áp dụng từ hôm nay, biểu đồ Phase đứt đoạn giữa chừng, không giải thích được với khách hàng. Nếu tính lại tất cả cùng lúc thì dồn tải đột ngột. | Màn hình Xem thử luôn báo trước số Epic sẽ phải tính lại. Nếu > 50 Epic → hỏi xác nhận lần nữa và giãn việc tính lại theo lô. Xem mục 2.2.7. |
 | **E-22** | **Cấu hình ghi đè theo project trỏ tới `phase_code` không có trong bộ Mặc định** | Chặn ngay lúc lưu (kiểm tra hợp lệ ở mục 2.2.4). | Nếu lọt qua — do sau đó có người xoá Phase khỏi bộ Mặc định — thì luật khớp trỏ vào khoảng không, Task rơi hết vào `UNCLASSIFIED` mà không rõ lý do. | Khi phát hiện lúc chạy → coi là `UNCLASSIFIED` + ghi cảnh báo `ORPHAN_PHASE_CODE` kèm tên Phase bị thiếu. Trước khi xoá một Phase khỏi bộ Mặc định, hệ thống cảnh báo có bao nhiêu bộ ghi đè đang tham chiếu tới nó. |
-| **E-23** | **Custom field `wbs_start_date` / `wbs_end_date` bị đổi mã hoặc bị xoá trên Jira** | Lúc khởi động: kiểm tra field tồn tại và đúng kiểu `date` → sai thì **chặn khởi động**, báo lỗi rõ ràng. Đang chạy mà mất field → giữ nguyên ngày cũ trong `phase_rollup`, ghi cảnh báo `FIELD_MAPPING_BROKEN`. | Nếu vẫn chạy tiếp, mọi Sub-task đọc ra ngày `null` → toàn bộ Phase mất đường Kế hoạch mà không ai biết nguyên nhân. | Bật `autoDetect` để tự dò lại mã field theo tên. Dò được → cập nhật cấu hình và báo PM. Không dò được → gửi cảnh báo P1, giữ số liệu cũ chứ **không xoá trắng**. |
+| **E-23** | **Custom field `wbs_start_date` / `wbs_end_date` bị đổi mã hoặc bị xoá trên Jira** | Lúc khởi động: kiểm tra field tồn tại và đúng kiểu `date` → sai thì **chặn khởi động**, báo lỗi rõ ràng. Đang chạy mà mất field → giữ nguyên ngày cũ trong `phase_rollup`, ghi cảnh báo `FIELD_MAPPING_BROKEN`. | Nếu vẫn chạy tiếp, mọi Sub-task đọc ra ngày `null` → toàn bộ Phase mất đường Kế hoạch mà không ai biết nguyên nhân. | Khôi phục bằng cách sửa mã field mới vào `config/jira-fields.yaml` rồi khởi động lại — thông báo chặn khởi động đã liệt kê sẵn các custom field gần đúng để tra nhanh (không còn `autoDetect` tự dò từ bản 2026-08-08). Mất field khi đang chạy → cảnh báo P1, giữ số liệu cũ chứ **không xoá trắng**. |
 | **E-24** | **Sub-task được chuyển sang Phase khác** (đổi `parent`) | Đọc changelog trường `parent`. Tính lại `phase_rollup` cho **CẢ HAI** Phase — Phase cũ (mất một Sub-task) và Phase mới (thêm một Sub-task). Ngày plan/actual của cả hai đều có thể đổi. | Chỉ tính lại Phase mới → Phase cũ giữ ngày `plan_end` của một Sub-task không còn thuộc về nó → sai cả hai biểu đồ. | Dùng chung cơ chế tính lại với **E-09** và **E-21**. Nếu việc chuyển làm `plan_end` của Phase nào bị lùi → ghi vào `plan_shift_history` như bình thường. |
 | **E-25** | **Epic bị chuyển sang `PAUSED` giữa lúc job đang chạy** | Job hiện tại **chạy nốt** cho xong (tránh để dữ liệu dở dang). Các lượt sau bỏ qua vì truy vấn chỉ lấy `status = 'ACTIVE'`. | Cắt job giữa chừng → snapshot dở dang, thiếu ngày. | Kiểm tra `status` ở đầu mỗi job, không kiểm tra giữa chừng. Dữ liệu cũ giữ nguyên để PM vẫn xem được biểu đồ, kèm nhãn *"Đã tạm dừng — số liệu tính đến ngày X"*. |
 | **E-26** | **Epic bị xoá hoặc bị đổi key trên Jira** trong khi vẫn đang theo dõi | Job đêm nhận 404 → thử lại 2 lần → chuyển Epic sang `status = ERROR`, ghi `last_error`. | Thử lại vô hạn làm tốn quota API và job đêm không bao giờ xong. | **Không tự xoá** khỏi `tracked_epic` — có thể chỉ là lỗi tạm thời hoặc đổi key. Hiện trên màn hình danh sách với trạng thái Lỗi, để PM tự quyết định bỏ theo dõi hay cập nhật key mới. |

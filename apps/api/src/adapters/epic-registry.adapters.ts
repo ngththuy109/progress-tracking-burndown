@@ -9,7 +9,9 @@ import {
 } from '@app/db';
 import {
   JiraHttpError,
+  fieldIdsForSearch,
   getIssue,
+  readWbsDates,
   searchIssues,
   type JiraClient,
   type JiraIssue,
@@ -92,7 +94,7 @@ export function createJiraEpicPort(
           ? []
           : await searchIssues(client, {
               jql: `parentEpic IN (${[...foundKeys].map(quote).join(',')})`,
-              fields: ['parent', 'timeoriginalestimate', fields.wbsStartDate, fields.wbsEndDate],
+              fields: ['parent', 'timeoriginalestimate', ...fieldIdsForSearch(fields)],
             });
 
       // Con TRỰC TIẾP của Epic là Task (Phase); mọi thứ còn lại là Sub-task nằm
@@ -118,8 +120,11 @@ export function createJiraEpicPort(
         if (epicKey === undefined) continue;
         subtaskCount.set(epicKey, (subtaskCount.get(epicKey) ?? 0) + 1);
         estimate.set(epicKey, (estimate.get(epicKey) ?? 0) + numberOf(d.fields['timeoriginalestimate']));
-        // Thiếu MỘT trong hai ngày đã là không so sánh được sớm/trễ.
-        if (d.fields[fields.wbsStartDate] == null || d.fields[fields.wbsEndDate] == null) {
+        // Thiếu MỘT trong hai ngày đã là không so sánh được sớm/trễ. Đọc bằng
+        // readWbsDates để "thiếu" hiểu ĐÚNG như lúc ghi xuống DB (chuỗi rỗng hay
+        // giá trị rác cũng là thiếu), tránh preview lệch với số liệu sau đồng bộ.
+        const wbs = readWbsDates(d, fields);
+        if (wbs.start === null || wbs.end === null) {
           missingDates.set(epicKey, (missingDates.get(epicKey) ?? 0) + 1);
         }
       }

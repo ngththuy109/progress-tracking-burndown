@@ -14,7 +14,7 @@ import {
   type FieldMappingConfig,
   type StatusMapCache,
 } from '@app/jira';
-import type { StatusIdMap } from '@app/shared';
+import { withTimeout, TimeoutError, type StatusIdMap } from '@app/shared';
 import { createServer, DEFAULT_PORT, type ServerDeps } from './server.js';
 
 /**
@@ -67,6 +67,22 @@ function readEnv(source: NodeJS.ProcessEnv): Record<EnvName, string> {
 // không API đẩy job vào một hàng đợi mà worker không hề lắng nghe.
 const QUEUE_PREFIX = 'bull:burndown';
 const BACKFILL_QUEUE_NAME = 'backfill';
+
+/**
+ * Hạn chót cho bước KHỞI ĐỘNG, để một phụ thuộc "treo" không giữ tiến trình ở
+ * trạng thái "sống mà không lắng nghe" (xem `withTimeout`).
+ *
+ * `REDIS_READY_TIMEOUT_MS` bắt riêng ca Redis treo (accept TCP nhưng không trả
+ * lời) → cho thông báo CHÍNH XÁC và thoát nhanh. `BOOTSTRAP_TIMEOUT_MS` là lưới
+ * chặn cuối cho MỌI bước treo khác (Jira `/field`, DB…). Chỉnh qua env để hợp
+ * môi trường khởi động chậm.
+ */
+function readTimeoutMs(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+const REDIS_READY_TIMEOUT_MS = readTimeoutMs('REDIS_READY_TIMEOUT_MS', 10_000);
+const BOOTSTRAP_TIMEOUT_MS = readTimeoutMs('BOOTSTRAP_TIMEOUT_MS', 60_000);
 
 /** Log JSON có cấu trúc, cùng dạng với Fastify logger (C-9). */
 function log(event: Record<string, unknown>): void {
@@ -145,6 +161,13 @@ async function bootstrap(): Promise<void> {
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   redis.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
 
+  // CHẶN ca Redis "treo": instance accept TCP nhưng không trả lời lệnh nào. Không
+  // có hạn chót thì `redis.get()` trong `loadStatusIdMap` (và mọi lệnh sau) chờ
+  // MÃI — `maxRetriesPerRequest: null` khiến lệnh không bao giờ bị bỏ, mà treo
+  // kiểu này KHÔNG phát ra event `error` nên `.catch` bên dưới chẳng bao giờ chạy.
+  // Ping có hạn chót biến "treo im lặng" thành lỗi rõ, để bootstrap thoát hẳn.
+  await withTimeout(redis.ping(), REDIS_READY_TIMEOUT_MS, 'Redis (ping lúc khởi động)');
+
   // JiraClient dùng bộ giới hạn tốc độ IN-MEMORY mặc định. Đủ cho API vì nó chỉ
   // tra cứu tương tác lượng nhỏ (kiểm key Epic, duyệt danh sách); ngân sách Redis
   // 40 req/s toàn hệ thống (C-7) tồn tại để ghìm lượt đồng bộ HÀNG LOẠT của
@@ -155,7 +178,6 @@ async function bootstrap(): Promise<void> {
   // Field mapping: nạp MỘT lần, CHẶN khởi động nếu field sai/thiếu (PRD §2.8,
   // E-23) — thà không chạy còn hơn để mọi Phase mất đường Kế hoạch trong im lặng.
   const fieldMapping = resolveFieldMapping(loadFieldMappingConfig(), await getFields(jira));
-  for (const w of fieldMapping.warnings) log({ event: 'fieldMapping.warning', message: w });
 
   // Status map: id trạng thái → nhóm, cache 24h ở Redis (T-04). Changelog Jira
   // chỉ ghi id số nên không có bảng này thì không dựng lại trạng thái quá khứ.
@@ -217,9 +239,12 @@ async function bootstrap(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
-bootstrap().catch((err: unknown) => {
+// Watchdog toàn bộ khởi động: nếu bootstrap KHÔNG xong trong `BOOTSTRAP_TIMEOUT_MS`
+// (bất kỳ phụ thuộc nào treo), thoát hẳn thay vì nằm im chờ mãi.
+withTimeout(bootstrap(), BOOTSTRAP_TIMEOUT_MS, 'Khởi động API').catch((err: unknown) => {
   const code = (err as NodeJS.ErrnoException | null)?.code;
   const portInUse = code === 'EADDRINUSE';
+  const timedOut = err instanceof TimeoutError;
   log({
     event: 'api.fatal',
     message: err instanceof Error ? err.message : String(err),
@@ -228,6 +253,11 @@ bootstrap().catch((err: unknown) => {
     // EADDRINUSE. Nói thẳng để không phải đoán.
     ...(portInUse
       ? { hint: `Cổng ${process.env['PORT'] ?? DEFAULT_PORT} đang bận — nhiều khả năng còn một tiến trình API cũ chưa thoát. Dừng nó rồi chạy lại.` }
+      : {}),
+    // Treo lúc khởi động: gần như luôn là một phụ thuộc không phản hồi. Redis
+    // treo (accept TCP nhưng không trả PONG) là thủ phạm thường gặp nhất.
+    ...(timedOut
+      ? { hint: 'Một phụ thuộc không phản hồi khi khởi động — nhiều khả năng Redis treo. Kiểm tra `redis-cli -u $REDIS_URL ping` phải trả PONG; nếu treo thì kill và restart Redis.' }
       : {}),
   });
 

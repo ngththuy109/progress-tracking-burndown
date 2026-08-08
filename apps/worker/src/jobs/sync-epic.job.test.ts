@@ -8,7 +8,6 @@ import { FakeJira, FakeStore, portsOf, type FakeIssue, type FakeJiraOptions } fr
 const FIELDS: ResolvedFieldMapping = {
   wbsStartDate: 'customfield_10100',
   wbsEndDate: 'customfield_10101',
-  warnings: [],
 };
 
 const PAYLOAD: ConfigPayload = {

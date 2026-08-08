@@ -1,7 +1,7 @@
 import type { EffectiveConfig } from '@app/shared';
 import { UNCLASSIFIED_PHASE } from '@app/shared';
 import { SubtaskTitleParser, TaskTitleParser } from '@app/engine';
-import { toDateOnly, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
+import { readWbsDates, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
 import type { EpicTree } from './fetch-epic-tree.js';
 
 /**
@@ -199,6 +199,7 @@ function baseRecord(
 ): IssueRecord {
   const f = issue.fields;
   const status = f['status'] as { id?: string; statusCategory?: { key?: string } } | undefined;
+  const wbs = readWbsDates(issue, fields);
 
   return {
     issueKey: issue.key,
@@ -220,8 +221,8 @@ function baseRecord(
     timeSpentS: BigInt(numberField(f['timespent'])),
     jiraCreatedAt: new Date(stringField(f['created'])),
     jiraUpdatedAt: new Date(stringField(f['updated'])),
-    wbsStartDate: parseDateOnly(f[fields.wbsStartDate]),
-    wbsEndDate: parseDateOnly(f[fields.wbsEndDate]),
+    wbsStartDate: dateFromDateOnly(wbs.start),
+    wbsEndDate: dateFromDateOnly(wbs.end),
     sbProject: null,
     sbTeam: null,
     sbPhaseRaw: null,
@@ -233,8 +234,13 @@ function baseRecord(
   };
 }
 
-function parseDateOnly(v: unknown): Date | null {
-  const s = toDateOnly(v);
+/**
+ * Chuỗi `'YYYY-MM-DD'` (từ `readWbsDates`) → `Date` lúc nửa đêm UTC.
+ *
+ * Ngày kế hoạch neo theo UTC để so sánh nhất quán, không phụ thuộc múi giờ máy
+ * chạy worker. `readWbsDates` đã cắt phần giờ theo múi giờ trong chuỗi gốc rồi.
+ */
+function dateFromDateOnly(s: string | null): Date | null {
   return s === null ? null : new Date(`${s}T00:00:00.000Z`);
 }
 

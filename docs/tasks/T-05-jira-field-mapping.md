@@ -18,6 +18,14 @@ finished_at: 2026-08-03
 
 # T-05 · Ánh xạ custom field wbs_start_date / wbs_end_date
 
+> **Cập nhật 2026-08-08.** Đã **bỏ tính năng tự dò field** (`autoDetect` /
+> `detectFieldIds`): mã field nay khai **trực tiếp** trong `config/jira-fields.yaml`
+> là nguồn duy nhất; lúc khởi động chỉ còn kiểm field **tồn tại** + **đúng kiểu**
+> `date`/`datetime`. Đồng thời gom mọi chỗ đọc/dựng field WBS về hai hàm chung
+> `readWbsDates()` và `fieldIdsForSearch()`. Các phần "Phạm vi", "Việc phải làm",
+> "Đã làm gì" bên dưới là bản **gốc** lúc làm card — giữ để đối chiếu lịch sử,
+> không còn phản ánh phần tự dò.
+
 ## Mục tiêu
 Hệ thống đọc được ngày kế hoạch của Sub-task từ Jira, dù mã custom field khác nhau ở mỗi Jira instance. Không có card này thì không tổng hợp được ngày Phase (T-15) và không vẽ được đường Kế hoạch (T-16).
 

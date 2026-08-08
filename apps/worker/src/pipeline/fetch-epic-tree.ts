@@ -1,4 +1,5 @@
 import {
+  fieldIdsForSearch,
   getDeletedWorklogIds,
   getIssueChangelog,
   getIssueWorklogs,
@@ -91,8 +92,7 @@ export async function fetchEpicTree(
     'timespent',
     'created',
     'updated',
-    args.fields.wbsStartDate,
-    args.fields.wbsEndDate,
+    ...fieldIdsForSearch(args.fields),
   ];
 
   // (1) Bản thân Epic + các Task con. KHÔNG lọc theo `updated` — xem chú thích.

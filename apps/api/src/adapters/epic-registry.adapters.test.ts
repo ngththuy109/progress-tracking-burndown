@@ -24,7 +24,6 @@ const CREDS = {
 const FIELDS: ResolvedFieldMapping = {
   wbsStartDate: 'customfield_10015',
   wbsEndDate: 'customfield_10016',
-  warnings: [],
 };
 
 function json(body: unknown, status = 200): Response {

@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { Redis } from 'ioredis';
 import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
 import { disconnectPrisma, getPrisma } from '@app/db';
+import { withTimeout, TimeoutError } from '@app/shared';
 import { RedisTokenBucketStore, type EvalRedis } from './queue/redis-token-bucket.js';
 import { createShutdown, registerSignalHandlers } from './queue/shutdown.js';
 import { wireWorker } from './wire.js';
@@ -21,6 +22,21 @@ export const NIGHTLY_CRON = '1 0 * * *';
 
 /** Giờ chạy job đối soát hằng tuần (T-26) — rạng sáng Chủ nhật. */
 export const WEEKLY_RECONCILE_CRON = '0 3 * * 0';
+
+/**
+ * Hạn chót cho bước KHỞI ĐỘNG, để một phụ thuộc "treo" không giữ tiến trình ở
+ * trạng thái "sống mà không làm gì" (xem `withTimeout`).
+ *
+ * `REDIS_READY_TIMEOUT_MS` bắt riêng ca Redis treo (accept TCP nhưng không trả
+ * lời) → thông báo CHÍNH XÁC và thoát nhanh. `BOOTSTRAP_TIMEOUT_MS` là lưới chặn
+ * cuối cho MỌI bước treo khác (Jira, DB…). Chỉnh qua env cho môi trường chậm.
+ */
+function readTimeoutMs(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+const REDIS_READY_TIMEOUT_MS = readTimeoutMs('REDIS_READY_TIMEOUT_MS', 10_000);
+const BOOTSTRAP_TIMEOUT_MS = readTimeoutMs('BOOTSTRAP_TIMEOUT_MS', 60_000);
 
 // ---------------------------------------------------------------------------
 // Biến môi trường
@@ -191,6 +207,11 @@ async function bootstrap(): Promise<void> {
     conn.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
   }
 
+  // CHẶN ca Redis "treo" (accept TCP nhưng không trả lời lệnh): không có hạn chót
+  // thì `loadStatusIdMap` → `redis.get()` trên `general` chờ MÃI và worker nằm im
+  // mà không phát ra lỗi nào. Ping có hạn chót để thoát sớm với thông báo rõ.
+  await withTimeout(redis.general.ping(), REDIS_READY_TIMEOUT_MS, 'Redis (ping lúc khởi động)');
+
   // Kiểm DB ngay lúc khởi động: thà chết sớm với lỗi rõ còn hơn để mọi job đổ vì
   // không có database.
   const prisma = getPrisma();
@@ -242,15 +263,24 @@ async function bootstrap(): Promise<void> {
 // test import các hàm export ở trên (vd queue.test.ts) — nếu không mỗi lần chạy
 // test lại mở kết nối Redis/Prisma thật.
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  bootstrap().catch((err: unknown) => {
+  // Watchdog toàn bộ khởi động: bất kỳ phụ thuộc nào treo cũng thoát hẳn, không
+  // để worker nằm chờ mãi.
+  withTimeout(bootstrap(), BOOTSTRAP_TIMEOUT_MS, 'Khởi động worker').catch((err: unknown) => {
+    const timedOut = err instanceof TimeoutError;
     console.error(
       JSON.stringify({
         level: 'error',
         name: 'worker',
         event: 'worker.fatal',
         message: err instanceof Error ? err.message : String(err),
+        ...(timedOut
+          ? { hint: 'Một phụ thuộc không phản hồi khi khởi động — nhiều khả năng Redis treo. Kiểm tra `redis-cli -u $REDIS_URL ping` phải trả PONG; nếu treo thì kill và restart Redis.' }
+          : {}),
       }),
     );
-    process.exitCode = 1;
+    // PHẢI thoát HẲN chứ không chỉ đặt `exitCode`: Redis/BullMQ đang mở GIỮ event
+    // loop sống, nên đặt exitCode sẽ để tiến trình "sống mà không làm gì" — trình
+    // giám sát thấy PID còn đó nên KHÔNG dựng lại. Thoát hẳn để được restart.
+    process.exit(1);
   });
 }

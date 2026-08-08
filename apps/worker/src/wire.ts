@@ -107,7 +107,6 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
   const now = (): Date => new Date();
 
   const fields = resolveFieldMapping(loadFieldMappingConfig(), await getFields(jira));
-  for (const w of fields.warnings) log({ event: 'fieldMapping.warning', message: w });
   const statusIdMap = await loadStatusIdMap(jira, createStatusMapCache(deps.generalConn));
 
   const queues = createQueues(deps.queueConn);

@@ -58,7 +58,6 @@ export {
 
 export {
   resolveFieldMapping,
-  detectFieldIds,
   readWbsDates,
   toDateOnly,
   fieldIdsForSearch,
