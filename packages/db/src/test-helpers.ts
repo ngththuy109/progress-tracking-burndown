@@ -21,8 +21,10 @@ export async function hasDatabase(): Promise<boolean> {
   }
 
   try {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+    // Đi qua factory chung: khi bật `queryCompiler`, client bắt buộc có
+    // `adapter` nên KHÔNG được `new PrismaClient()` trần ở đây nữa.
+    const { createPrismaClient } = await import('./client.js');
+    const prisma = createPrismaClient();
     await prisma.$queryRaw`SELECT 1`;
     await prisma.$disconnect();
     cached = true;

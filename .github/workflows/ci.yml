@@ -19,6 +19,10 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      # Sinh Prisma Client (query compiler WASM, không tải engine) — typecheck
+      # cần các kiểu do generate sinh ra. Không đặt vào `postinstall` vì lúc đó
+      # `prisma generate` tự gọi `pnpm add` lồng nhau và kẹt khoá với install.
+      - run: pnpm db:generate
       - run: pnpm typecheck
 
   lint:
@@ -30,6 +34,8 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      # Prisma Client phải tồn tại thì ESLint mới phân giải được kiểu (xem job typecheck).
+      - run: pnpm db:generate
       - run: pnpm lint
 
   test:
