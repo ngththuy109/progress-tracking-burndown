@@ -218,6 +218,28 @@ async function bootstrap(): Promise<void> {
 }
 
 bootstrap().catch((err: unknown) => {
-  log({ event: 'api.fatal', message: err instanceof Error ? err.message : String(err) });
-  process.exitCode = 1;
+  const code = (err as NodeJS.ErrnoException | null)?.code;
+  const portInUse = code === 'EADDRINUSE';
+  log({
+    event: 'api.fatal',
+    message: err instanceof Error ? err.message : String(err),
+    // Ca hay gặp khi KHỞI ĐỘNG LẠI: tiến trình API cũ chưa nhả cổng (shutdown
+    // còn đợi request dở dang drain) nên `app.listen` của tiến trình mới trúng
+    // EADDRINUSE. Nói thẳng để không phải đoán.
+    ...(portInUse
+      ? { hint: `Cổng ${process.env['PORT'] ?? DEFAULT_PORT} đang bận — nhiều khả năng còn một tiến trình API cũ chưa thoát. Dừng nó rồi chạy lại.` }
+      : {}),
+  });
+
+  // PHẢI thoát HẲN, không chỉ đặt `process.exitCode = 1`.
+  //
+  // Lúc này bootstrap đã mở Redis (và hàng đợi BullMQ) — những kết nối đó GIỮ
+  // event loop sống. Nếu chỉ đặt exitCode mà không exit, tiến trình sẽ nằm lại ở
+  // trạng thái "CÒN SỐNG NHƯNG KHÔNG LẮNG NGHE": trình giám sát (tsx watch,
+  // Docker, K8s…) thấy PID còn sống nên KHÔNG khởi động lại, còn Vite proxy trả
+  // 500 rỗng cho mọi `/api/*` → màn hình chỉ hiện "SERVER_ERROR" chung chung, che
+  // mất nguyên nhân thật là API chưa bao giờ bind được cổng. Thoát hẳn để đúng
+  // với chủ ý "thà không chạy còn hơn chạy nửa vời" ở trên, và để nơi giám sát
+  // có cơ hội dựng lại tiến trình.
+  process.exit(1);
 });
