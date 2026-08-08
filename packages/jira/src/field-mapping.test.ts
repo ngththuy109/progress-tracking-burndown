@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveFieldMapping,
-  detectFieldIds,
   readWbsDates,
   toDateOnly,
   FieldMappingError,
@@ -25,40 +24,13 @@ const baseConfig = (over: Partial<FieldMappingConfig['fieldMapping']> = {}): Fie
       wbsEndDate: 'customfield_10101',
       ...over,
     },
-    autoDetect: { enabled: false, startDateNames: [], endDateNames: [] },
   });
 
-describe('đọc cấu hình và dò field', () => {
-  it('đọc được mã field từ file cấu hình khi tắt tự dò', () => {
+describe('đọc cấu hình field mapping', () => {
+  it('đọc được mã field khai trong file cấu hình', () => {
     const r = resolveFieldMapping(baseConfig(), FIELDS);
     expect(r.wbsStartDate).toBe('customfield_10100');
     expect(r.wbsEndDate).toBe('customfield_10101');
-    expect(r.warnings).toHaveLength(0);
-  });
-
-  it('tự dò tìm đúng field theo tên wbs_start_date', () => {
-    expect(detectFieldIds(FIELDS, ['wbs_start_date'])).toBe('customfield_10100');
-  });
-
-  it('tự dò khớp được tên tiếng Nhật 開始日 dạng toàn giác', () => {
-    // Chuỗi tìm dùng ký tự toàn giác khác với chuỗi trong FIELDS sau NFKC
-    expect(detectFieldIds(FIELDS, ['開始日'])).toBe('customfield_10200');
-  });
-
-  it('tự dò không phân biệt hoa thường và khoảng trắng thừa', () => {
-    expect(detectFieldIds(FIELDS, ['  WBS_START_DATE  '])).toBe('customfield_10100');
-  });
-
-  it('file và kết quả dò lệch nhau thì ưu tiên file và ghi cảnh báo', () => {
-    const cfg = fieldMappingConfigSchema.parse({
-      fieldMapping: { wbsStartDate: 'customfield_10100', wbsEndDate: 'customfield_10101' },
-      autoDetect: { enabled: true, startDateNames: ['開始日'], endDateNames: [] },
-    });
-
-    const r = resolveFieldMapping(cfg, FIELDS);
-
-    expect(r.wbsStartDate).toBe('customfield_10100'); // giá trị trong file thắng
-    expect(r.warnings.join(' ')).toMatch(/customfield_10200/);
   });
 });
 

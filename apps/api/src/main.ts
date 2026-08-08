@@ -155,7 +155,6 @@ async function bootstrap(): Promise<void> {
   // Field mapping: nạp MỘT lần, CHẶN khởi động nếu field sai/thiếu (PRD §2.8,
   // E-23) — thà không chạy còn hơn để mọi Phase mất đường Kế hoạch trong im lặng.
   const fieldMapping = resolveFieldMapping(loadFieldMappingConfig(), await getFields(jira));
-  for (const w of fieldMapping.warnings) log({ event: 'fieldMapping.warning', message: w });
 
   // Status map: id trạng thái → nhóm, cache 24h ở Redis (T-04). Changelog Jira
   // chỉ ghi id số nên không có bảng này thì không dựng lại trạng thái quá khứ.

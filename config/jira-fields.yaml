@@ -8,16 +8,3 @@
 fieldMapping:
   wbsStartDate: customfield_10100 # tên hiển thị trên Jira: wbs_start_date
   wbsEndDate: customfield_10101 # tên hiển thị trên Jira: wbs_end_date
-
-autoDetect:
-  # Bật thì hệ thống tự dò mã field theo tên lúc khởi động, rồi ĐỐI CHIẾU với
-  # giá trị khai ở trên. Lệch nhau → ghi cảnh báo, ưu tiên giá trị trong file.
-  enabled: true
-  startDateNames:
-    - wbs_start_date
-    - WBS Start Date
-    - 開始日
-  endDateNames:
-    - wbs_end_date
-    - WBS End Date
-    - 終了日
