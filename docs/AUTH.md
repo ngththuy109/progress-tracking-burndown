@@ -93,7 +93,7 @@ Xem `.env.example`. Frontend: `VITE_SIGN_IN_PATH` để 401 đá về trang đă
 
 **Thứ tự:** đăng ký project trước, rồi mới gán PM vào project đó.
 
-1. **Admin đầu tiên** — đặt `AUTH_BOOTSTRAP_ADMINS=you@cty.com` (không cần DB).
+1. **Admin đầu tiên** — đặt `AUTH_BOOTSTRAP_ADMINS=you@cty.com` (không cần DB), hoặc **seed tự động khi deploy**: `pnpm seed:admin` (idempotent; cấu hình qua env `SEED_ADMIN_*`, đặt SAU `pnpm db:migrate`).
 2. **Đăng ký project** — màn hình **Projects** (chỉ ADMIN), hoặc
    `INSERT INTO "project"(project_key) VALUES ('PAY') ON CONFLICT DO NOTHING;`
 3. **Cấp quyền** — màn hình **Users** (tick project cho PM từ danh sách), hoặc CLI:

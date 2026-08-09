@@ -65,6 +65,24 @@ xuất/hết phiên; chỉ hợp cho **vài người, tạm thời**. Gỡ ngư�
 
 ---
 
+## Seed admin tự động khi deploy
+
+`pnpm seed:admin` tạo sẵn một admin, **idempotent** (chạy lại mỗi lần deploy vô
+hại). Cấu hình đọc từ env (xem `.env.example`); chưa đặt `SEED_ADMIN_EMAIL` thì
+bỏ qua. Đặt vào bước release, **SAU** migration:
+
+```bash
+pnpm db:migrate && pnpm seed:admin
+```
+
+- `SEED_ADMIN_EMAIL` → ghi một dòng ADMIN vào `app_user` (đủ cho cả SSO lẫn Basic Auth).
+- Thêm `SEED_ADMIN_PASSWORD` (+ `SEED_ADMIN_HTPASSWD`) khi dùng **Basic Auth** → tạo
+  luôn login htpasswd; **bỏ qua nếu user đã có** (không reset mật khẩu mỗi deploy).
+
+Đổi mật khẩu sau này: xoá dòng trong htpasswd (hoặc dùng `pnpm auth:testuser`) rồi deploy lại.
+
+---
+
 ## Các bước triển khai (SSO — mục tiêu)
 
 1. **Đăng ký ứng dụng ở Microsoft Entra ID** (Azure Portal → Microsoft Entra ID
