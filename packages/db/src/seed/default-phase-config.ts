@@ -98,12 +98,12 @@ export interface SeedDefaultConfigResult {
 /**
  * Seed bộ cấu hình Mặc định (GLOBAL) nếu CHƯA có bộ nào đang hiệu lực.
  *
- * Vì sao cần bước này: migration chỉ TẠO BẢNG, không nạp dữ liệu. Còn
- * `GET /api/config/phase` — nguồn của cả màn hình **Phase settings** lẫn màn
- * hình **Signboard columns** — CỐ Ý trả 500 `NO_GLOBAL_CONFIG` khi không tìm
- * thấy bộ Mặc định (thà không chạy còn hơn để PM sửa cấu hình dựa trên một bộ
- * mặc định ảo — C-9). Thiếu bước seed này thì cả hai màn hình hỏng ngay lần mở
- * đầu tiên trên một database mới migrate.
+ * Vì sao có bước này: migration chỉ TẠO BẢNG, không nạp dữ liệu. Seed cho một
+ * ĐIỂM XUẤT PHÁT hợp lý (6 Phase + luật khớp Việt/Nhật/Anh + 5 cột Signboard)
+ * thay vì màn hình trống. **KHÔNG bắt buộc:** `GET /api/config/phase` trả về bộ
+ * RỖNG khi chưa có Mặc định, nên màn hình Phase settings / Signboard columns vẫn
+ * mở bình thường để admin tự định nghĩa rồi Lưu (tạo GLOBAL v1). Seed chỉ là
+ * tiện lợi để không phải gõ tay từ đầu.
  *
  * Đi qua đúng `saveNewVersion` mà API dùng, nên dữ liệu seed có CÙNG hình dạng
  * API mong đợi — `DEFAULT_PHASE_CONFIG` là nguồn sự thật duy nhất, không nhân

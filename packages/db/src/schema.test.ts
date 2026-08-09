@@ -212,8 +212,8 @@ describe('ràng buộc thật trên PostgreSQL', async () => {
   });
 
   it('seed bộ Mặc định tạo đúng một bản GLOBAL hiệu lực (v1) với 6 Phase và 5 cột', async () => {
-    // Đây là bản vá cho lỗi NO_GLOBAL_CONFIG: màn hình Phase settings và
-    // Signboard columns 500 khi database mới migrate mà chưa seed.
+    // Seed cho một điểm xuất phát hợp lý thay vì màn hình trống. API không còn
+    // 500 khi thiếu Mặc định (mở bộ RỖNG), nhưng seed vẫn phải tạo đúng GLOBAL v1.
     await prisma.phaseConfigSet.deleteMany({ where: { scope: 'GLOBAL' } });
     const { seedDefaultPhaseConfig } = await import('./seed/default-phase-config.js');
 

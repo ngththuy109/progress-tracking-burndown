@@ -228,6 +228,69 @@ describe('lưu', () => {
   });
 });
 
+describe('khi chưa có bộ Mặc định (chưa seed)', () => {
+  /** App với kho RỖNG — KHÔNG seed GLOBAL, mô phỏng database vừa migrate xong. */
+  function buildEmpty(): { app: FastifyInstance; store: FakeConfigStore } {
+    const emptyStore = new FakeConfigStore([]);
+    const app = Fastify({ logger: false });
+    registerConfigPhaseRoutes(app, {
+      store: emptyStore,
+      dirty: new FakeDirtyQueue(),
+      issues: new FakeIssueRead([], [], ['PAY-100']),
+      resolvePrincipal: () => ADMIN,
+    });
+    return { app, store: emptyStore };
+  }
+
+  it('GET /api/config/phase trả 200 với bộ RỖNG, KHÔNG còn 500 NO_GLOBAL_CONFIG', async () => {
+    const res = await buildEmpty().app.inject({ method: 'GET', url: '/api/config/phase' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.globalVersion).toBe(0);
+    expect(body.projectVersion).toBeNull();
+    expect(body.phaseDefinitions).toEqual([]);
+    expect(body.signboardColumns).toEqual([]);
+    expect(body.matchRules).toEqual([]);
+    expect(body.titlePatterns).toEqual([]);
+    expect(body.fallbackScanFullTitle).toBe(true);
+  });
+
+  it('GET ?project=SHOP cũng mở bình thường (rỗng) khi chưa có Mặc định', async () => {
+    const res = await buildEmpty().app.inject({ method: 'GET', url: '/api/config/phase?project=SHOP' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().globalVersion).toBe(0);
+    expect(res.json().phaseDefinitions).toEqual([]);
+  });
+
+  it('admin tự định nghĩa Phase + cột rồi Lưu thì tạo GLOBAL v1', async () => {
+    const { app } = buildEmpty();
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/config/phase',
+      payload: {
+        projectKey: null,
+        payload: {
+          fallbackScanFullTitle: true,
+          titlePatterns: [],
+          subtaskPatterns: [],
+          phaseDefinitions: [{ phaseCode: 'DESIGN', labelVi: 'Thiết kế', displayOrder: 1 }],
+          matchRules: [],
+          signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+        },
+        note: 'tự định nghĩa từ đầu',
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().version).toBe(1);
+
+    // Sau khi lưu, GET phản ánh đúng bộ vừa tạo (hết rỗng).
+    const after = (await app.inject({ method: 'GET', url: '/api/config/phase' })).json();
+    expect(after.globalVersion).toBe(1);
+    expect(after.phaseDefinitions).toHaveLength(1);
+    expect(after.signboardColumns).toHaveLength(1);
+  });
+});
+
 describe('version và quay lại', () => {
   it('GET /versions trả đủ lịch sử kèm người sửa và ghi chú', async () => {
     await app.inject({

@@ -1,10 +1,11 @@
 /**
  * Seed dữ liệu Mặc định cho một database MỚI.
  *
- * Vì sao tồn tại: `pnpm db:migrate` chỉ TẠO BẢNG, không nạp dữ liệu. Nếu chưa
- * seed thì màn hình **Phase settings** và **Signboard columns** trả 500
- * `NO_GLOBAL_CONFIG` — `GET /api/config/phase` không tìm thấy bộ Mặc định đang
- * hiệu lực. Đây là bước còn thiếu để một database vừa migrate xong dùng được.
+ * Vì sao tồn tại: `pnpm db:migrate` chỉ TẠO BẢNG, không nạp dữ liệu. Seed cho
+ * một ĐIỂM XUẤT PHÁT hợp lý (bộ nhận diện Phase + 5 cột Signboard + lịch làm
+ * việc) thay vì màn hình trống. **KHÔNG bắt buộc** — màn hình cấu hình vẫn mở
+ * với bộ RỖNG khi chưa seed (`GET /api/config/phase` trả về rỗng, không còn
+ * 500) — nhưng khuyến nghị chạy để có sẵn bộ Mặc định hợp lý.
  *
  * Chạy SAU `pnpm db:migrate`:
  *

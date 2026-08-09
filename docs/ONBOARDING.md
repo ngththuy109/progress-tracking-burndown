@@ -54,14 +54,15 @@ Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đ�
 ```bash
 pnpm db:migrate          # áp migration (chạy SQL trực tiếp qua driver pg)
 pnpm db:generate         # sinh Prisma Client (query compiler WASM)
-pnpm db:seed             # nạp dữ liệu Mặc định (bộ nhận diện Phase + 5 cột Signboard + lịch làm việc)
+pnpm db:seed             # (khuyến nghị) nạp bộ Mặc định: nhận diện Phase + 5 cột Signboard + lịch làm việc
 ```
 
-> **Vì sao PHẢI seed.** Migration chỉ TẠO BẢNG, không nạp dữ liệu. Thiếu bước
-> `pnpm db:seed` thì màn hình **Phase settings** và **Signboard columns** hỏng
-> ngay lần mở đầu tiên: `GET /api/config/phase` trả **500 `NO_GLOBAL_CONFIG`** vì
-> chưa có bộ Mặc định (GLOBAL) nào đang hiệu lực. Lệnh này **idempotent** (chạy
-> lại vô hại) — bộ Mặc định chỉ tạo khi chưa có, lịch làm việc dùng upsert.
+> **`pnpm db:seed` là KHUYẾN NGHỊ, không bắt buộc.** Migration chỉ TẠO BẢNG,
+> không nạp dữ liệu. Seed cho bạn một điểm xuất phát hợp lý (6 Phase + 29 luật
+> khớp Việt/Nhật/Anh + 5 cột Signboard) thay vì màn hình trống. **Bỏ qua vẫn
+> chạy được:** màn hình **Phase settings** và **Signboard columns** mở bình
+> thường với bộ RỖNG để bạn tự định nghĩa Phase và cột rồi Lưu (tạo bản Mặc định
+> v1). Lệnh **idempotent** — bộ Mặc định chỉ tạo khi chưa có, lịch dùng upsert.
 
 > **Không tải engine của Prisma — chạy được cả khi máy chặn mạng.** Bình thường Prisma tải hai
 > binary Rust (query engine + schema engine) từ CDN `binaries.prisma.sh` lúc `pnpm install` và

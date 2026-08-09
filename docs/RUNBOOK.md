@@ -80,11 +80,11 @@ Kiểm chứng: `redis-cli -u "$REDIS_URL" ping` trả `PONG`, rồi `curl -s lo
 
 **Môi trường khởi động chậm:** nới `REDIS_READY_TIMEOUT_MS` / `BOOTSTRAP_TIMEOUT_MS` — xem `.env.example`.
 
-**Chỉ màn hình Phase settings / Signboard columns lỗi 500 (`NO_GLOBAL_CONFIG`).** Các trang khác chạy bình thường, riêng hai màn hình này báo *"Could not load…"* với `Error code: NO_GLOBAL_CONFIG`, và `GET /api/config/phase` trả 500. Nguyên nhân là **database chưa được seed**: migration chỉ tạo bảng, chưa có bộ Mặc định (GLOBAL) nào đang hiệu lực. Đây là chủ đích (C-9): thà chặn còn hơn để PM sửa cấu hình dựa trên một bộ mặc định ảo. Xử lý — chạy seed (idempotent, an toàn chạy lại):
+**Màn hình Phase settings / Signboard columns mở nhưng TRỐNG (chưa có bộ Mặc định).** Không còn lỗi 500: từ nay hai màn hình vẫn mở bình thường với bộ **RỖNG** để admin tự định nghĩa Phase và cột rồi Lưu — thao tác đó tạo bản Mặc định v1. `GET /api/config/phase` trả 200 với `globalVersion: 0` khi chưa có bản nào. Muốn có sẵn bộ **khuyến nghị** (6 Phase + 29 luật + 5 cột) thay vì gõ tay, chạy seed (idempotent, an toàn chạy lại):
 
 ```bash
 pnpm db:seed
-curl -s localhost:3000/api/config/phase | jq '.phaseDefinitions | length'   # ≠ 0 là đã seed
+curl -s localhost:3000/api/config/phase | jq '.globalVersion'   # 0 = chưa có bản nào; > 0 = đã có
 ```
 
 ---

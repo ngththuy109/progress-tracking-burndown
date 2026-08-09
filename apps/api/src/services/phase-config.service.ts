@@ -1,4 +1,5 @@
 import {
+  EMPTY_CONFIG_PAYLOAD,
   RECOMPUTE_SECONDS_PER_EPIC,
   type ConfigPayload,
   type ConfigSet,
@@ -108,27 +109,29 @@ export async function getEffective(
   projectKey: string | null,
 ): Promise<EffectiveConfig> {
   const global = await deps.store.findActive('GLOBAL', null);
-  if (!global) {
-    // Thiếu bộ Mặc định là hỏng cấu hình, không phải hỏng dữ liệu: thà không
-    // chạy còn hơn chạy ra số sai (C-9).
-    throw new ApiError(
-      500,
-      'NO_GLOBAL_CONFIG',
-      'No Default settings set is active. Run the seed before using this API.',
-    );
-  }
+
+  // Thiếu bộ Mặc định KHÔNG còn là lỗi chặn. Màn hình cấu hình vẫn mở bình
+  // thường với một bộ RỖNG để admin tự định nghĩa Phase và cột Signboard từ đầu
+  // rồi Lưu — thao tác đó tạo GLOBAL v1. `globalVersion = 0` báo cho UI biết
+  // "chưa có bản nào".
+  //
+  // An toàn: engine/worker KHÔNG đi qua đường này. Chúng có đường riêng
+  // (`loadEffectiveConfig` ở worker, fallback `DEFAULT_PHASE_CONFIG`), nên nới
+  // đường ĐỌC cho UI cấu hình không kéo theo chuyện tính ra số từ cấu hình ảo.
+  const globalPayload: ConfigPayload = global ?? EMPTY_CONFIG_PAYLOAD;
+  const globalVersion = global?.version ?? 0;
 
   if (projectKey === null) {
-    return mergeInheritance(global, null, {
-      globalVersion: global.version,
+    return mergeInheritance(globalPayload, null, {
+      globalVersion,
       projectVersion: null,
     });
   }
 
   const project = await deps.store.findActive('PROJECT', projectKey);
 
-  return mergeInheritance(global, project === null ? null : { ...project, projectKey }, {
-    globalVersion: global.version,
+  return mergeInheritance(globalPayload, project === null ? null : { ...project, projectKey }, {
+    globalVersion,
     projectVersion: project?.version ?? null,
   });
 }
