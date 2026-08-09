@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  fieldPath,
   previewRequestSchema,
   saveConfigRequestSchema,
   type Principal,
@@ -123,33 +124,9 @@ function badRequest(error: { issues: ReadonlyArray<{ path: PropertyKey[]; messag
       level: 'ERROR' as const,
       code: 'SCHEMA_INVALID',
       message: i.message,
+      // `fieldPath` (shared) đổi đường dẫn zod về dạng `phaseDefinitions[2].phaseCode`
+      // để màn hình neo được lỗi vào đúng dòng. Xem `@app/shared/issue-path.ts`.
       path: fieldPath(i.path),
     })),
   );
-}
-
-/**
- * Đổi đường dẫn lỗi của zod về ĐÚNG quy ước mà màn hình cấu hình dùng để neo
- * thông báo vào từng dòng: `phaseDefinitions[2].phaseCode`, `matchRules[0].keyword`.
- *
- * Zod trả mảng khoá `['payload','phaseDefinitions',2,'phaseCode']`. Chỉ
- * `join('.')` thì ra `payload.phaseDefinitions.2.phaseCode` — KHÔNG khớp dạng
- * `field[index].subfield` mà cả `field-errors.ts` (T-21) lẫn `validateConfigPayload`
- * (engine) dùng. Hệ quả: khi PM bấm "+ Add Phase" rồi Lưu lúc dòng mới còn trống,
- * lỗi "phaseCode rỗng" không neo được vào dòng nào, cũng không rơi vào nhóm
- * "không neo được" — nên màn hình báo "chưa lưu, xem thông báo đỏ dưới từng dòng"
- * mà chẳng có dòng nào đỏ. PM không biết phải sửa gì.
- *
- *   - Bỏ khoá bọc ngoài (`payload` khi Lưu, `draft` khi Xem thử): thông báo neo
- *     theo trường của cấu hình, không kèm tên bọc.
- *   - Chỉ số mảng viết dạng `[n]` để khớp `atRow()`.
- */
-function fieldPath(path: ReadonlyArray<PropertyKey>): string {
-  const parts = path[0] === 'payload' || path[0] === 'draft' ? path.slice(1) : path.slice();
-  let out = '';
-  for (const seg of parts) {
-    if (typeof seg === 'number') out += `[${seg}]`;
-    else out += out === '' ? String(seg) : `.${String(seg)}`;
-  }
-  return out;
 }
