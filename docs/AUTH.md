@@ -117,7 +117,41 @@ Xem `.env.example`. Frontend: `VITE_SIGN_IN_PATH` để 401 đá về trang đă
 
 ## 9. Chạy local (không có cổng)
 
-Ở máy dev không có cổng SSO: API *đọc* vẫn chạy, nhưng thao tác *ghi* cần header
-danh tính. Cách nhanh: đặt `AUTH_BOOTSTRAP_ADMINS=you@cty.com` rồi gửi kèm
-`x-user-id` — qua một oauth2-proxy local, hoặc thêm `-H 'x-user-id: you@cty.com'`
-khi gọi bằng `curl`. Xem thêm [ONBOARDING.md](./ONBOARDING.md).
+Ở máy dev không có cổng SSO: API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic,
+sửa cấu hình, quản lý người dùng) cần header danh tính. Nếu **thiếu** header này
+thì API không phân giải được principal và trả `401 UNAUTHENTICATED` — kể cả khi
+đã đặt `AUTH_BOOTSTRAP_ADMINS`, vì biến đó chỉ ánh xạ *danh tính → ADMIN* chứ
+**không tự tạo ra danh tính**.
+
+### Cách nhanh nhất — dùng app qua trình duyệt (`pnpm dev`)
+
+Đặt **hai** biến rồi chạy dev; Vite dev proxy sẽ đóng vai cổng, tự chèn
+`x-user-id` vào mọi request `/api`:
+
+```bash
+# admin@test.test là admin mồi (phía API) VÀ danh tính Vite chèn vào (phía web).
+AUTH_BOOTSTRAP_ADMINS=admin@test.test VITE_DEV_USER=admin@test.test pnpm dev
+```
+
+- `AUTH_BOOTSTRAP_ADMINS` — API đọc; email này luôn là ADMIN.
+- `VITE_DEV_USER` — **web/Vite** đọc; Vite chèn `x-user-id: <email>` vào request
+  `/api` khi dev (xem `apps/web/vite.config.ts`). Đổi header qua
+  `VITE_DEV_IDENTITY_HEADER` nếu cần. **Chỉ tác dụng dưới `vite dev`** — bản build
+  production phục vụ sau cổng thật, không bao giờ dùng shim này.
+
+Hai email phải **giống nhau** thì tài khoản Vite chèn mới khớp admin mồi. Đặt cả
+hai ở `.env` ở gốc repo cũng được (xem `.env.example`); shell luôn thắng `.env`.
+Không đặt `VITE_DEV_USER` thì Vite không chèn gì — giữ nguyên hành vi cũ.
+
+### Kiểm bằng `curl` (không qua trình duyệt)
+
+Bỏ qua cổng và Vite, gọi thẳng API kèm header tay:
+
+```bash
+curl -X POST http://localhost:3000/api/epics \
+  -H 'content-type: application/json' \
+  -H 'x-user-id: admin@test.test' \
+  -d '{"keys":["PAY-1"]}'
+```
+
+Xem thêm [ONBOARDING.md](./ONBOARDING.md).

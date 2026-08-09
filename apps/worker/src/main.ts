@@ -1,3 +1,6 @@
+// PHẢI đứng TRƯỚC mọi import khác: nạp `.env` ở gốc repo vào process.env trước
+// khi @app/db… (hoặc bất kỳ module nào) đọc env. Xem load-env.ts.
+import './load-env.js';
 import { pathToFileURL } from 'node:url';
 import { Redis } from 'ioredis';
 import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
