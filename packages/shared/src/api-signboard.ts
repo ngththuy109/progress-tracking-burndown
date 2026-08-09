@@ -103,6 +103,45 @@ export interface SignboardResponse {
   readonly parseHealthWarning: boolean;
 }
 
+/**
+ * Một Phase CÓ Sub-task trong Epic — nguồn cho bộ chọn Phase của Signboard.
+ *
+ * Signboard trước đây bắt PM tự GÕ mã Phase, không biết Phase nào có dữ liệu.
+ * Endpoint này liệt kê đúng những Phase mà bảng sẽ dựng được ô, nên bộ chọn chỉ
+ * hiện Phase "mở ra là có gì để xem".
+ */
+export const signboardPhaseSchema = z.object({
+  phaseCode: z.string(),
+  /** Nhãn hiển thị lấy từ cấu hình Phase; `null` khi Phase chưa được định nghĩa. */
+  label: z.string().nullable(),
+  /** Số Sub-task mang mã Phase này (kể cả loại chưa lên được bảng). */
+  subtaskCount: z.number().int(),
+});
+
+export const signboardPhasesResponseSchema = z.object({
+  epicKey: z.string(),
+  /** Đã sắp theo `display_order` của cấu hình; Phase lạ xếp sau, theo mã. */
+  phases: z.array(signboardPhaseSchema),
+});
+
+/**
+ * Kiểu TS khai TAY (không lấy `z.infer`) để `phases` là mảng `readonly`.
+ *
+ * Cùng lý do với `SignboardResponse` bên dưới: cổng đọc trả mảng `readonly`, còn
+ * `z.infer` sinh ra mảng sửa được — hai bên không gán cho nhau được. Schema zod
+ * ở trên vẫn dùng để frontend kiểm dữ liệu tại biên.
+ */
+export interface SignboardPhase {
+  readonly phaseCode: string;
+  readonly label: string | null;
+  readonly subtaskCount: number;
+}
+
+export interface SignboardPhasesResponse {
+  readonly epicKey: string;
+  readonly phases: readonly SignboardPhase[];
+}
+
 /** Ngưỡng banner cảnh báo tiêu đề chưa chuẩn — PRD E-27. */
 export const UNPARSED_BANNER_RATIO = 0.3;
 

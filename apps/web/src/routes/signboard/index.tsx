@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { SIGNBOARD_STATUS, type SignboardRow, type SignboardStatus } from '@app/shared';
-import { useSignboard, useUnparsedSubtasks } from '../../api/use-signboard.js';
+import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL, STATUS_TONE } from './signboard-cell.js';
 
@@ -16,12 +16,6 @@ export function SignboardScreen() {
   const epicKey = params.get('epic');
   const phaseCode = params.get('phase');
 
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<SignboardStatus | null>(null);
-
-  const board = useSignboard(epicKey, phaseCode);
-  const unparsed = useUnparsedSubtasks(epicKey, phaseCode);
-
   if (epicKey === null || epicKey === '') {
     return (
       <EmptyState
@@ -32,14 +26,122 @@ export function SignboardScreen() {
     );
   }
 
-  if (phaseCode === null || phaseCode === '') {
+  // Chọn Phase = ghi vào URL. Nhờ vậy chia sẻ link giữ nguyên Phase, và bấm một
+  // Phase khác trên thanh chọn là CHUYỂN được ngay — không phải tải lại trang.
+  const pickPhase = (code: string): void => setParams({ epic: epicKey, phase: code });
+
+  return (
+    <div className="stack">
+      <div className="scope">
+        <span className="scope__label">Epic:</span>
+        <code>{epicKey}</code>
+      </div>
+
+      {/* Thanh chọn Phase LUÔN hiện khi đã có Epic — kể cả lúc đang xem một
+          Phase — nên người dùng nhảy từ Testing sang Coding chỉ bằng một cú bấm. */}
+      <PhaseNav epicKey={epicKey} current={phaseCode} onPick={pickPhase} />
+
+      {phaseCode === null || phaseCode === '' ? (
+        <EmptyState
+          icon="🧭"
+          title="Pick a Phase"
+          description="Choose one of the Phases above to build its Signboard."
+        />
+      ) : (
+        // `key` theo Phase: đổi Phase thì bảng dựng lại sạch — ô tìm kiếm và bộ
+        // lọc trạng thái của Phase cũ không dính sang Phase mới.
+        <SignboardBoard key={phaseCode} epicKey={epicKey} phaseCode={phaseCode} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Thanh chọn Phase — thay cho ô gõ tay mã Phase trước đây.
+ *
+ * Chỉ liệt kê Phase CÓ Sub-task (API đã lọc sẵn), nên PM không phải nhớ mã và
+ * không mở nhầm Phase rỗng. Phase đang xem được tô đậm để biết mình ở đâu.
+ */
+function PhaseNav({
+  epicKey,
+  current,
+  onPick,
+}: {
+  readonly epicKey: string;
+  readonly current: string | null;
+  readonly onPick: (code: string) => void;
+}) {
+  const query = useSignboardPhases(epicKey);
+
+  if (query.isPending) return <LoadingState label="Finding Phases with sub-tasks…" rows={1} />;
+  if (query.isError) {
     return (
-      <div className="stack">
-        <PhaseInput epicKey={epicKey} onPick={(code) => setParams({ epic: epicKey, phase: code })} />
-        <EmptyState title="No Phase selected" description="Enter a Phase code, for example DESIGN." />
+      <ErrorState
+        error={query.error}
+        title="Could not load the Phase list"
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
+
+  const phases = query.data.phases;
+  const codes = phases.map((p) => p.phaseCode);
+  // Phase đang xem mà KHÔNG còn trong danh sách (Sub-task vừa bị gỡ hết, hoặc mã
+  // cũ trên URL) vẫn phải hiện — nếu không người dùng kẹt lại đó, không có nút
+  // nào để chuyển đi.
+  const orphan = current !== null && current !== '' && !codes.includes(current) ? current : null;
+
+  if (phases.length === 0 && orphan === null) {
+    return (
+      <div className="notice notice--error" role="status">
+        No sub-task in this Epic has a Phase yet. Sync the Epic on the Epics screen, then reload.
       </div>
     );
   }
+
+  return (
+    <div className="scope" role="group" aria-label="Select a Phase">
+      <span className="scope__label">Phase:</span>
+      {phases.map((p) => {
+        const active = p.phaseCode === current;
+        return (
+          <button
+            key={p.phaseCode}
+            type="button"
+            className={`button${active ? ' button--primary' : ''}`}
+            aria-pressed={active}
+            title={p.label === null ? p.phaseCode : `${p.label} (${p.phaseCode})`}
+            onClick={() => onPick(p.phaseCode)}
+          >
+            {p.label ?? p.phaseCode} <Badge tone="muted">{p.subtaskCount}</Badge>
+          </button>
+        );
+      })}
+      {orphan !== null && (
+        <button
+          type="button"
+          className="button button--primary"
+          aria-pressed={true}
+          title="This Phase has no sub-tasks right now"
+          onClick={() => onPick(orphan)}
+        >
+          {orphan}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Bảng của MỘT Phase đã chọn — tách riêng để mọi hook của bảng nằm gọn một chỗ
+ * và chỉ chạy khi thật sự có Phase.
+ */
+function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; readonly phaseCode: string }) {
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<SignboardStatus | null>(null);
+
+  const board = useSignboard(epicKey, phaseCode);
+  const unparsed = useUnparsedSubtasks(epicKey, phaseCode);
 
   if (board.isPending) return <LoadingState label="Building the Signboard…" rows={5} />;
   if (board.isError) {
@@ -53,10 +155,6 @@ export function SignboardScreen() {
   return (
     <div className="stack">
       <div className="scope">
-        <span className="scope__label">Epic:</span>
-        <code>{epicKey}</code>
-        <span className="scope__label">Phase:</span>
-        <code>{phaseCode}</code>
         {/* Trạng thái phụ thuộc "hôm nay". Người dùng mở tab từ hôm qua rồi quay
             lại sẽ thấy trạng thái cũ, nên NGÀY ĐANG TÍNH phải hiện rõ. */}
         <span className="muted">Status as of {data.asOfDate}</span>
@@ -88,24 +186,6 @@ export function SignboardScreen() {
       <BoardTable rows={data.rows} columns={data.columns} search={search} filter={filter} />
 
       <UnparsedPanel query={unparsed} />
-    </div>
-  );
-}
-
-function PhaseInput({ epicKey, onPick }: { readonly epicKey: string; readonly onPick: (code: string) => void }) {
-  const [text, setText] = useState('');
-  return (
-    <div className="scope">
-      <span className="scope__label">Epic {epicKey} · Phase:</span>
-      <input
-        className="input input--code"
-        value={text}
-        aria-label="Phase code"
-        onChange={(e) => setText(e.target.value)}
-      />
-      <button type="button" className="button button--primary" disabled={text.trim() === ''} onClick={() => onPick(text.trim())}>
-        Open board
-      </button>
     </div>
   );
 }

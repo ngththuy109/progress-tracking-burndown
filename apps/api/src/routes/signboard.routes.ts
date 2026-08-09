@@ -3,6 +3,8 @@ import { localDateOf } from '@app/engine';
 import type {
   DateOnly,
   Principal,
+  SignboardPhase,
+  SignboardPhasesResponse,
   SignboardResponse,
   SignboardSubtask,
   UnparsedResponse,
@@ -20,6 +22,13 @@ import { buildSignboard, buildUnparsedList, type ColumnSpec } from '../services/
 
 export interface SignboardReadPort {
   epicMeta(epicKey: string): Promise<{ projectKey: string; calendar: WorkCalendar } | null>;
+  /**
+   * Các Phase CÓ Sub-task trong Epic, kèm nhãn và số lượng, sắp theo cấu hình.
+   *
+   * Chính là danh sách để PM chọn thay vì gõ tay — mỗi mục ở đây bảo đảm mở ra
+   * bảng sẽ có dữ liệu.
+   */
+  phases(epicKey: string, projectKey: string): Promise<readonly SignboardPhase[]>;
   /** MỘT truy vấn lấy mọi Sub-task của `(epicKey, phaseCode)`. */
   subtasks(epicKey: string, phaseCode: string): Promise<readonly SignboardSubtask[]>;
   /** Cột đang hiệu lực, đã gộp kế thừa, sắp theo `display_order`. */
@@ -49,12 +58,17 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     }
   };
 
-  async function context(req: FastifyRequest) {
+  /**
+   * Phần dùng chung: xác thực + tra Epic + kiểm quyền, CHƯA đọc `phaseCode`.
+   *
+   * Bộ chọn Phase chỉ cần tới đây (không có Phase nào để đọc); bảng thì gọi tiếp
+   * `context` để lấy thêm `phaseCode`.
+   */
+  async function epicContext(req: FastifyRequest) {
     const principal = deps.resolvePrincipal(req);
     if (!principal) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
 
     const epicKey = param(req, 'epicKey');
-    const phaseCode = param(req, 'phaseCode');
 
     const meta = await deps.reads.epicMeta(epicKey);
     if (meta === null) {
@@ -68,6 +82,12 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
       throw new ApiError(403, 'FORBIDDEN', `You are not assigned to project ${meta.projectKey}.`);
     }
 
+    return { epicKey, meta };
+  }
+
+  async function context(req: FastifyRequest) {
+    const { epicKey, meta } = await epicContext(req);
+    const phaseCode = param(req, 'phaseCode');
     return { epicKey, phaseCode, meta };
   }
 
@@ -85,6 +105,13 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     }
     return raw;
   }
+
+  app.get('/api/signboard/epic/:epicKey/phases', async (req, reply) =>
+    handle(reply, async (): Promise<SignboardPhasesResponse> => {
+      const { epicKey, meta } = await epicContext(req);
+      return { epicKey, phases: await deps.reads.phases(epicKey, meta.projectKey) };
+    }),
+  );
 
   app.get('/api/signboard/epic/:epicKey/phase/:phaseCode', async (req, reply) =>
     handle(reply, async (): Promise<SignboardResponse> => {

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_WORKDAYS_MASK,
   type Principal,
+  type SignboardPhase,
+  type SignboardPhasesResponse,
   type SignboardResponse,
   type SignboardSubtask,
   type UnparsedResponse,
@@ -48,10 +50,14 @@ class FakeReads implements SignboardReadPort {
   subtaskList: SignboardSubtask[] = [];
   columnList: ColumnSpec[] = COLUMNS;
   raw: Record<string, string | null> = {};
+  phaseList: SignboardPhase[] = [];
   queries = 0;
 
   async epicMeta() {
     return { projectKey: 'PAY', calendar: CALENDAR };
+  }
+  async phases() {
+    return this.phaseList;
   }
   async subtasks() {
     this.queries += 1;
@@ -311,6 +317,43 @@ describe('khu chưa lên được bảng', () => {
     const { body } = await get<SignboardResponse>(BOARD);
     expect(body.parseHealthWarning).toBe(false);
     expect(body.rows).toEqual([]);
+  });
+});
+
+describe('bộ chọn Phase', () => {
+  const PHASES = '/api/signboard/epic/PAY-1/phases';
+
+  it('trả về danh sách Phase có Sub-task đúng thứ tự cổng đưa ra', async () => {
+    reads.phaseList = [
+      { phaseCode: 'DESIGN', label: 'Thiết kế', subtaskCount: 4 },
+      { phaseCode: 'CODING', label: 'Lập trình', subtaskCount: 12 },
+      { phaseCode: 'TESTING', label: 'Kiểm thử', subtaskCount: 7 },
+    ];
+
+    const { status, body } = await get<SignboardPhasesResponse>(PHASES);
+
+    expect(status).toBe(200);
+    expect(body.epicKey).toBe('PAY-1');
+    expect(body.phases.map((p) => p.phaseCode)).toEqual(['DESIGN', 'CODING', 'TESTING']);
+    expect(body.phases[1]).toEqual({ phaseCode: 'CODING', label: 'Lập trình', subtaskCount: 12 });
+  });
+
+  it('Epic chưa có Sub-task nào thì danh sách rỗng, không phải lỗi', async () => {
+    reads.phaseList = [];
+    const { status, body } = await get<SignboardPhasesResponse>(PHASES);
+
+    expect(status).toBe(200);
+    expect(body.phases).toEqual([]);
+  });
+
+  it('PM không phụ trách project nhận HTTP 403', async () => {
+    principal = { userId: 'pm', role: 'PM', projects: ['SHOP'] };
+    expect((await get(PHASES)).status).toBe(403);
+  });
+
+  it('thiếu thông tin người dùng nhận HTTP 401', async () => {
+    principal = null;
+    expect((await get(PHASES)).status).toBe(401);
   });
 });
 
