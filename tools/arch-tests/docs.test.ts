@@ -166,8 +166,16 @@ describe('ONBOARDING.md', () => {
       (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts,
     );
     const used = [...onboarding.matchAll(/pnpm ([a-z0-9:]+)/g)].map((m) => m[1] ?? '');
+    // Lệnh DỰNG SẴN của pnpm — không phải script trong package.json nhưng vẫn
+    // được phép nhắc trong tài liệu (ví dụ giải thích vì sao KHÔNG gộp
+    // `prisma generate` vào `postinstall`: nó tự chạy `pnpm add`). Bỏ qua để test
+    // vẫn bắt được script GÕ SAI mà không cấm nhắc lệnh pnpm thật.
+    const PNPM_BUILTINS = new Set([
+      'install', 'add', 'remove', 'update', 'run', 'exec', 'dlx',
+      'create', 'import', 'rebuild', 'prune', 'store', 'patch', 'setup', 'init',
+    ]);
     for (const name of new Set(used)) {
-      if (name === 'install') continue; // lệnh dựng sẵn của pnpm
+      if (PNPM_BUILTINS.has(name)) continue;
       expect(scripts, `onboarding dùng "pnpm ${name}" nhưng package.json không có`).toContain(name);
     }
   });
