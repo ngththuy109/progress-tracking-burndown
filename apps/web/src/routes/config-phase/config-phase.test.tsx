@@ -265,6 +265,43 @@ describe('ConfigPhaseScreen', () => {
     expect(screen.getByText('Unsaved changes')).toBeTruthy();
   });
 
+  it('thêm Phase rồi Lưu lúc còn trống: báo lỗi NGAY dưới dòng, KHÔNG gọi máy chủ', async () => {
+    // Tái hiện đúng lỗi PM báo: bấm "+ Add Phase" xong Lưu khi dòng mới còn trống.
+    // Kiểm-tại-client bắt ngay ("Phase name is required.") và chặn luôn PUT — PM
+    // không phải chờ một vòng request để nhận về 400 khó hiểu.
+    const fetchMock = vi.fn((url: string) =>
+      Promise.resolve(
+        new Response(JSON.stringify(url.includes('unmatched') ? { labels: [] } : CONFIG), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('② Phase list')).toBeTruthy());
+    const getCount = () => fetchMock.mock.calls.filter((c) => (c[1]?.method ?? 'GET') !== 'GET').length;
+
+    await userEvent.click(screen.getByRole('button', { name: /Add Phase/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Save without preview/ }));
+
+    // Thông báo đọc được, nằm TRONG đúng dòng Phase vừa thêm (không phải banner rỗng).
+    const msg = await screen.findByText('Phase name is required.');
+    const row = msg.closest('.row');
+    expect(row).not.toBeNull();
+    expect((row as HTMLElement).querySelector('input[aria-label="Vietnamese label, row 3"]')).not.toBeNull();
+
+    // Sai hình dạng thì KHÔNG mở hộp xác nhận và KHÔNG gửi request nào lên máy chủ.
+    expect(screen.queryByRole('button', { name: 'Save anyway' })).toBeNull();
+    expect(getCount()).toBe(0);
+
+    // Điền đủ mã + tên thì lỗi biến mất realtime.
+    await userEvent.type(screen.getByRole('textbox', { name: 'Phase code, row 3' }), 'UAT');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Vietnamese label, row 3' }), 'Nghiệm thu');
+    expect(screen.queryByText('Phase name is required.')).toBeNull();
+  });
+
   it('KHÔNG gọi API mỗi lần gõ phím — chỉ Xem thử và Lưu mới gọi', async () => {
     const fetchMock = vi.fn((url: string) =>
       Promise.resolve(

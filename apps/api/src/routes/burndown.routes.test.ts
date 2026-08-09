@@ -189,8 +189,26 @@ describe('ba chế độ xem', () => {
     expect(body.mode).toBe('EPIC');
     expect(body.from).toBe('2026-03-02');
     expect(body.to).toBe('2026-03-13');
-    expect(body.series).toHaveLength(1);
+    // Đường Tổng Epic vẫn ở vị trí đầu, đủ 10 điểm trên trục.
+    expect(body.series[0]?.key).toBe('EPIC');
     expect(body.series[0]?.points).toHaveLength(10);
+  });
+
+  it('Tổng Epic KÈM chuỗi của MỌI Phase để màn hình dựng được ô chọn Phase', async () => {
+    // Đây là lỗi PM báo: ở chế độ Single Phase / Compare không có Phase nào để
+    // chọn. Gốc rễ: phản hồi Tổng Epic phải kèm sẵn chuỗi từng Phase (đổi Phase
+    // KHÔNG gọi lại API — xem use-burndown.ts), nhưng trước đây chỉ trả mỗi EPIC.
+    const { body } = await get('/api/burndown/epic/PAY-1');
+
+    // EPIC đứng đầu, theo sau là từng Phase đúng thứ tự rollup (display_order).
+    expect(body.series.map((s) => s.key)).toEqual(['EPIC', 'DESIGN', 'DEV']);
+
+    const design = body.series.find((s) => s.key === 'DESIGN');
+    expect(design?.label).toBe('Thiết kế'); // nhãn + màu lấy từ cấu hình hiệu lực
+    expect(design?.colorHex).toBe('#4A90D9');
+    expect(design?.points).toHaveLength(10);
+    // Số của Phase lấy từ per_phase (một nửa số Epic trong fixture), KHÔNG lấy số Epic.
+    expect(design?.points[0]?.actualRemainingHours).toBe(toHours(288_000 / 2));
   });
 
   it('chế độ một Phase CO LẠI đúng khoảng của Phase đó', async () => {

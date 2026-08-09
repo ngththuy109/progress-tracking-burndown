@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  fieldPath,
   previewRequestSchema,
   saveConfigRequestSchema,
   type Principal,
@@ -123,7 +124,9 @@ function badRequest(error: { issues: ReadonlyArray<{ path: PropertyKey[]; messag
       level: 'ERROR' as const,
       code: 'SCHEMA_INVALID',
       message: i.message,
-      path: i.path.join('.'),
+      // `fieldPath` (shared) đổi đường dẫn zod về dạng `phaseDefinitions[2].phaseCode`
+      // để màn hình neo được lỗi vào đúng dòng. Xem `@app/shared/issue-path.ts`.
+      path: fieldPath(i.path),
     })),
   );
 }

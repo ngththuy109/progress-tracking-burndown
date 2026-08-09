@@ -12,7 +12,7 @@ import { CONFIG_SCOPE, MATCH_MODE } from './enums.js';
 
 /** Tầng 1 — mẫu tiêu đề Task, ví dụ `[Phase] {name}`. */
 export const titlePatternSchema = z.object({
-  patternText: z.string().min(1),
+  patternText: z.string().min(1, 'Pattern text cannot be empty.'),
   sortOrder: z.number().int(),
 });
 
@@ -21,8 +21,8 @@ export const subtaskPatternSchema = titlePatternSchema;
 
 /** Định nghĩa một Phase chuẩn. */
 export const phaseDefinitionSchema = z.object({
-  phaseCode: z.string().min(1).max(24),
-  labelVi: z.string().min(1),
+  phaseCode: z.string().min(1, 'Phase code is required.').max(24, 'Phase code is at most 24 characters.'),
+  labelVi: z.string().min(1, 'Phase name is required.'),
   labelJa: z.string().nullable().optional(),
   colorHex: z
     .string()
@@ -35,17 +35,17 @@ export const phaseDefinitionSchema = z.object({
 
 /** Tầng 2 — luật khớp từ khoá sang Phase. */
 export const matchRuleSchema = z.object({
-  keyword: z.string().min(1),
+  keyword: z.string().min(1, 'Keyword is required.'),
   matchMode: z.enum(MATCH_MODE).default('CONTAINS'),
-  phaseCode: z.string().min(1).max(24),
+  phaseCode: z.string().min(1, 'Pick the target Phase for this rule.').max(24, 'Phase code is at most 24 characters.'),
   /** Thứ tự ƯU TIÊN KHI KHỚP, số nhỏ thắng. KHÁC `displayOrder`. */
   matchPriority: z.number().int().default(50),
 });
 
 /** Một cột của bảng Signboard. Khớp CHÍNH XÁC, không phải từ khoá. */
 export const signboardColumnSchema = z.object({
-  taskCode: z.string().min(1).max(32),
-  labelVi: z.string().min(1),
+  taskCode: z.string().min(1, 'Column code is required.').max(32, 'Column code is at most 32 characters.'),
+  labelVi: z.string().min(1, 'Column name is required.'),
   labelJa: z.string().nullable().optional(),
   displayOrder: z.number().int(),
 });

@@ -9,6 +9,7 @@ import {
   payloadToPreview,
   payloadToSave,
 } from './draft-state.js';
+import { validateDraftClient } from './client-validation.js';
 import { indexIssues, issuesOf, NO_ISSUES } from './field-errors.js';
 import { MatchRulesSection } from './match-rules-section.js';
 import { PhaseDefinitionsSection } from './phase-definitions-section.js';
@@ -88,6 +89,13 @@ function ConfigEditor({ config }: ConfigEditorProps) {
   /** Bản nháp đã được xem thử. Khác bản hiện tại nghĩa là kết quả đã cũ. */
   const [previewedOf, setPreviewedOf] = useState<string | null>(null);
   const [forceSave, setForceSave] = useState(false);
+  /**
+   * Đã bấm Lưu/Xem thử lần nào chưa. Chỉ hiện lỗi kiểm-tại-client SAU khi đã thử —
+   * bật đỏ ngay lúc PM vừa bấm "+ Add Phase" (dòng còn trống là đương nhiên) thì
+   * phiền và bị hiểu là màn hình lỗi. Sau lần thử đầu thì cập nhật realtime: sửa
+   * xong ô nào, lỗi dòng đó biến mất ngay.
+   */
+  const [attempted, setAttempted] = useState(false);
 
   const preview = usePreview();
   const save = useSaveConfig();
@@ -96,20 +104,47 @@ function ConfigEditor({ config }: ConfigEditorProps) {
   const draftKey = JSON.stringify(payloadToPreview(state));
   const previewIsFresh = preview.isSuccess && previewedOf === draftKey;
 
-  // Lỗi kiểm tra hợp lệ do máy chủ trả về, đánh chỉ mục theo đường dẫn để neo
-  // vào đúng dòng. Không neo được thì hiện ở đầu trang.
+  // Lỗi hình dạng kiểm ngay tại client (ô bắt buộc còn trống) — cho phản hồi tức
+  // thì, không phải chờ máy chủ trả 400. Chỉ tính sau khi PM đã thử Lưu/Xem thử.
+  const clientIssues = useMemo(
+    () => (attempted ? validateDraftClient(payloadToPreview(state)) : []),
+    [attempted, state],
+  );
+
+  // Gộp lỗi client (hình dạng) với lỗi máy chủ (luật nghiệp vụ như trùng mã, trỏ
+  // Phase chưa định nghĩa...). Cả hai đã cùng quy ước đường dẫn nên neo chung được.
   const errors = useMemo(() => {
-    const issues = issuesOf(save.error);
+    const issues = [...clientIssues, ...issuesOf(save.error)];
     return issues.length === 0 ? NO_ISSUES : indexIssues(issues);
-  }, [save.error]);
+  }, [clientIssues, save.error]);
+
+  /** Có lỗi hình dạng nào chặn việc gửi đi không (tính trên bản nháp hiện tại). */
+  const hasBlockingClientErrors = (): boolean => validateDraftClient(payloadToPreview(state)).length > 0;
 
   const runPreview = (): void => {
+    setAttempted(true);
     setForceSave(false);
+    // Sai hình dạng thì hiện lỗi neo dòng ngay, KHÔNG gọi máy chủ (chắc chắn 400).
+    if (hasBlockingClientErrors()) return;
     setPreviewedOf(draftKey);
     preview.mutate({ projectKey: state.projectKey, draft: payloadToPreview(state) });
   };
 
+  /** Nút "Lưu không xem thử": chỉ mở hộp xác nhận khi cấu hình đã hợp lệ hình dạng. */
+  const askSaveWithoutPreview = (): void => {
+    setAttempted(true);
+    // Còn ô bắt buộc trống thì hiện lỗi ngay, khỏi mở hộp xác nhận — không có gì
+    // để xác nhận vì có bấm tiếp cũng không lưu được.
+    if (hasBlockingClientErrors()) return;
+    setForceSave(true);
+  };
+
   const runSave = (): void => {
+    setAttempted(true);
+    if (hasBlockingClientErrors()) {
+      setForceSave(false);
+      return;
+    }
     save.mutate(
       { projectKey: state.projectKey, payload: payloadToSave(state), note: note === '' ? null : note },
       {
@@ -119,6 +154,7 @@ function ConfigEditor({ config }: ConfigEditorProps) {
           preview.reset();
           setPreviewedOf(null);
           setForceSave(false);
+          setAttempted(false);
         },
       },
     );
@@ -259,7 +295,7 @@ function ConfigEditor({ config }: ConfigEditorProps) {
             </button>
           </span>
         ) : (
-          <button type="button" className="button" onClick={() => setForceSave(true)} disabled={!dirty}>
+          <button type="button" className="button" onClick={askSaveWithoutPreview} disabled={!dirty}>
             💾 Save without preview
           </button>
         )}

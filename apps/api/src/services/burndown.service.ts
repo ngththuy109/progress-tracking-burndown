@@ -58,7 +58,17 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
 
   const series =
     args.mode === 'EPIC'
-      ? [epicSeries(args.workdays, byDate)]
+      ? [
+          epicSeries(args.workdays, byDate),
+          // KÈM luôn chuỗi số của TỪNG Phase vào cùng một phản hồi Tổng Epic.
+          // Màn hình Burndown dựng ô chọn Phase TỪ CHÍNH `series` này và đổi
+          // Phase KHÔNG gọi lại API (xem `use-burndown.ts`: "một lần gọi cho cả
+          // Epic"). Thiếu phần này thì ở chế độ Single Phase / Compare ô chọn
+          // trống trơn — PM không có Phase nào để bấm.
+          ...distinctPhaseCodes(args.rollups).map((code) =>
+            phaseSeries(code, args.workdays, byDate, args.labels),
+          ),
+        ]
       : (args.phaseCodes ?? []).map((code) => phaseSeries(code, args.workdays, byDate, args.labels));
 
   return {
@@ -76,6 +86,25 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
     planIsFloating: true,
     planNote: PLAN_FLOATING_NOTE,
   };
+}
+
+/**
+ * Danh sách mã Phase của Epic, không trùng, GIỮ NGUYÊN thứ tự rollup.
+ *
+ * Rollup đã được tầng đọc sắp theo `display_order`; giữ nguyên thứ tự đó để ô
+ * chọn Phase và các đường trên biểu đồ hiện theo đúng thứ tự PM đã cấu hình, và
+ * để hai lần gọi cho ra thứ tự giống nhau (C-6).
+ */
+function distinctPhaseCodes(rollups: readonly PhaseRollup[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of rollups) {
+    if (!seen.has(r.phaseCode)) {
+      seen.add(r.phaseCode);
+      out.push(r.phaseCode);
+    }
+  }
+  return out;
 }
 
 function point(date: DateOnly, planned: number | null, actual: number | null): ChartPoint {
