@@ -71,18 +71,20 @@ pnpm db:seed                  # (recommended) load the default Phase-matching co
 pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
 ```
 
-> **`pnpm db:seed` is recommended, not required.** Migrations create the tables but load
-> no rows. The seed gives you a sensible starting point (6 Phases, 29 Vietnamese/Japanese/
-> English match rules, 5 Signboard columns) instead of a blank slate. **You can skip it:**
-> the **Phase settings** and **Signboard columns** screens open normally with an empty,
-> editable set, so you can define your own Phases and columns and Save — which creates
-> **Default v1**. The seed is idempotent: it only creates the Default set when none is
-> active, and upserts the calendars.
+> **Three ways to get the Default config, in priority order.** Migrations create the tables
+> but load no rows, and all three are idempotent:
 >
-> **No Node toolchain (DBA, Docker init, …)?** Run the plain-SQL equivalent directly —
-> also idempotent: `psql "$DATABASE_URL" -f tools/db/seed-default-config.sql`. That file is
-> **generated** from `DEFAULT_PHASE_CONFIG` (single source of truth) via `pnpm
-> db:seed:sql:gen`, and a test keeps the two in lock-step.
+> 1. **`pnpm db:seed`** *(recommended)* — when you have the Node toolchain. Strongest: it
+>    reuses the app's tested, type-safe write path (`saveNewVersion`), so a schema change
+>    fails at compile time and the fewest pieces can drift.
+> 2. **`psql "$DATABASE_URL" -f tools/db/seed-default-config.sql`** — when only `psql` is
+>    available (DBA, Docker init). The `.sql` is **generated** from `DEFAULT_PHASE_CONFIG`
+>    (single source of truth) via `pnpm db:seed:sql:gen`, with a test keeping them in lock-step.
+> 3. **Skip seeding** — the **Phase settings** and **Signboard columns** screens open empty
+>    and editable; define your own Phases/columns and Save to create **Default v1**.
+>
+> Methods 1 and 2 load the same set (6 Phases, 29 VI/JA/EN match rules, 5 Signboard columns).
+> Full detail in [`docs/ONBOARDING.md`](./docs/ONBOARDING.md).
 
 `pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
 **worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default

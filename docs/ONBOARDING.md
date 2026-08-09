@@ -57,21 +57,25 @@ pnpm db:generate         # sinh Prisma Client (query compiler WASM)
 pnpm db:seed             # (khuyến nghị) nạp bộ Mặc định: nhận diện Phase + 5 cột Signboard + lịch làm việc
 ```
 
-> **`pnpm db:seed` là KHUYẾN NGHỊ, không bắt buộc.** Migration chỉ TẠO BẢNG,
-> không nạp dữ liệu. Seed cho bạn một điểm xuất phát hợp lý (6 Phase + 29 luật
-> khớp Việt/Nhật/Anh + 5 cột Signboard) thay vì màn hình trống. **Bỏ qua vẫn
-> chạy được:** màn hình **Phase settings** và **Signboard columns** mở bình
-> thường với bộ RỖNG để bạn tự định nghĩa Phase và cột rồi Lưu (tạo bản Mặc định
-> v1). Lệnh **idempotent** — bộ Mặc định chỉ tạo khi chưa có, lịch dùng upsert.
+**Ba cách để có bộ Mặc định — theo THỨ TỰ ƯU TIÊN.** Migration chỉ TẠO BẢNG,
+không nạp dữ liệu. Cả ba đều **idempotent** (chạy lại vô hại); cách (1) và (2)
+cho ra CÙNG một bộ (6 Phase + 29 luật khớp Việt/Nhật/Anh + 5 cột Signboard):
 
-> **Không có Node/tsx (DBA, Docker init…)?** Chạy thẳng file SQL thuần — tương
-> đương `pnpm db:seed`, cũng idempotent:
-> ```bash
-> psql "$DATABASE_URL" -f tools/db/seed-default-config.sql
-> ```
-> File đó **được sinh** từ `DEFAULT_PHASE_CONFIG` (một nguồn sự thật duy nhất);
-> sau khi đổi hằng số thì chạy `pnpm db:seed:sql:gen` để sinh lại — có test giữ
-> hai bên luôn khớp.
+| # | Cách | Khi nào dùng |
+|---|---|---|
+| **1 — khuyến nghị** | `pnpm db:seed` | Có Node toolchain (trường hợp mặc định) |
+| **2** | `psql "$DATABASE_URL" -f tools/db/seed-default-config.sql` | Chỉ có `psql`, không Node (DBA, Docker init) |
+| **3** | Bỏ qua — tự định nghĩa trong giao diện | Muốn bắt đầu từ bộ trống |
+
+- **(1) mạnh nhất:** dùng lại đúng đường ghi `saveNewVersion` đã test + type-safe
+  của app, nên đổi schema là lỗi lộ ngay lúc biên dịch và ít mảnh lệch nhất. Chỉ
+  tạo bộ Mặc định khi chưa có; lịch làm việc dùng upsert.
+- **(2):** file `.sql` **được sinh** từ `DEFAULT_PHASE_CONFIG` (một nguồn sự thật,
+  có test giữ khớp từng byte). Sửa hằng số thì chạy `pnpm db:seed:sql:gen` để sinh
+  lại. Chỉ đứng sau (1) khi schema tiến hoá — bù lại chạy được **không cần Node**.
+- **(3):** không thật sự là seed — màn hình **Phase settings** / **Signboard
+  columns** mở với bộ RỖNG (`GET /api/config/phase` trả 200, `globalVersion: 0`);
+  bạn thêm Phase/cột rồi Lưu → tạo bản Mặc định v1.
 
 > **Không tải engine của Prisma — chạy được cả khi máy chặn mạng.** Bình thường Prisma tải hai
 > binary Rust (query engine + schema engine) từ CDN `binaries.prisma.sh` lúc `pnpm install` và

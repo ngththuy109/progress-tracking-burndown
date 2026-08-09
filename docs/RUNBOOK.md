@@ -80,18 +80,14 @@ Kiểm chứng: `redis-cli -u "$REDIS_URL" ping` trả `PONG`, rồi `curl -s lo
 
 **Môi trường khởi động chậm:** nới `REDIS_READY_TIMEOUT_MS` / `BOOTSTRAP_TIMEOUT_MS` — xem `.env.example`.
 
-**Màn hình Phase settings / Signboard columns mở nhưng TRỐNG (chưa có bộ Mặc định).** Không còn lỗi 500: từ nay hai màn hình vẫn mở bình thường với bộ **RỖNG** để admin tự định nghĩa Phase và cột rồi Lưu — thao tác đó tạo bản Mặc định v1. `GET /api/config/phase` trả 200 với `globalVersion: 0` khi chưa có bản nào. Muốn có sẵn bộ **khuyến nghị** (6 Phase + 29 luật + 5 cột) thay vì gõ tay, chạy seed (idempotent, an toàn chạy lại):
+**Màn hình Phase settings / Signboard columns mở nhưng TRỐNG (chưa có bộ Mặc định).** Không còn lỗi 500: hai màn hình vẫn mở với bộ **RỖNG** để admin tự định nghĩa Phase và cột rồi Lưu (tạo bản Mặc định v1) — đó là **cách 3**. Muốn có sẵn bộ **khuyến nghị** (6 Phase + 29 luật + 5 cột), nạp bộ Mặc định theo thứ tự ưu tiên (cả hai idempotent):
 
 ```bash
-pnpm db:seed
-curl -s localhost:3000/api/config/phase | jq '.globalVersion'   # 0 = chưa có bản nào; > 0 = đã có
+pnpm db:seed                                              # cách 1 (khuyến nghị) — khi có Node
+psql "$DATABASE_URL" -f tools/db/seed-default-config.sql  # cách 2 — khi chỉ có psql
 ```
 
-Không có sẵn Node/tsx trên máy đó (chỉ có `psql`)? Chạy file SQL thuần tương đương, cũng idempotent:
-
-```bash
-psql "$DATABASE_URL" -f tools/db/seed-default-config.sql
-```
+Kiểm chứng: `curl -s localhost:3000/api/config/phase | jq '.globalVersion'` (0 = chưa có; > 0 = đã có). Chi tiết ba cách và vì sao (1) mạnh nhất: [ONBOARDING.md §3](./ONBOARDING.md).
 
 ---
 
