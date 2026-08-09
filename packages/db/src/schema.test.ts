@@ -210,4 +210,38 @@ describe('ràng buộc thật trên PostgreSQL', async () => {
     });
     expect(count).toBe(2);
   });
+
+  it('seed bộ Mặc định tạo đúng một bản GLOBAL hiệu lực (v1) với 6 Phase và 5 cột', async () => {
+    // Đây là bản vá cho lỗi NO_GLOBAL_CONFIG: màn hình Phase settings và
+    // Signboard columns 500 khi database mới migrate mà chưa seed.
+    await prisma.phaseConfigSet.deleteMany({ where: { scope: 'GLOBAL' } });
+    const { seedDefaultPhaseConfig } = await import('./seed/default-phase-config.js');
+
+    const result = await seedDefaultPhaseConfig(prisma);
+    expect(result).toEqual({ seeded: true, version: 1 });
+
+    const active = await prisma.phaseConfigSet.findMany({
+      where: { scope: 'GLOBAL', isActive: true },
+      include: { phaseDefinitions: true, signboardColumns: true, matchRules: true },
+    });
+    expect(active).toHaveLength(1);
+    expect(active[0]?.phaseDefinitions).toHaveLength(6);
+    expect(active[0]?.signboardColumns).toHaveLength(5);
+    // Nếu quên seed luật khớp thì mọi Task rơi vào UNCLASSIFIED.
+    expect(active[0]?.matchRules.length).toBeGreaterThan(0);
+  });
+
+  it('seed bộ Mặc định chạy 2 lần không tạo version mới (idempotent)', async () => {
+    await prisma.phaseConfigSet.deleteMany({ where: { scope: 'GLOBAL' } });
+    const { seedDefaultPhaseConfig } = await import('./seed/default-phase-config.js');
+
+    const first = await seedDefaultPhaseConfig(prisma);
+    expect(first.seeded).toBe(true);
+
+    const second = await seedDefaultPhaseConfig(prisma);
+    expect(second).toEqual({ seeded: false, version: first.version });
+
+    const total = await prisma.phaseConfigSet.count({ where: { scope: 'GLOBAL' } });
+    expect(total).toBe(1);
+  });
 });

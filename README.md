@@ -67,8 +67,15 @@ but not to run the tests — see below.
 pnpm install:all              # one-shot: pnpm install + prisma generate (builds re2, generates Prisma Client)
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:migrate
+pnpm db:seed                  # load default data (Phase-matching config + Signboard columns + work calendars)
 pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
 ```
+
+> **Why `pnpm db:seed` is required, not optional.** Migrations create the tables but
+> load no rows. Without the seed there is no active **Default** phase-config set, so the
+> **Phase settings** and **Signboard columns** screens fail on first open — `GET
+> /api/config/phase` returns **500 `NO_GLOBAL_CONFIG`**. The seed is idempotent (safe to
+> re-run): it only creates the Default set when none is active, and upserts the calendars.
 
 `pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
 **worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default

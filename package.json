@@ -19,6 +19,7 @@
     "install:all": "pnpm install && pnpm db:generate",
     "db:generate": "prisma generate",
     "db:migrate": "node tools/db/apply-migrations.mjs",
+    "db:seed": "tsx packages/db/src/seed/cli.ts",
     "db:validate": "prisma validate",
     "auth:grant": "node tools/auth/grant-role.mjs",
     "auth:testuser": "node tools/auth/add-basic-user.mjs",
