@@ -67,8 +67,24 @@ but not to run the tests — see below.
 pnpm install:all              # one-shot: pnpm install + prisma generate (builds re2, generates Prisma Client)
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:migrate
+pnpm db:seed                  # (recommended) load the default Phase-matching config + Signboard columns + work calendars
 pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
 ```
+
+> **Three ways to get the Default config, in priority order.** Migrations create the tables
+> but load no rows, and all three are idempotent:
+>
+> 1. **`pnpm db:seed`** *(recommended)* — when you have the Node toolchain. Strongest: it
+>    reuses the app's tested, type-safe write path (`saveNewVersion`), so a schema change
+>    fails at compile time and the fewest pieces can drift.
+> 2. **`psql "$DATABASE_URL" -f tools/db/seed-default-config.sql`** — when only `psql` is
+>    available (DBA, Docker init). The `.sql` is **generated** from `DEFAULT_PHASE_CONFIG`
+>    (single source of truth) via `pnpm db:seed:sql:gen`, with a test keeping them in lock-step.
+> 3. **Skip seeding** — the **Phase settings** and **Signboard columns** screens open empty
+>    and editable; define your own Phases/columns and Save to create **Default v1**.
+>
+> Methods 1 and 2 load the same set (6 Phases, 29 VI/JA/EN match rules, 5 Signboard columns).
+> Full detail in [`docs/ONBOARDING.md`](./docs/ONBOARDING.md).
 
 `pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
 **worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default

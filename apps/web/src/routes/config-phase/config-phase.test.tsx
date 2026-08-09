@@ -202,6 +202,48 @@ describe('ConfigPhaseScreen', () => {
     expect(screen.queryByText('Unsaved changes')).toBeNull();
   });
 
+  it('chưa seed (globalVersion 0) vẫn vẽ bình thường và cho định nghĩa từ đầu', async () => {
+    const EMPTY: EffectiveConfigResponse = {
+      fallbackScanFullTitle: true,
+      titlePatterns: [],
+      subtaskPatterns: [],
+      phaseDefinitions: [],
+      matchRules: [],
+      signboardColumns: [],
+      projectKey: null,
+      globalVersion: 0,
+      projectVersion: null,
+      inherited: {
+        titlePatterns: false,
+        subtaskPatterns: false,
+        phaseDefinitions: false,
+        matchRules: false,
+        signboardColumns: false,
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          new Response(JSON.stringify(url.includes('unmatched') ? { labels: [] } : EMPTY), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
+      ),
+    );
+
+    renderScreen();
+
+    // KHÔNG hiện lỗi — màn hình mở bình thường với các khu để tự định nghĩa.
+    await waitFor(() => expect(screen.getByText('① Task title patterns')).toBeTruthy());
+    expect(screen.queryByText('Could not load Phase settings')).toBeNull();
+    expect(screen.getByText('② Phase list')).toBeTruthy();
+    // Badge cho biết chưa có bản Mặc định nào, và có nút thêm Phase đầu tiên.
+    expect(screen.getByText('not created yet')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Add Phase/ })).toBeTruthy();
+  });
+
   it('sửa một ô thì hiện chỉ báo chưa lưu', async () => {
     vi.stubGlobal(
       'fetch',

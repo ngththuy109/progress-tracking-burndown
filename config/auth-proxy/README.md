@@ -72,8 +72,12 @@ hại). Cấu hình đọc từ env (xem `.env.example`); chưa đặt `SEED_ADM
 bỏ qua. Đặt vào bước release, **SAU** migration:
 
 ```bash
-pnpm db:migrate && pnpm seed:admin
+pnpm db:migrate && pnpm db:seed && pnpm seed:admin
 ```
+
+`pnpm db:seed` nạp bộ Mặc định (nhận diện Phase + cột Signboard + lịch làm việc),
+cũng **idempotent**. Khuyến nghị nhưng không bắt buộc: thiếu nó thì màn hình cấu
+hình vẫn mở với bộ RỖNG để admin tự định nghĩa — xem [RUNBOOK.md](../../docs/RUNBOOK.md).
 
 - `SEED_ADMIN_EMAIL` → ghi một dòng ADMIN vào `app_user` (đủ cho cả SSO lẫn Basic Auth).
 - Thêm `SEED_ADMIN_PASSWORD` (+ `SEED_ADMIN_HTPASSWD`) khi dùng **Basic Auth** → tạo

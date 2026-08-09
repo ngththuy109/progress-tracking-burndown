@@ -28,7 +28,17 @@ export {
   WORKDAYS_MON_TO_FRI,
 } from './seed/work-calendar.seed.js';
 
-export { DEFAULT_PHASE_CONFIG } from './seed/default-phase-config.js';
+export {
+  DEFAULT_PHASE_CONFIG,
+  SEED_AUTHOR,
+  seedDefaultPhaseConfig,
+  type SeedDefaultConfigResult,
+} from './seed/default-phase-config.js';
+
+export {
+  renderDefaultConfigSql,
+  SEED_SQL_RELATIVE_PATH,
+} from './seed/render-default-config-sql.js';
 
 export {
   findActiveConfigSet,

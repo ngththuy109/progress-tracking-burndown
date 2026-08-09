@@ -1,4 +1,6 @@
 import type { ConfigPayload } from '@app/shared';
+import type { PrismaClient } from '../client.js';
+import { findActiveConfigSet, saveNewVersion } from '../repositories/phase-config.repository.js';
 
 /**
  * Bộ cấu hình Mặc định — PRD §2.2.2 (6 Phase) và §2.9.3 (5 cột Signboard).
@@ -82,3 +84,46 @@ export const DEFAULT_PHASE_CONFIG: ConfigPayload = {
     { taskCode: 'FixCommentJM', labelVi: 'Sửa comment JM', labelJa: 'JM指摘対応', displayOrder: 5 },
   ],
 };
+
+/** Giá trị ghi vào cột `created_by` khi seed — KHÔNG phải người dùng thật. */
+export const SEED_AUTHOR = 'system';
+
+export interface SeedDefaultConfigResult {
+  /** `true` nếu vừa tạo bộ Mặc định; `false` nếu đã có sẵn (chạy lại vô hại). */
+  readonly seeded: boolean;
+  /** Version của bộ Mặc định (GLOBAL) đang hiệu lực sau khi seed. */
+  readonly version: number;
+}
+
+/**
+ * Seed bộ cấu hình Mặc định (GLOBAL) nếu CHƯA có bộ nào đang hiệu lực.
+ *
+ * Vì sao có bước này: migration chỉ TẠO BẢNG, không nạp dữ liệu. Seed cho một
+ * ĐIỂM XUẤT PHÁT hợp lý (6 Phase + luật khớp Việt/Nhật/Anh + 5 cột Signboard)
+ * thay vì màn hình trống. **KHÔNG bắt buộc:** `GET /api/config/phase` trả về bộ
+ * RỖNG khi chưa có Mặc định, nên màn hình Phase settings / Signboard columns vẫn
+ * mở bình thường để admin tự định nghĩa rồi Lưu (tạo GLOBAL v1). Seed chỉ là
+ * tiện lợi để không phải gõ tay từ đầu.
+ *
+ * Đi qua đúng `saveNewVersion` mà API dùng, nên dữ liệu seed có CÙNG hình dạng
+ * API mong đợi — `DEFAULT_PHASE_CONFIG` là nguồn sự thật duy nhất, không nhân
+ * bản logic ghi thành SQL tay dễ lệch.
+ *
+ * Idempotent (C-6): đã có bộ GLOBAL đang hiệu lực thì KHÔNG tạo version mới —
+ * chạy lại mỗi lần deploy đều vô hại, giống `seedWorkCalendars` và `seed:admin`.
+ */
+export async function seedDefaultPhaseConfig(
+  prisma: PrismaClient,
+): Promise<SeedDefaultConfigResult> {
+  const existing = await findActiveConfigSet(prisma, 'GLOBAL', null);
+  if (existing) return { seeded: false, version: existing.version };
+
+  const { version } = await saveNewVersion(prisma, {
+    scope: 'GLOBAL',
+    projectKey: null,
+    payload: DEFAULT_PHASE_CONFIG,
+    createdBy: SEED_AUTHOR,
+    note: 'Bộ Mặc định khởi tạo (seed).',
+  });
+  return { seeded: true, version };
+}

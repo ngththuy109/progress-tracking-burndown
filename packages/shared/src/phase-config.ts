@@ -66,6 +66,23 @@ export type MatchRule = z.infer<typeof matchRuleSchema>;
 export type SignboardColumn = z.infer<typeof signboardColumnSchema>;
 export type ConfigPayload = z.infer<typeof configPayloadSchema>;
 
+/**
+ * Bộ cấu hình RỖNG — điểm xuất phát khi CHƯA có gì được cấu hình.
+ *
+ * Dùng khi database chưa seed bộ Mặc định: màn hình **Phase settings** và
+ * **Signboard columns** vẫn mở bình thường với bộ rỗng này để admin tự định
+ * nghĩa Phase và cột Signboard rồi Lưu (tạo GLOBAL v1) — không bắt phải chạy
+ * seed trước. `fallbackScanFullTitle` bật sẵn vì đó là mặc định an toàn nhất.
+ */
+export const EMPTY_CONFIG_PAYLOAD: ConfigPayload = {
+  fallbackScanFullTitle: true,
+  titlePatterns: [],
+  subtaskPatterns: [],
+  phaseDefinitions: [],
+  matchRules: [],
+  signboardColumns: [],
+};
+
 export interface ConfigSetMeta {
   readonly id: number;
   readonly scope: (typeof CONFIG_SCOPE)[number];

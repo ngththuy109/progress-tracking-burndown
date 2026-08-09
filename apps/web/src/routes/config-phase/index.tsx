@@ -142,7 +142,10 @@ function ConfigEditor({ config }: ConfigEditorProps) {
     <div className="stack">
       <div className="statusbar">
         <span>
-          Default set <Badge tone="muted">v{config.globalVersion}</Badge>
+          Default set{' '}
+          <Badge tone="muted">
+            {config.globalVersion === 0 ? 'not created yet' : `v${config.globalVersion}`}
+          </Badge>
           {config.projectKey !== null && (
             <>
               {' · '}Project {config.projectKey}{' '}
