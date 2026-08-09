@@ -56,6 +56,8 @@ export {
 
 export {
   findAppUser,
+  listAppUsers,
+  deleteAppUser,
   upsertAppUser,
   type AppUserRow,
   type UpsertAppUserArgs,

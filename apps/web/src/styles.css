@@ -388,6 +388,10 @@ code {
 .row__order {
   min-width: 34px;
 }
+/* Đẩy các nút thao tác về cuối hàng. */
+.row__spacer {
+  margin-left: auto;
+}
 
 .move {
   display: inline-flex;

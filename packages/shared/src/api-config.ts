@@ -220,3 +220,45 @@ export const meResponseSchema = z.object({
   projects: z.array(z.string()),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Quản lý người dùng — /api/users (chỉ ADMIN)
+// ---------------------------------------------------------------------------
+
+/**
+ * Người dùng đến từ đâu:
+ *   DB  — cấp trong bảng `app_user`, sửa/xoá được ở đây.
+ *   ENV — admin mồi qua biến môi trường `AUTH_BOOTSTRAP_ADMINS`, CHỈ ĐỌC (đổi ở
+ *         env, không đổi ở màn hình — nếu không sẽ hiểu nhầm là đã hạ quyền).
+ */
+export const APP_USER_SOURCE = ['DB', 'ENV'] as const;
+export type AppUserSource = (typeof APP_USER_SOURCE)[number];
+
+export const appUserSchema = z.object({
+  userId: z.string(),
+  role: z.enum(USER_ROLE),
+  projects: z.array(z.string()),
+  displayName: z.string().nullable(),
+  source: z.enum(APP_USER_SOURCE),
+});
+export type AppUserView = z.infer<typeof appUserSchema>;
+
+export const listUsersResponseSchema = z.object({ users: z.array(appUserSchema) });
+export type ListUsersResponse = z.infer<typeof listUsersResponseSchema>;
+
+/**
+ * Cấp / cập nhật một người dùng. `userId` là email (server tự hạ chữ thường).
+ * `projects` chỉ có nghĩa với PM — server từ chối nếu gán cho ADMIN/VIEWER.
+ */
+export const upsertUserRequestSchema = z.object({
+  userId: z.string().trim().min(1),
+  role: z.enum(USER_ROLE),
+  projects: z.array(z.string().trim().min(1)).default([]),
+  displayName: z
+    .string()
+    .trim()
+    .min(1)
+    .nullable()
+    .default(null),
+});
+export type UpsertUserRequest = z.infer<typeof upsertUserRequestSchema>;

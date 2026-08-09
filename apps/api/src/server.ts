@@ -8,6 +8,7 @@ import { registerBurndownRoutes } from './routes/burndown.routes.js';
 import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
 import { registerSignboardRoutes } from './routes/signboard.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
+import { registerUsersRoutes } from './routes/users.routes.js';
 import { createSignboardReadPort } from './adapters/signboard.adapters.js';
 import { createEpicOpsReadPort, createEpicOpsWritePort } from './adapters/epic-ops.adapters.js';
 import { createBurndownReadPort } from './adapters/burndown.adapters.js';
@@ -25,7 +26,7 @@ import {
   type QueueLike,
 } from './adapters/epic-registry.adapters.js';
 import { createPrincipalResolver, type AuthConfig } from './adapters/principal.js';
-import { createAppUserStore } from './adapters/app-user.adapters.js';
+import { createAppUserStore, createAppUserAdminStore } from './adapters/app-user.adapters.js';
 
 /**
  * REST API — chỉ điều phối, không chứa logic nghiệp vụ.
@@ -94,6 +95,12 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   const getPrincipal = (req: FastifyRequest): Principal | null => req.principal;
 
   registerMeRoutes(app, { resolvePrincipal: getPrincipal });
+
+  registerUsersRoutes(app, {
+    resolvePrincipal: getPrincipal,
+    store: createAppUserAdminStore(deps.prisma),
+    bootstrapAdmins: deps.auth.bootstrapAdmins,
+  });
 
   registerConfigPhaseRoutes(app, {
     store: createPhaseConfigStore(deps.prisma, deps.cache),

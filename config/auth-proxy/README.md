@@ -72,10 +72,18 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)
 
    ```bash
    pnpm db:migrate
-   # admin đầu tiên đã có nhờ AUTH_BOOTSTRAP_ADMINS; cấp cho những người khác:
-   pnpm auth:grant --user pm@cty.com  --role PM --projects PAY,CRM
-   pnpm auth:grant --user ai@cty.com  --role VIEWER
    ```
+
+   Admin đầu tiên đã có nhờ `AUTH_BOOTSTRAP_ADMINS`. Sau khi đăng nhập, cấp quyền
+   cho người khác theo **một trong hai cách**:
+
+   - **Màn hình Users** (thanh bên, chỉ ADMIN thấy) — cấp Admin/PM/Viewer, gán
+     project cho PM ngay trên giao diện. Cách khuyến nghị cho vận hành hằng ngày.
+   - **CLI** (script / CI, không cần mở app):
+     ```bash
+     pnpm auth:grant --user pm@cty.com --role PM --projects PAY,CRM
+     pnpm auth:grant --user ai@cty.com --role VIEWER
+     ```
 
 ## Đổi IdP hoặc loại cổng
 

@@ -19,6 +19,10 @@ export function AppLayout() {
   const location = useLocation();
   const current = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path));
   const me = useMe();
+  const isAdmin = me.data?.role === 'ADMIN';
+  // Mục adminOnly chỉ hiện với ADMIN. Vẫn giữ NAV_ITEMS đầy đủ cho `current` ở
+  // trên để tiêu đề thanh trên đúng ngay cả khi mở thẳng URL /admin/users.
+  const visibleNav = NAV_ITEMS.filter((item) => item.adminOnly !== true || isAdmin);
 
   return (
     <div className="app">
@@ -36,7 +40,7 @@ export function AppLayout() {
 
         <nav aria-label="Main navigation">
           <ul className="nav">
-            {NAV_ITEMS.map((item) => (
+            {visibleNav.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}

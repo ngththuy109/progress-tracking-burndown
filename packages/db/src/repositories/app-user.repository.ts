@@ -39,6 +39,25 @@ export async function findAppUser(prisma: PrismaClient, userId: string): Promise
   };
 }
 
+/** Liệt kê mọi người dùng đã cấp quyền — cho màn hình quản trị. */
+export async function listAppUsers(prisma: PrismaClient): Promise<AppUserRow[]> {
+  const rows = await prisma.appUser.findMany({ orderBy: [{ role: 'asc' }, { userId: 'asc' }] });
+  return rows
+    .filter((r) => isRole(r.role))
+    .map((r) => ({
+      userId: r.userId,
+      role: r.role as UserRole,
+      projects: r.projects,
+      displayName: r.displayName,
+    }));
+}
+
+/** Gỡ quyền. Trả `true` nếu có xoá, `false` nếu vốn không tồn tại. */
+export async function deleteAppUser(prisma: PrismaClient, userId: string): Promise<boolean> {
+  const res = await prisma.appUser.deleteMany({ where: { userId } });
+  return res.count > 0;
+}
+
 export interface UpsertAppUserArgs {
   readonly userId: string;
   readonly role: UserRole;
