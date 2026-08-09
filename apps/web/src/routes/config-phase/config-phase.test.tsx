@@ -269,7 +269,10 @@ describe('ConfigPhaseScreen', () => {
     // Tái hiện đúng lỗi PM báo: bấm "+ Add Phase" xong Lưu khi dòng mới còn trống.
     // Kiểm-tại-client bắt ngay ("Phase name is required.") và chặn luôn PUT — PM
     // không phải chờ một vòng request để nhận về 400 khó hiểu.
-    const fetchMock = vi.fn((url: string) =>
+    // Kiểu tuple đủ hai tham số của `fetch` để `c[1]?.method` bên dưới có kiểu
+    // đúng — test này soi `method` từ RequestInit. Chỉ lấy `url`, phần tử thứ
+    // hai bỏ qua nên không sinh biến thừa.
+    const fetchMock = vi.fn((...[url]: [url: string, init?: RequestInit]) =>
       Promise.resolve(
         new Response(JSON.stringify(url.includes('unmatched') ? { labels: [] } : CONFIG), {
           status: 200,

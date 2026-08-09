@@ -40,6 +40,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     builtBy: 'GĐ 4',
   },
   {
+    path: '/phase-subtasks',
+    label: 'Phase sub-tasks',
+    icon: '🧾',
+    summary: 'List the sub-tasks under each defined Phase for one Epic.',
+    builtBy: 'Phase tickets',
+  },
+  {
     path: '/config/signboard',
     label: 'Signboard columns',
     icon: '🧩',
