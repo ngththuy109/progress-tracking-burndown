@@ -8,6 +8,7 @@
 |---|---|
 | [ONBOARDING.md](./ONBOARDING.md) | Lập trình viên mới, ngày đầu vào dự án |
 | [UAT-CHECKLIST.md](./UAT-CHECKLIST.md) | PM, buổi nghiệm thu |
+| [AUTH.md](./AUTH.md) | Phân quyền: cấp Admin/PM/Viewer, gán PM vào project |
 
 ---
 
@@ -271,7 +272,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 ---
 
-## Bốn quy trình vận hành thường dùng
+## Năm quy trình vận hành thường dùng
 
 ### 1. Dựng lại lịch sử một Epic
 
@@ -337,6 +338,24 @@ Dùng khi Jira báo sắp chặn tổ chức. Worker dừng gọi ở vòng kế
 Làm trên giao diện: **Phase settings → tab History → Roll back to vN**.
 
 Quay lại **không xoá** version mới hơn — nó tạo thêm một version nữa có nội dung giống bản cũ. Nhờ vậy quay lại nhầm cũng quay lại được lần nữa.
+
+### 5. Cấp / gỡ quyền người dùng
+
+Phân quyền (`ADMIN` / `PM` / `VIEWER`) nằm ở bảng `app_user`; PM chỉ gán được vào project đã đăng ký ở bảng `project`. Mô hình đầy đủ: [AUTH.md](./AUTH.md).
+
+**Cách thường dùng — trên giao diện** (Admin đăng nhập): màn hình **Projects** để đăng ký project, màn hình **Users** để cấp Admin/PM/Viewer và tick project cho PM.
+
+**Bằng dòng lệnh** (script/CI, hoặc khi chưa mở được app):
+
+```bash
+pnpm db:migrate                                               # tạo bảng app_user / project (lần đầu)
+pnpm auth:grant --user pm@cty.com --role PM --projects PAY,CRM
+pnpm auth:grant --user ai@cty.com --role VIEWER
+```
+
+- Admin **đầu tiên** cấp qua biến môi trường `AUTH_BOOTSTRAP_ADMINS` (không cần DB) — xem `.env.example`.
+- PM chỉ nhận project **đã đăng ký**; chưa có thì đăng ký trước (màn hình Projects hoặc `INSERT INTO "project"`).
+- Gỡ quyền: hạ về VIEWER bằng `pnpm auth:grant … --role VIEWER`, hoặc xoá dòng trong `app_user`.
 
 ---
 

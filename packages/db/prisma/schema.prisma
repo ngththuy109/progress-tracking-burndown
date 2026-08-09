@@ -174,7 +174,9 @@ model TrackedEpic {
   timezone   String @db.VarChar(48) // IANA, ví dụ Asia/Ho_Chi_Minh
   calendarId String @map("calendar_id") @db.VarChar(32)
 
-  addedBy      String    @map("added_by") @db.VarChar(64)
+  // 254 = độ dài email tối đa (RFC 5321): `added_by` lưu chính danh tính người
+  // thêm (email do SSO xác thực). Nới từ 64 ở migration 20260809000000_app_user.
+  addedBy      String    @map("added_by") @db.VarChar(254)
   addedAt      DateTime  @default(now()) @map("added_at") @db.Timestamptz(6)
   lastSyncedAt DateTime? @map("last_synced_at") @db.Timestamptz(6)
   lastError    String?   @map("last_error")
@@ -493,4 +495,51 @@ model SubtaskActualDates {
   issue JiraIssue @relation(fields: [issueKey], references: [issueKey], onDelete: Cascade, onUpdate: Cascade)
 
   @@map("subtask_actual_dates")
+}
+
+// ============================================================================
+// Bảng 12: Người dùng ứng dụng — NGUỒN SỰ THẬT của phân quyền (role/projects).
+//
+// Vì sao cần bảng này (mô hình SSO B1): cổng (auth proxy) chỉ khẳng định DANH
+// TÍNH đã xác thực và bơm vào header `x-user-id`. API KHÔNG tin `role`/`projects`
+// từ header — bất kỳ header nào cũng có thể bị giả nếu cổng cấu hình sai — mà
+// tra chính bảng này. Nhờ vậy Admin quản lý ai-là-PM-của-project-nào ngay trong
+// hệ thống, có version và audit được, thay vì nhồi vào cấu hình IdP/proxy.
+//
+// `user_id` là danh tính ổn định do IdP cấp (thường là email đã chuẩn hoá về
+// chữ thường). Dài 254 = giới hạn địa chỉ email theo RFC 5321.
+// ============================================================================
+model AppUser {
+  userId String @id @map("user_id") @db.VarChar(254)
+
+  // ADMIN | PM | VIEWER — khớp USER_ROLE ở @app/shared.
+  role String @db.VarChar(16)
+
+  // Các project mà PM này phụ trách. Rỗng với ADMIN/VIEWER (họ thấy tất cả).
+  projects String[] @default([])
+
+  displayName String?  @map("display_name")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_user")
+}
+
+// ============================================================================
+// Bảng 13: Danh mục Project do Admin quản lý — dùng để gán PM.
+//
+// KHÔNG ràng buộc `tracked_epic.project_key` (Epic đến từ Jira với mọi project);
+// bảng này là DANH SÁCH CHỌN có kiểm soát để Admin gắn PM vào đúng project. Nhờ
+// vậy PM không bị gõ nhầm key và mất quyền xem trong im lặng. `project_key` là
+// key Jira (chữ HOA, ví dụ PAY, CRM); một project gắn được nhiều PM (mỗi PM là
+// một dòng `app_user` có key này trong `projects`).
+// ============================================================================
+model Project {
+  projectKey  String @id @map("project_key") @db.VarChar(32)
+  displayName String? @map("display_name")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("project")
 }

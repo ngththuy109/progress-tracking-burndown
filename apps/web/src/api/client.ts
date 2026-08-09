@@ -265,6 +265,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     const init: RequestInit = {
       method: opts.method ?? 'GET',
       headers: hasBody ? { 'Content-Type': 'application/json' } : {},
+      // Gửi kèm cookie phiên đăng nhập do cổng SSO đặt. Cùng gốc thì trình duyệt
+      // vốn đã gửi, nhưng khai `include` tường minh để không phụ thuộc mặc định
+      // (và vẫn đúng nếu sau này API nằm khác gốc).
+      credentials: 'include',
       ...(hasBody ? { body: JSON.stringify(opts.body) } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
     };

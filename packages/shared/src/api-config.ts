@@ -202,3 +202,90 @@ export interface Principal {
   /** Các project user này phụ trách. Chỉ có nghĩa với role `PM`. */
   readonly projects: readonly string[];
 }
+
+// ---------------------------------------------------------------------------
+// GET /api/me — người dùng đang đăng nhập
+// ---------------------------------------------------------------------------
+
+/**
+ * Ai đang đăng nhập, để frontend hiện tên và ẩn/hiện nút theo vai trò.
+ *
+ * Đây CHỈ để phục vụ giao diện; API vẫn tự kiểm quyền ở mỗi endpoint ghi —
+ * ẩn nút không phải là hàng rào bảo mật, chỉ đỡ cho người dùng bấm vào thứ
+ * chắc chắn bị từ chối.
+ */
+export const meResponseSchema = z.object({
+  userId: z.string(),
+  role: z.enum(USER_ROLE),
+  projects: z.array(z.string()),
+});
+export type MeResponse = z.infer<typeof meResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Quản lý người dùng — /api/users (chỉ ADMIN)
+// ---------------------------------------------------------------------------
+
+/**
+ * Người dùng đến từ đâu:
+ *   DB  — cấp trong bảng `app_user`, sửa/xoá được ở đây.
+ *   ENV — admin mồi qua biến môi trường `AUTH_BOOTSTRAP_ADMINS`, CHỈ ĐỌC (đổi ở
+ *         env, không đổi ở màn hình — nếu không sẽ hiểu nhầm là đã hạ quyền).
+ */
+export const APP_USER_SOURCE = ['DB', 'ENV'] as const;
+export type AppUserSource = (typeof APP_USER_SOURCE)[number];
+
+export const appUserSchema = z.object({
+  userId: z.string(),
+  role: z.enum(USER_ROLE),
+  projects: z.array(z.string()),
+  displayName: z.string().nullable(),
+  source: z.enum(APP_USER_SOURCE),
+});
+export type AppUserView = z.infer<typeof appUserSchema>;
+
+export const listUsersResponseSchema = z.object({ users: z.array(appUserSchema) });
+export type ListUsersResponse = z.infer<typeof listUsersResponseSchema>;
+
+/**
+ * Cấp / cập nhật một người dùng. `userId` là email (server tự hạ chữ thường).
+ * `projects` chỉ có nghĩa với PM — server từ chối nếu gán cho ADMIN/VIEWER.
+ */
+export const upsertUserRequestSchema = z.object({
+  userId: z.string().trim().min(1),
+  role: z.enum(USER_ROLE),
+  projects: z.array(z.string().trim().min(1)).default([]),
+  displayName: z
+    .string()
+    .trim()
+    .min(1)
+    .nullable()
+    .default(null),
+});
+export type UpsertUserRequest = z.infer<typeof upsertUserRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Danh mục Project — /api/projects (chỉ ADMIN)
+// ---------------------------------------------------------------------------
+
+/**
+ * Key project theo chuẩn Jira: chữ HOA, bắt đầu bằng chữ cái. Chuẩn hoá (trim +
+ * viết hoa) nằm ở server; schema này chốt định dạng để chặn key rác.
+ */
+export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,31}$/;
+
+export const projectSchema = z.object({
+  projectKey: z.string(),
+  displayName: z.string().nullable(),
+  /** Số PM đang được gán vào project này (một project có thể nhiều PM). */
+  pmCount: z.number().int().nonnegative(),
+});
+export type ProjectView = z.infer<typeof projectSchema>;
+
+export const listProjectsResponseSchema = z.object({ projects: z.array(projectSchema) });
+export type ListProjectsResponse = z.infer<typeof listProjectsResponseSchema>;
+
+export const upsertProjectRequestSchema = z.object({
+  projectKey: z.string().trim().min(1),
+  displayName: z.string().trim().min(1).nullable().default(null),
+});
+export type UpsertProjectRequest = z.infer<typeof upsertProjectRequestSchema>;

@@ -55,6 +55,23 @@ export {
 } from './repositories/tracked-epic.repository.js';
 
 export {
+  findAppUser,
+  listAppUsers,
+  deleteAppUser,
+  upsertAppUser,
+  type AppUserRow,
+  type UpsertAppUserArgs,
+} from './repositories/app-user.repository.js';
+
+export {
+  listProjects,
+  projectKeySet,
+  upsertProject,
+  deleteProject,
+  type ProjectRow,
+} from './repositories/project.repository.js';
+
+export {
   upsertIssues,
   markRemovedIssues,
   knownIdToKey,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RECOMPUTE_SECONDS_PER_EPIC, type AddEpicsRequest } from '@app/shared';
 import { useAddEpics, useValidateEpics } from '../../api/use-epics.js';
+import { useMe } from '../../api/use-me.js';
 import { Badge, ErrorState } from '../../components/ui/index.js';
 
 /**
@@ -31,9 +32,27 @@ export function estimateMinutes(epicCount: number): number {
 }
 
 export function AddEpicsPanel() {
+  const me = useMe();
   const [raw, setRaw] = useState('');
   const validate = useValidateEpics();
   const add = useAddEpics();
+
+  // VIEWER không được đổi tập Epic theo dõi (API sẽ trả 403). Ẩn cả ô nhập cho
+  // gọn, thay vì để họ gõ xong mới bị từ chối. Đây CHỈ là trải nghiệm — hàng
+  // rào thật vẫn ở API.
+  if (me.data?.role === 'VIEWER') {
+    return (
+      <section className="panel" aria-labelledby="add-epics-title">
+        <h2 className="panel__title" id="add-epics-title">
+          Track new Epics
+        </h2>
+        <p className="panel__hint" role="status">
+          Only Admins and PMs can change which Epics are tracked. You have the Viewer role, so you
+          can browse charts and Signboards but not add Epics.
+        </p>
+      </section>
+    );
+  }
 
   const keys = parseKeys(raw);
   const results = validate.data?.results ?? [];

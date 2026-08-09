@@ -1,0 +1,86 @@
+# Cấu hình MẪU cho cổng (nginx + oauth2-proxy) — mô hình SSO B1.
+#
+# Vai trò của cổng:
+#   1. Bắt đăng nhập SSO cho MỌI route (uỷ quyền cho oauth2-proxy).
+#   2. Đặt header danh tính `x-user-id` = email đã xác thực, cho API tin.
+#   3. XOÁ mọi header `x-user-*` client tự gửi TRƯỚC khi đặt của mình — nếu
+#      không, ai cũng tự xưng được là người khác.
+#   4. Phục vụ SPA tĩnh (dist) và chuyển tiếp `/api` cùng gốc.
+#
+# API (cổng 3000) PHẢI chỉ nghe từ cổng này, KHÔNG expose ra Internet. Đặt
+# HOST=127.0.0.1 (hoặc mạng nội bộ) cho tiến trình API.
+
+upstream burndown_api {
+  server 127.0.0.1:3000;
+}
+
+server {
+  listen 443 ssl;
+  server_name burndown.your-company.com;
+
+  # ssl_certificate ... ; ssl_certificate_key ... ;
+
+  # -- oauth2-proxy: điểm xác thực. Mọi request qua endpoint nội bộ này trước. --
+  location = /oauth2/auth {
+    internal;
+    proxy_pass http://127.0.0.1:4180;
+    proxy_set_header Host             $host;
+    proxy_set_header X-Real-IP        $remote_addr;
+    proxy_set_header X-Forwarded-Uri  $request_uri;
+    # Không chuyển body khi chỉ hỏi "đã đăng nhập chưa".
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+  }
+
+  # Trang đăng nhập / callback của oauth2-proxy (KHÔNG chặn — đây là lối vào).
+  location /oauth2/ {
+    proxy_pass http://127.0.0.1:4180;
+    proxy_set_header Host             $host;
+    proxy_set_header X-Real-IP        $remote_addr;
+    proxy_set_header X-Forwarded-Host  $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location / {
+    # Hỏi oauth2-proxy trước. Chưa đăng nhập → 401 → đá sang trang sign_in.
+    auth_request /oauth2/auth;
+    error_page 401 = /oauth2/sign_in?rd=$scheme://$host$request_uri;
+
+    # Lấy email đã xác thực mà oauth2-proxy trả về (bật --set-xauthrequest).
+    auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+
+    # ------------------------------------------------------------------
+    # DANH TÍNH: đặt x-user-id = email đã xác thực.
+    #
+    # `proxy_set_header` GHI ĐÈ mọi header cùng tên đến từ client, nên đây cũng
+    # là bước "xoá header giả": client có gửi `X-User-Id`/`X-User-Role` gì cũng
+    # bị thay bằng giá trị dưới đây. API chỉ đọc x-user-id và bỏ qua role header.
+    # ------------------------------------------------------------------
+    proxy_set_header X-User-Id "$authenticated_email";
+    # Chốt chặn thừa: dọn sạch các header phân quyền cũ nếu có.
+    proxy_set_header X-User-Role "";
+    proxy_set_header X-User-Projects "";
+
+    # SPA tĩnh; `/api` đi tiếp xuống API.
+    root /var/www/burndown;      # nơi đặt `pnpm --filter @app/web build` (dist)
+    try_files $uri /index.html;
+  }
+
+  location /api/ {
+    auth_request /oauth2/auth;
+    error_page 401 = /oauth2/sign_in?rd=$scheme://$host$request_uri;
+    auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+
+    proxy_set_header X-User-Id "$authenticated_email";
+    proxy_set_header X-User-Role "";
+    proxy_set_header X-User-Projects "";
+
+    proxy_set_header Host $host;
+    proxy_pass http://burndown_api;
+  }
+
+  # Health check của API không cần đăng nhập (để LB thăm dò).
+  location = /healthz {
+    proxy_pass http://burndown_api;
+  }
+}

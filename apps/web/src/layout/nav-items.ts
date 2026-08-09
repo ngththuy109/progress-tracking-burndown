@@ -13,6 +13,8 @@ export interface NavItem {
   readonly summary: string;
   /** Card nào sẽ dựng màn hình thật. Hiện thẳng lên trang tạm. */
   readonly builtBy: string;
+  /** Chỉ hiện trên thanh bên khi người dùng là ADMIN (API vẫn tự chặn). */
+  readonly adminOnly?: boolean;
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -57,6 +59,22 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '🩺',
     summary: 'Nightly jobs, Jira rate limits, data quality, and plan drift.',
     builtBy: 'T-33',
+  },
+  {
+    path: '/admin/projects',
+    label: 'Projects',
+    icon: '🗄️',
+    summary: 'Register the project keys PMs can be assigned to.',
+    builtBy: 'SSO',
+    adminOnly: true,
+  },
+  {
+    path: '/admin/users',
+    label: 'Users',
+    icon: '👤',
+    summary: 'Grant Admin, PM, or Viewer access and scope PMs to their projects.',
+    builtBy: 'SSO',
+    adminOnly: true,
   },
 ];
 
