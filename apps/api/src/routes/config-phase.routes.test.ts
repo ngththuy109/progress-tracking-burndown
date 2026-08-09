@@ -435,6 +435,71 @@ describe('kiểm tra thân yêu cầu', () => {
     expect(res.json().issues.length).toBeGreaterThan(0);
   });
 
+  it('Phase mới thêm còn để trống: lỗi neo ĐÚNG dòng theo dạng phaseDefinitions[i].field', async () => {
+    // Đúng thao tác PM gặp lỗi: bấm "+ Add Phase" xong Lưu khi dòng mới còn trống.
+    // Đường dẫn PHẢI là `phaseDefinitions[2].phaseCode` để màn hình neo được vào
+    // dòng — KHÔNG phải `payload.phaseDefinitions.2.phaseCode` (không neo được vào
+    // đâu, PM thấy "chưa lưu" mà không có dòng nào đỏ).
+    const withBlankPhase: ConfigPayload = {
+      ...GLOBAL_PAYLOAD,
+      phaseDefinitions: [
+        ...GLOBAL_PAYLOAD.phaseDefinitions,
+        { phaseCode: '', labelVi: '', displayOrder: 3 },
+      ],
+    };
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/config/phase',
+      payload: { projectKey: null, payload: withBlankPhase, note: null },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error).toBe('BAD_REQUEST');
+
+    const paths = body.issues.map((i: { path: string }) => i.path);
+    expect(paths).toContain('phaseDefinitions[2].phaseCode');
+    expect(paths).toContain('phaseDefinitions[2].labelVi');
+    // Không được rò khoá bọc `payload` ra đường dẫn — đó chính là chỗ neo hỏng.
+    expect(paths.every((p: string) => !p.startsWith('payload'))).toBe(true);
+    // Thông báo đọc được, không phải câu thô của zod.
+    const codeIssue = body.issues.find((i: { path: string }) => i.path === 'phaseDefinitions[2].phaseCode');
+    expect(codeIssue.message).toBe('Phase code is required.');
+    expect(store.writeCount).toBe(0);
+  });
+
+  it('luật khớp mới thêm còn trống: lỗi neo ĐÚNG dòng theo dạng matchRules[i].field', async () => {
+    const withBlankRule: ConfigPayload = {
+      ...GLOBAL_PAYLOAD,
+      matchRules: [
+        ...GLOBAL_PAYLOAD.matchRules,
+        { keyword: '', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
+      ],
+    };
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/config/phase',
+      payload: { projectKey: null, payload: withBlankRule, note: null },
+    });
+    expect(res.statusCode).toBe(400);
+    const paths = res.json().issues.map((i: { path: string }) => i.path);
+    expect(paths).toContain('matchRules[1].keyword');
+  });
+
+  it('Xem thử sai schema cũng cho đường dẫn đã chuẩn hoá (bỏ khoá bọc draft)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/config/phase/preview',
+      payload: {
+        projectKey: null,
+        draft: { ...GLOBAL_PAYLOAD, phaseDefinitions: [{ phaseCode: '', labelVi: '', displayOrder: 1 }] },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    const paths = res.json().issues.map((i: { path: string }) => i.path);
+    expect(paths).toContain('phaseDefinitions[0].phaseCode');
+    expect(paths.every((p: string) => !p.startsWith('draft'))).toBe(true);
+  });
+
   it('số version không phải số trả HTTP 400', async () => {
     const res = await app.inject({ method: 'POST', url: '/api/config/phase/rollback/abc' });
     expect(res.statusCode).toBe(400);

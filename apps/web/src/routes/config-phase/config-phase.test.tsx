@@ -265,6 +265,50 @@ describe('ConfigPhaseScreen', () => {
     expect(screen.getByText('Unsaved changes')).toBeTruthy();
   });
 
+  it('thêm Phase rồi Lưu lúc còn trống: thông báo hiện NGAY dưới dòng Phase mới', async () => {
+    // Tái hiện đúng lỗi PM báo: bấm "+ Add Phase" xong Lưu khi dòng mới còn trống.
+    // Máy chủ trả 400 với đường dẫn `phaseDefinitions[2].phaseCode` (đã chuẩn hoá).
+    // Trước khi sửa, máy chủ trả `payload.phaseDefinitions.2.phaseCode` — không neo
+    // được vào dòng nào, PM chỉ thấy "chưa lưu" mà không rõ phải sửa gì.
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'PUT') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: 'BAD_REQUEST',
+              message: 'The request body is not valid. Fix the highlighted fields and send it again.',
+              issues: [
+                { level: 'ERROR', code: 'SCHEMA_INVALID', message: 'Phase code is required.', path: 'phaseDefinitions[2].phaseCode' },
+                { level: 'ERROR', code: 'SCHEMA_INVALID', message: 'Phase name is required.', path: 'phaseDefinitions[2].labelVi' },
+              ],
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(url.includes('unmatched') ? { labels: [] } : CONFIG), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('② Phase list')).toBeTruthy());
+
+    await userEvent.click(screen.getByRole('button', { name: /Add Phase/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Save without preview/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
+
+    // Thông báo đọc được, nằm TRONG đúng dòng Phase vừa thêm (không phải banner rỗng).
+    const msg = await screen.findByText('Phase code is required.');
+    const row = msg.closest('.row');
+    expect(row).not.toBeNull();
+    expect((row as HTMLElement).querySelector('input[aria-label="Phase code, row 3"]')).not.toBeNull();
+  });
+
   it('KHÔNG gọi API mỗi lần gõ phím — chỉ Xem thử và Lưu mới gọi', async () => {
     const fetchMock = vi.fn((url: string) =>
       Promise.resolve(
