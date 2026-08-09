@@ -143,6 +143,18 @@ describe('POST /api/users', () => {
     expect(bad.json().error).toBe('UNKNOWN_PROJECT');
   });
 
+  it('một PM gán được NHIỀU project cùng lúc (chuẩn hoá + khử trùng lặp)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      payload: { userId: 'multi@x.com', role: 'PM', projects: ['PAY', 'crm', 'PAY'] },
+    });
+    expect(res.statusCode).toBe(200);
+    // PAY trùng bị gộp, crm → CRM; giữ đúng thứ tự gặp lần đầu.
+    expect(res.json().projects).toEqual(['PAY', 'CRM']);
+    expect(store.rows.get('multi@x.com')?.projects).toEqual(['PAY', 'CRM']);
+  });
+
   it('tự sửa quyền của chính mình → 400 CANNOT_MODIFY_SELF', async () => {
     const res = await app.inject({
       method: 'POST',
