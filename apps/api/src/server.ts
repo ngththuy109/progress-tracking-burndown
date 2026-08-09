@@ -9,6 +9,7 @@ import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
 import { registerSignboardRoutes } from './routes/signboard.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
 import { registerUsersRoutes } from './routes/users.routes.js';
+import { registerProjectsRoutes } from './routes/projects.routes.js';
 import { createSignboardReadPort } from './adapters/signboard.adapters.js';
 import { createEpicOpsReadPort, createEpicOpsWritePort } from './adapters/epic-ops.adapters.js';
 import { createBurndownReadPort } from './adapters/burndown.adapters.js';
@@ -27,6 +28,7 @@ import {
 } from './adapters/epic-registry.adapters.js';
 import { createPrincipalResolver, type AuthConfig } from './adapters/principal.js';
 import { createAppUserStore, createAppUserAdminStore } from './adapters/app-user.adapters.js';
+import { createProjectStore } from './adapters/project.adapters.js';
 
 /**
  * REST API — chỉ điều phối, không chứa logic nghiệp vụ.
@@ -96,10 +98,20 @@ export function createServer(deps: ServerDeps): FastifyInstance {
 
   registerMeRoutes(app, { resolvePrincipal: getPrincipal });
 
+  const appUserAdminStore = createAppUserAdminStore(deps.prisma);
+  const projectStore = createProjectStore(deps.prisma);
+
   registerUsersRoutes(app, {
     resolvePrincipal: getPrincipal,
-    store: createAppUserAdminStore(deps.prisma),
+    store: appUserAdminStore,
     bootstrapAdmins: deps.auth.bootstrapAdmins,
+    knownProjectKeys: () => projectStore.keys(),
+  });
+
+  registerProjectsRoutes(app, {
+    resolvePrincipal: getPrincipal,
+    projects: projectStore,
+    users: appUserAdminStore,
   });
 
   registerConfigPhaseRoutes(app, {

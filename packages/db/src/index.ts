@@ -64,6 +64,14 @@ export {
 } from './repositories/app-user.repository.js';
 
 export {
+  listProjects,
+  projectKeySet,
+  upsertProject,
+  deleteProject,
+  type ProjectRow,
+} from './repositories/project.repository.js';
+
+export {
   upsertIssues,
   markRemovedIssues,
   knownIdToKey,

@@ -12,6 +12,7 @@ import {
   type UpsertUserRequest,
 } from '@app/shared';
 import { apiClient, noContent, type ApiClient } from './client.js';
+import { projectKeys } from './use-projects.js';
 
 /**
  * Hook cho màn hình quản lý người dùng (chỉ ADMIN dùng tới).
@@ -19,6 +20,12 @@ import { apiClient, noContent, type ApiClient } from './client.js';
  * Mọi schema lấy từ `@app/shared`; kiểm dữ liệu ngay tại biên như mọi hook khác.
  */
 export const userKeys = { all: ['users'] as const };
+
+/** Đổi PM/gán project cũng làm `pmCount` của danh mục Project đổi theo. */
+function invalidateUsersAndProjects(queryClient: ReturnType<typeof useQueryClient>): void {
+  void queryClient.invalidateQueries({ queryKey: userKeys.all });
+  void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+}
 
 export function useUsers(client: ApiClient = apiClient): UseQueryResult<readonly AppUserView[], Error> {
   return useQuery({
@@ -34,9 +41,7 @@ export function useUpsertUser(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: UpsertUserRequest) => client.post('/users', body, appUserSchema),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: userKeys.all });
-    },
+    onSuccess: () => invalidateUsersAndProjects(queryClient),
   });
 }
 
@@ -47,8 +52,6 @@ export function useDeleteUser(
   return useMutation({
     mutationFn: (userId: string) =>
       client.delete(`/users/${encodeURIComponent(userId)}`, noContent),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: userKeys.all });
-    },
+    onSuccess: () => invalidateUsersAndProjects(queryClient),
   });
 }

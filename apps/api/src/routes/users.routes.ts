@@ -27,6 +27,8 @@ export interface UsersRouteDeps {
   readonly store: AppUserAdminStore;
   /** Email admin mồi từ env — hiện dưới dạng chỉ-đọc, không sửa được ở đây. */
   readonly bootstrapAdmins: ReadonlySet<string>;
+  /** Tập project đã đăng ký — PM chỉ được gán vào các project trong tập này. */
+  knownProjectKeys(): Promise<ReadonlySet<string>>;
 }
 
 const ROLE_RANK: Record<UserRole, number> = { ADMIN: 0, PM: 1, VIEWER: 2 };
@@ -107,7 +109,23 @@ export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps):
       if (role !== 'PM' && parsed.data.projects.length > 0) {
         throw new ApiError(400, 'BAD_REQUEST', 'Only PMs are scoped to projects. Clear the projects field for Admin/Viewer.');
       }
-      const projects = role === 'PM' ? parsed.data.projects : [];
+
+      let projects: string[] = [];
+      if (role === 'PM') {
+        // Chuẩn hoá về chữ HOA (khớp danh mục) và khử trùng lặp.
+        projects = [...new Set(parsed.data.projects.map((p) => p.trim().toUpperCase()).filter((p) => p !== ''))];
+        // PM chỉ được gán vào project ĐÃ ĐĂNG KÝ — chặn gõ nhầm key gây mất quyền
+        // xem trong im lặng.
+        const known = await deps.knownProjectKeys();
+        const unknown = projects.filter((p) => !known.has(p));
+        if (unknown.length > 0) {
+          throw new ApiError(
+            400,
+            'UNKNOWN_PROJECT',
+            `These projects are not registered: ${unknown.join(', ')}. An Admin must add them on the Projects screen first.`,
+          );
+        }
+      }
 
       await deps.store.upsert({ userId, role, projects, displayName: parsed.data.displayName });
 

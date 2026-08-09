@@ -29,13 +29,18 @@ let principal: Principal | null;
 let store: FakeAdminStore;
 let app: FastifyInstance;
 
-function build(seed: AdminUserRow[] = [], bootstrap: string[] = []): FastifyInstance {
+function build(
+  seed: AdminUserRow[] = [],
+  bootstrap: string[] = [],
+  known: string[] = ['PAY', 'CRM'],
+): FastifyInstance {
   store = new FakeAdminStore(seed);
   const instance = Fastify({ logger: false });
   registerUsersRoutes(instance, {
     resolvePrincipal: () => principal,
     store,
     bootstrapAdmins: new Set(bootstrap),
+    knownProjectKeys: () => Promise.resolve(new Set(known)),
   });
   return instance;
 }
@@ -118,6 +123,24 @@ describe('POST /api/users', () => {
       payload: { userId: 'x@x.com', role: 'ADMIN', projects: ['PAY'] },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('PM chỉ nhận project ĐÃ ĐĂNG KÝ; key lạ → 400 UNKNOWN_PROJECT', async () => {
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      payload: { userId: 'pm2@x.com', role: 'PM', projects: ['pay'] },
+    });
+    expect(ok.statusCode, 'pay → PAY đã đăng ký').toBe(200);
+    expect(ok.json().projects).toEqual(['PAY']); // chuẩn hoá về chữ HOA
+
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/api/users',
+      payload: { userId: 'pm3@x.com', role: 'PM', projects: ['PAY', 'NOPE'] },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error).toBe('UNKNOWN_PROJECT');
   });
 
   it('tự sửa quyền của chính mình → 400 CANNOT_MODIFY_SELF', async () => {

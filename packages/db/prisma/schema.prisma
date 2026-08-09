@@ -524,3 +524,22 @@ model AppUser {
 
   @@map("app_user")
 }
+
+// ============================================================================
+// Bảng 13: Danh mục Project do Admin quản lý — dùng để gán PM.
+//
+// KHÔNG ràng buộc `tracked_epic.project_key` (Epic đến từ Jira với mọi project);
+// bảng này là DANH SÁCH CHỌN có kiểm soát để Admin gắn PM vào đúng project. Nhờ
+// vậy PM không bị gõ nhầm key và mất quyền xem trong im lặng. `project_key` là
+// key Jira (chữ HOA, ví dụ PAY, CRM); một project gắn được nhiều PM (mỗi PM là
+// một dòng `app_user` có key này trong `projects`).
+// ============================================================================
+model Project {
+  projectKey  String @id @map("project_key") @db.VarChar(32)
+  displayName String? @map("display_name")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("project")
+}

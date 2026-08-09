@@ -67,23 +67,25 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)
    VITE_SIGN_IN_PATH=/oauth2/sign_in pnpm --filter @app/web build
    ```
 
-6. **Áp migration & cấp quyền** — bảng `app_user` do migration
-   `20260809000000_app_user` tạo:
+6. **Áp migration & cấp quyền** — bảng `app_user` và `project` do migration tạo:
 
    ```bash
    pnpm db:migrate
    ```
 
-   Admin đầu tiên đã có nhờ `AUTH_BOOTSTRAP_ADMINS`. Sau khi đăng nhập, cấp quyền
-   cho người khác theo **một trong hai cách**:
+   Admin đầu tiên đã có nhờ `AUTH_BOOTSTRAP_ADMINS`. Sau khi đăng nhập:
 
-   - **Màn hình Users** (thanh bên, chỉ ADMIN thấy) — cấp Admin/PM/Viewer, gán
-     project cho PM ngay trên giao diện. Cách khuyến nghị cho vận hành hằng ngày.
-   - **CLI** (script / CI, không cần mở app):
-     ```bash
-     pnpm auth:grant --user pm@cty.com --role PM --projects PAY,CRM
-     pnpm auth:grant --user ai@cty.com --role VIEWER
-     ```
+   1. **Đăng ký project** đã (PM chỉ gán được vào project có thật):
+      - **Màn hình Projects** (thanh bên, chỉ ADMIN) — khuyến nghị; hoặc
+      - SQL: `INSERT INTO "project"(project_key) VALUES ('PAY') ON CONFLICT DO NOTHING;`
+   2. **Cấp quyền** cho người khác:
+      - **Màn hình Users** — cấp Admin/PM/Viewer, tick project cho PM từ danh sách
+        đã đăng ký. Khuyến nghị cho vận hành hằng ngày.
+      - **CLI** (script / CI): `auth:grant` cũng kiểm PM chỉ nhận project đã đăng ký.
+        ```bash
+        pnpm auth:grant --user pm@cty.com --role PM --projects PAY,CRM
+        pnpm auth:grant --user ai@cty.com --role VIEWER
+        ```
 
 ## Đổi IdP hoặc loại cổng
 

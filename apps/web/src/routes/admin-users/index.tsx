@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { USER_ROLE, type AppUserView, type UpsertUserRequest, type UserRole } from '@app/shared';
 import { useMe } from '../../api/use-me.js';
+import { useProjects } from '../../api/use-projects.js';
 import { useDeleteUser, useUpsertUser, useUsers } from '../../api/use-users.js';
 import { Badge, EmptyState, ErrorState, LoadingState, type BadgeTone } from '../../components/ui/index.js';
 
@@ -36,37 +38,41 @@ export function AdminUsersScreen() {
 
 function UsersManager({ currentUserId }: { readonly currentUserId: string | null }) {
   const query = useUsers();
+  const projectsQuery = useProjects();
   const upsert = useUpsertUser();
   const remove = useDeleteUser();
 
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState<UserRole>('VIEWER');
-  const [projects, setProjects] = useState('');
+  const [selectedProjects, setSelectedProjects] = useState<readonly string[]>([]);
   const [displayName, setDisplayName] = useState('');
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const resetForm = (): void => {
     setUserId('');
     setRole('VIEWER');
-    setProjects('');
+    setSelectedProjects([]);
     setDisplayName('');
   };
 
   const editUser = (u: AppUserView): void => {
     setUserId(u.userId);
     setRole(u.role);
-    setProjects(u.projects.join(', '));
+    setSelectedProjects(u.projects);
     setDisplayName(u.displayName ?? '');
+  };
+
+  const toggleProject = (key: string): void => {
+    setSelectedProjects((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
   };
 
   const submit = (): void => {
     const body: UpsertUserRequest = {
       userId: userId.trim(),
       role,
-      projects:
-        role === 'PM'
-          ? projects.split(',').map((s) => s.trim()).filter((s) => s !== '')
-          : [],
+      projects: role === 'PM' ? [...selectedProjects] : [],
       displayName: displayName.trim() === '' ? null : displayName.trim(),
     };
     upsert.mutate(body, { onSuccess: resetForm });
@@ -119,16 +125,33 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
         </label>
 
         {role === 'PM' && (
-          <label className="field">
-            <span>Projects (comma-separated)</span>
-            <input
-              className="input input--wide"
-              value={projects}
-              placeholder="PAY, CRM"
-              aria-label="Projects"
-              onChange={(e) => setProjects(e.target.value)}
-            />
-          </label>
+          <fieldset className="field">
+            <legend>Projects owned</legend>
+            {projectsQuery.isPending ? (
+              <span className="muted">Loading projects…</span>
+            ) : projectsQuery.isError ? (
+              <ErrorState error={projectsQuery.error} title="Could not load projects" />
+            ) : projectsQuery.data.length === 0 ? (
+              <p className="panel__hint">
+                No projects registered yet. Add them on the <Link to="/admin/projects">Projects</Link>{' '}
+                screen first, then assign them here.
+              </p>
+            ) : (
+              <div className="checks">
+                {projectsQuery.data.map((p) => (
+                  <label className="check" key={p.projectKey}>
+                    <input
+                      type="checkbox"
+                      checked={selectedProjects.includes(p.projectKey)}
+                      onChange={() => toggleProject(p.projectKey)}
+                    />
+                    <code>{p.projectKey}</code>
+                    {p.displayName !== null && <span className="muted">{p.displayName}</span>}
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
         )}
 
         <label className="field">

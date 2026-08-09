@@ -61,6 +61,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     builtBy: 'T-33',
   },
   {
+    path: '/admin/projects',
+    label: 'Projects',
+    icon: '🗄️',
+    summary: 'Register the project keys PMs can be assigned to.',
+    builtBy: 'SSO',
+    adminOnly: true,
+  },
+  {
     path: '/admin/users',
     label: 'Users',
     icon: '👤',

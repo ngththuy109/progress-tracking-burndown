@@ -262,3 +262,30 @@ export const upsertUserRequestSchema = z.object({
     .default(null),
 });
 export type UpsertUserRequest = z.infer<typeof upsertUserRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Danh mục Project — /api/projects (chỉ ADMIN)
+// ---------------------------------------------------------------------------
+
+/**
+ * Key project theo chuẩn Jira: chữ HOA, bắt đầu bằng chữ cái. Chuẩn hoá (trim +
+ * viết hoa) nằm ở server; schema này chốt định dạng để chặn key rác.
+ */
+export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,31}$/;
+
+export const projectSchema = z.object({
+  projectKey: z.string(),
+  displayName: z.string().nullable(),
+  /** Số PM đang được gán vào project này (một project có thể nhiều PM). */
+  pmCount: z.number().int().nonnegative(),
+});
+export type ProjectView = z.infer<typeof projectSchema>;
+
+export const listProjectsResponseSchema = z.object({ projects: z.array(projectSchema) });
+export type ListProjectsResponse = z.infer<typeof listProjectsResponseSchema>;
+
+export const upsertProjectRequestSchema = z.object({
+  projectKey: z.string().trim().min(1),
+  displayName: z.string().trim().min(1).nullable().default(null),
+});
+export type UpsertProjectRequest = z.infer<typeof upsertProjectRequestSchema>;

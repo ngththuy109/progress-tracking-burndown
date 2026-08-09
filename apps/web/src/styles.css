@@ -393,6 +393,18 @@ code {
   margin-left: auto;
 }
 
+/* Nhóm checkbox chọn nhiều (ví dụ: gán project cho PM). */
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .move {
   display: inline-flex;
   align-items: center;

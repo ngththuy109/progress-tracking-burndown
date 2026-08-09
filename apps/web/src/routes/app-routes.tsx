@@ -9,6 +9,7 @@ import { SignboardScreen } from './signboard/index.js';
 import { SignboardColumnScreen } from './config-signboard/index.js';
 import { OpsScreen } from './ops/index.js';
 import { AdminUsersScreen } from './admin-users/index.js';
+import { AdminProjectsScreen } from './admin-projects/index.js';
 
 /**
  * Bảng định tuyến.
@@ -29,6 +30,7 @@ export function AppRoutes() {
         <Route path="config/phase" element={<ConfigPhaseScreen />} />
         <Route path="config/signboard" element={<SignboardColumnScreen />} />
         <Route path="ops" element={<OpsScreen />} />
+        <Route path="admin/projects" element={<AdminProjectsScreen />} />
         <Route path="admin/users" element={<AdminUsersScreen />} />
 
         <Route
