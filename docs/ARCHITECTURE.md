@@ -162,6 +162,12 @@ Lý do cụ thể: trạng thái Signboard phụ thuộc *hôm nay là ngày nà
 }]
 ```
 
+### Ranh giới xác thực (bổ sung khi lắp SSO, 2026-08-09)
+
+`apps/api` **không tự đăng nhập người dùng**. Một auth proxy (SSO/OIDC) đứng trước, đặt header danh tính `x-user-id` = email đã xác thực và **xoá mọi `x-user-*`** client tự gửi. API chỉ tin danh tính đó rồi **tra vai trò ở bảng `app_user`** — KHÔNG tin `role` từ header. Vai trò/`projects` là dữ liệu của hệ thống (bảng `app_user`, `project`), không suy từ Jira.
+
+Danh tính được phân giải một lần mỗi request trong một hook `onRequest` (`apps/api/src/adapters/principal.ts`), nên tầng route vẫn đọc `resolvePrincipal(req)` đồng bộ như cũ. Chi tiết: [AUTH.md](./AUTH.md); cấu hình cổng: [`config/auth-proxy/`](../config/auth-proxy/).
+
 ---
 
 ## 3. Bảng phân vùng — dùng cho trường `touches:` của task card
@@ -216,4 +222,5 @@ Lý do cụ thể: trạng thái Signboard phụ thuộc *hôm nay là ngày nà
 | `pnpm test:engine` | **Chỉ** `packages/engine` — phải chạy < 10 giây, không cần DB |
 | `pnpm e2e` | Playwright |
 | `pnpm db:migrate` | Áp migration |
+| `pnpm auth:grant` | Cấp/đổi vai trò người dùng (ADMIN/PM/VIEWER) — xem [AUTH.md](./AUTH.md) |
 | `pnpm dev` | Chạy api + worker + web song song |

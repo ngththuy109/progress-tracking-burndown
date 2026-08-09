@@ -2297,6 +2297,33 @@ CREATE INDEX idx_planshift_epic
 >
 > Signboard vì thế **tính lúc đọc**: một truy vấn trên `jira_issue` (đã có sẵn `function_key`, `task_type`, ngày plan/actual) rồi chạy cây quyết định ở mục 6.3 — thuần tính toán, không gọi Jira, không đọc lịch sử. Nhờ vậy Signboard rẻ hơn hẳn Burndown và không cần thêm bảng nào.
 
+> **Bảng phân quyền (bổ sung cho SSO, 2026-08-09 — xem [AUTH.md](./AUTH.md)).** Hai bảng dưới đây không có trong PRD gốc; thêm khi lắp xác thực SSO. Nguồn sự thật của role/projects — cổng SSO chỉ xác thực *danh tính*, còn *vai trò* tra ở đây.
+
+```sql
+-- ============================================================
+-- Bảng 12: Người dùng ứng dụng — phân quyền
+-- ============================================================
+CREATE TABLE app_user (
+    user_id      VARCHAR(254) PRIMARY KEY,                        -- email đã xác thực (chữ thường)
+    role         VARCHAR(16)  NOT NULL CHECK (role IN ('ADMIN','PM','VIEWER')),
+    projects     TEXT[]       NOT NULL DEFAULT '{}',              -- project PM phụ trách; rỗng với ADMIN/VIEWER
+    display_name TEXT,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- Bảng 13: Danh mục Project do Admin quản lý — dùng để gán PM.
+-- KHÔNG ràng buộc tracked_epic (Epic đến từ Jira với mọi project).
+-- ============================================================
+CREATE TABLE project (
+    project_key  VARCHAR(32) PRIMARY KEY,                         -- key Jira, chữ HOA (PAY, CRM)
+    display_name TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
 ### 4.7. Bố trí key trên Redis
 
 | Key | Kiểu | TTL | Dùng làm gì |
@@ -2736,8 +2763,10 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 | Xoay vòng token | 90 ngày/lần. Có runbook hướng dẫn. Cảnh báo trước hạn 14 ngày. |
 | Chuẩn bị cho tương lai | Bọc phần xác thực sau interface `CredentialProvider`, để sau này chuyển sang OAuth mà không phải sửa engine. |
 | Ghi log | **Cấm ghi token vào log.** Có bộ lọc tự động che (redact) header `Authorization`. |
-| Phân quyền người dùng | Người dùng chỉ xem được Epic thuộc project mà họ có quyền trên Jira. Kiểm tra quyền ở tầng API. |
+| Xác thực người dùng | SSO (OpenID Connect) qua một **auth proxy** đứng trước API; proxy đặt header danh tính `x-user-id` (email đã xác thực) và **xoá header `x-user-*` giả** từ client. IdP đã chốt: **Microsoft Entra ID**. Chi tiết: [AUTH.md](./AUTH.md); cấu hình cổng: `config/auth-proxy/`. |
+| Phân quyền người dùng | Vai trò `ADMIN` / `PM` / `VIEWER` **tra bảng `app_user`** (KHÔNG suy từ quyền Jira, KHÔNG tin `role` từ header). VIEWER xem tất cả; PM xem/thao tác project mình phụ trách (gán từ danh mục `project` — nhiều–nhiều); ADMIN toàn quyền. Kiểm ở tầng API. |
 | Quyền sửa cấu hình Phase | Chỉ role **Admin** (sửa bộ Mặc định) và **PM** (sửa bộ ghi đè của project mình phụ trách). Người dùng thường chỉ xem. Mọi lần lưu đều ghi `created_by` + ghi chú lý do. |
+| Quản lý phân quyền | Chỉ **ADMIN**: màn hình Users/Projects hoặc `pnpm auth:grant`. Admin đầu tiên mồi qua `AUTH_BOOTSTRAP_ADMINS`. Không cho tự hạ quyền chính mình. |
 | Regex do người dùng nhập | Coi là **dữ liệu không đáng tin**. Giới hạn 200 ký tự, chạy có timeout 100ms, khuyến nghị dùng `re2` để loại bỏ hoàn toàn nguy cơ ReDoS. Xem tình huống **E-20**. |
 | Truyền tải | Chỉ HTTPS/TLS 1.2 trở lên. |
 | Lưu trữ | Chỉ lưu dữ liệu tổng hợp và metadata. **Không lưu nội dung mô tả issue hay comment** (tránh chứa thông tin nhạy cảm). |

@@ -47,6 +47,8 @@ Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đ�
 
 > **Chỉ cần Jira thật khi muốn đồng bộ dữ liệu thật.** Toàn bộ test chạy được mà không cần Jira, PostgreSQL hay Redis — xem mục 5.
 
+> **Xác thực khi chạy local.** Ở môi trường triển khai, app dùng **SSO qua một cổng** đặt header danh tính `x-user-id` (xem [AUTH.md](./AUTH.md)). Ở local **không có cổng**: các API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic, sửa cấu hình, quản lý người dùng) cần header danh tính. Cách nhanh: đặt `AUTH_BOOTSTRAP_ADMINS=you@cty.com` rồi gửi kèm `-H 'x-user-id: you@cty.com'` khi gọi `curl` (hoặc dựng một oauth2-proxy local). Các biến `AUTH_*` đều tùy chọn — mặc định người đã xác thực nhưng chưa cấp quyền là `VIEWER`.
+
 ## 3. Dựng database
 
 ```bash
