@@ -87,6 +87,12 @@ pnpm db:seed
 curl -s localhost:3000/api/config/phase | jq '.globalVersion'   # 0 = chưa có bản nào; > 0 = đã có
 ```
 
+Không có sẵn Node/tsx trên máy đó (chỉ có `psql`)? Chạy file SQL thuần tương đương, cũng idempotent:
+
+```bash
+psql "$DATABASE_URL" -f tools/db/seed-default-config.sql
+```
+
 ---
 
 ## [P1] `JOB_FAILED` — Job đêm thất bại

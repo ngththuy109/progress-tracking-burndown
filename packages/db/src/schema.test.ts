@@ -244,4 +244,50 @@ describe('ràng buộc thật trên PostgreSQL', async () => {
     const total = await prisma.phaseConfigSet.count({ where: { scope: 'GLOBAL' } });
     expect(total).toBe(1);
   });
+
+  it('SQL seed thuần chạy được bằng driver pg và idempotent', async () => {
+    // Chứng minh file tools/db/seed-default-config.sql thật sự CHẠY ĐƯỢC (cú
+    // pháp, cột, kiểu) — không chỉ khớp chuỗi. Dùng driver `pg` (simple query
+    // protocol) vì file có nhiều câu lệnh và một khối DO $$ mà Prisma
+    // $executeRaw không nuốt trọn được.
+    await prisma.phaseConfigSet.deleteMany({ where: { scope: 'GLOBAL' } });
+    const { renderDefaultConfigSql } = await import('./seed/render-default-config-sql.js');
+    const pg = (await import('pg')).default;
+    // psql không chấp nhận `?schema=` của Prisma; bảng nằm ở search_path mặc
+    // định (public) nên bỏ query string đi là đủ.
+    const conn = (process.env['DATABASE_URL'] ?? '').split('?')[0];
+    const client = new pg.Client({ connectionString: conn });
+    await client.connect();
+    try {
+      await client.query(renderDefaultConfigSql()); // lần 1: tạo
+      await client.query(renderDefaultConfigSql()); // lần 2: bỏ qua (idempotent)
+    } finally {
+      await client.end();
+    }
+
+    const active = await prisma.phaseConfigSet.findMany({
+      where: { scope: 'GLOBAL', isActive: true },
+      include: {
+        phaseDefinitions: true,
+        signboardColumns: true,
+        matchRules: true,
+        titlePatterns: true,
+        subtaskTitlePatterns: true,
+      },
+    });
+    expect(active).toHaveLength(1);
+    expect(active[0]?.phaseDefinitions).toHaveLength(6);
+    expect(active[0]?.signboardColumns).toHaveLength(5);
+    expect(active[0]?.matchRules).toHaveLength(29);
+    expect(active[0]?.titlePatterns).toHaveLength(2);
+    expect(active[0]?.subtaskTitlePatterns).toHaveLength(1);
+
+    // Chạy 2 lần vẫn chỉ một bản GLOBAL — idempotent.
+    expect(await prisma.phaseConfigSet.count({ where: { scope: 'GLOBAL' } })).toBe(1);
+
+    // Lịch làm việc cũng được seed (upsert).
+    expect(
+      await prisma.workCalendar.count({ where: { calendarId: { in: ['VN_STANDARD', 'JP_STANDARD'] } } }),
+    ).toBe(2);
+  });
 });

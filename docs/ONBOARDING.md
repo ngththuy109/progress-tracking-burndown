@@ -64,6 +64,15 @@ pnpm db:seed             # (khuyến nghị) nạp bộ Mặc định: nhận di
 > thường với bộ RỖNG để bạn tự định nghĩa Phase và cột rồi Lưu (tạo bản Mặc định
 > v1). Lệnh **idempotent** — bộ Mặc định chỉ tạo khi chưa có, lịch dùng upsert.
 
+> **Không có Node/tsx (DBA, Docker init…)?** Chạy thẳng file SQL thuần — tương
+> đương `pnpm db:seed`, cũng idempotent:
+> ```bash
+> psql "$DATABASE_URL" -f tools/db/seed-default-config.sql
+> ```
+> File đó **được sinh** từ `DEFAULT_PHASE_CONFIG` (một nguồn sự thật duy nhất);
+> sau khi đổi hằng số thì chạy `pnpm db:seed:sql:gen` để sinh lại — có test giữ
+> hai bên luôn khớp.
+
 > **Không tải engine của Prisma — chạy được cả khi máy chặn mạng.** Bình thường Prisma tải hai
 > binary Rust (query engine + schema engine) từ CDN `binaries.prisma.sh` lúc `pnpm install` và
 > `prisma generate`; máy chặn mạng ra ngoài sẽ chết ở cả hai bước. Dự án đã cấu hình để **không cần

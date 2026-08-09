@@ -78,6 +78,11 @@ pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consume
 > editable set, so you can define your own Phases and columns and Save — which creates
 > **Default v1**. The seed is idempotent: it only creates the Default set when none is
 > active, and upserts the calendars.
+>
+> **No Node toolchain (DBA, Docker init, …)?** Run the plain-SQL equivalent directly —
+> also idempotent: `psql "$DATABASE_URL" -f tools/db/seed-default-config.sql`. That file is
+> **generated** from `DEFAULT_PHASE_CONFIG` (single source of truth) via `pnpm
+> db:seed:sql:gen`, and a test keeps the two in lock-step.
 
 `pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
 **worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default

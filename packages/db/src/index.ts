@@ -36,6 +36,11 @@ export {
 } from './seed/default-phase-config.js';
 
 export {
+  renderDefaultConfigSql,
+  SEED_SQL_RELATIVE_PATH,
+} from './seed/render-default-config-sql.js';
+
+export {
   findActiveConfigSet,
   saveNewVersion,
   rollbackToVersion,
