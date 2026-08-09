@@ -27,6 +27,8 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)   [IdP: Micros
 Vì sao thiết kế thế này: dù cổng có lỡ để lọt một header `x-user-role: ADMIN`
 giả thì cũng vô hại — vai trò luôn đến từ database của hệ thống, không từ header.
 
+> **Cổng nào cũng được — miễn đặt đúng `x-user-id`.** IdP/proxy là phần thay-thế-được; app chỉ cần một header danh tính tin cậy. Chưa có SSO Entra thì dùng **Basic Auth tạm** để test với vài người (cùng mô hình header, không sửa code) — xem [`config/auth-proxy/`](../config/auth-proxy/) (`nginx-basic-auth.conf.example`).
+
 ## 2. Ba vai trò
 
 | Vai trò | Xem | Ghi (thêm/sửa Epic, cấu hình) | Quản lý người dùng & project |
@@ -91,7 +93,7 @@ Xem `.env.example`. Frontend: `VITE_SIGN_IN_PATH` để 401 đá về trang đă
 
 **Thứ tự:** đăng ký project trước, rồi mới gán PM vào project đó.
 
-1. **Admin đầu tiên** — đặt `AUTH_BOOTSTRAP_ADMINS=you@cty.com` (không cần DB).
+1. **Admin đầu tiên** — đặt `AUTH_BOOTSTRAP_ADMINS=you@cty.com` (không cần DB), hoặc **seed tự động khi deploy**: `pnpm seed:admin` (idempotent; cấu hình qua env `SEED_ADMIN_*`, đặt SAU `pnpm db:migrate`).
 2. **Đăng ký project** — màn hình **Projects** (chỉ ADMIN), hoặc
    `INSERT INTO "project"(project_key) VALUES ('PAY') ON CONFLICT DO NOTHING;`
 3. **Cấp quyền** — màn hình **Users** (tick project cho PM từ danh sách), hoặc CLI:

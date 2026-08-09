@@ -24,7 +24,66 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)
                         └───▶ API  (127.0.0.1:3000)  ──▶ tra app_user → role
 ```
 
-## Các bước triển khai
+## Phương án TẠM: Basic Auth (test nhanh khi chưa có app Entra)
+
+Chưa tạo được App registration Entra? Bảo vệ app cho **vài người test** bằng
+**Basic Auth** — cùng mô hình header, **không sửa code**. Đây là bản **tạm**, thay
+bằng SSO khi có app Entra. Cấu hình: `nginx-basic-auth.conf.example`.
+
+1. **Dựng nginx** theo `nginx-basic-auth.conf.example` (trỏ `root` tới bản build web),
+   **chạy API riêng tư**, áp migration:
+
+   ```bash
+   pnpm db:migrate
+   HOST=127.0.0.1 pnpm --filter @app/api dev
+   ```
+
+2. **Thêm người bằng MỘT lệnh** — `auth:testuser` gộp cả tạo login (htpasswd) lẫn
+   cấp vai trò (`app_user`); username = email chữ thường. Cần lệnh `htpasswd`
+   (gói `apache2-utils` / `httpd-tools`) và `DATABASE_URL`.
+
+   ```bash
+   pnpm auth:testuser --user you@cty.com --role ADMIN         # bạn — admin đầu tiên
+
+   # Gán PM thì đăng ký project TRƯỚC (màn hình Projects, hoặc:
+   #   INSERT INTO "project"(project_key) VALUES ('PAY') ON CONFLICT DO NOTHING;)
+   pnpm auth:testuser --user pm@cty.com --role PM --projects PAY,CRM
+   pnpm auth:testuser --user tester@cty.com                   # mặc định VIEWER
+   ```
+
+   Mỗi lệnh in ra **mật khẩu ngẫu nhiên** để đưa người dùng (hoặc tự đặt bằng
+   `--password`). File htpasswd mặc định `/etc/nginx/burndown.htpasswd` (đổi bằng
+   `--htpasswd`); tạo file lần đầu thì `nginx -s reload`.
+
+3. **Đăng nhập** bằng email + mật khẩu → dùng thử. Admin tinh chỉnh tiếp vai
+   trò/project trên màn hình **Users** / **Projects**.
+
+**Giới hạn cần biết:** BẮT BUỘC HTTPS (mật khẩu đi kèm mỗi request); không đăng
+xuất/hết phiên; chỉ hợp cho **vài người, tạm thời**. Gỡ người: xoá login
+`htpasswd -D /etc/nginx/burndown.htpasswd tester@cty.com`, và hạ/xoá quyền
+(`pnpm auth:grant --user … --role VIEWER` hoặc xoá dòng `app_user`).
+
+---
+
+## Seed admin tự động khi deploy
+
+`pnpm seed:admin` tạo sẵn một admin, **idempotent** (chạy lại mỗi lần deploy vô
+hại). Cấu hình đọc từ env (xem `.env.example`); chưa đặt `SEED_ADMIN_EMAIL` thì
+bỏ qua. Đặt vào bước release, **SAU** migration:
+
+```bash
+pnpm db:migrate && pnpm seed:admin
+```
+
+- `SEED_ADMIN_EMAIL` → ghi một dòng ADMIN vào `app_user` (đủ cho cả SSO lẫn Basic Auth).
+- Thêm `SEED_ADMIN_PASSWORD` (+ `SEED_ADMIN_HTPASSWD`) khi dùng **Basic Auth** → tạo
+  luôn login htpasswd; **bỏ qua nếu user đã có** (không reset mật khẩu mỗi deploy).
+
+Đổi mật khẩu sau này: xoá dòng trong htpasswd (hoặc dùng `pnpm auth:testuser`) rồi deploy lại.
+
+---
+
+## Các bước triển khai (SSO — mục tiêu)
 
 1. **Đăng ký ứng dụng ở Microsoft Entra ID** (Azure Portal → Microsoft Entra ID
    → App registrations → New registration):
