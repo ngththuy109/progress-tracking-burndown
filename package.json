@@ -16,6 +16,7 @@
     "test:coverage": "vitest run --project engine --coverage",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "install:all": "pnpm install && pnpm db:generate",
     "db:generate": "prisma generate",
     "db:migrate": "node tools/db/apply-migrations.mjs",
     "db:validate": "prisma validate",

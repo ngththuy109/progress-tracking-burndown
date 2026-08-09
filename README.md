@@ -64,9 +64,8 @@ Requires **Node ≥ 20.11** and **pnpm 9.15**. PostgreSQL and Redis are needed t
 but not to run the tests — see below.
 
 ```bash
-pnpm install
+pnpm install:all              # one-shot: pnpm install + prisma generate (builds re2, generates Prisma Client)
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
-pnpm db:generate
 pnpm db:migrate
 pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
 ```
@@ -82,6 +81,17 @@ stops the process with a clear message rather than a half-running server.
 > compiles to runtime code, such as constructor parameter properties (`constructor(readonly x)`). So
 > `node --watch src/*.ts` crashes with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on Node 22+/24. `tsx`
 > fully transpiles the TypeScript, so the dev entry points run on any supported Node.
+
+> **One-shot setup.** `pnpm install:all` runs `pnpm install` (which also builds the native
+> [`re2`](https://github.com/uhop/node-re2) engine — required by the ReDoS-safe regex layer, not
+> optional) and `pnpm db:generate` **in sequence**. On **Claude Code on the web**, a `SessionStart`
+> hook (`.claude/hooks/session-start.sh`) runs this automatically at session start, so a freshly
+> cloned container is ready to `pnpm dev` / `pnpm test` without manual setup — the container is then
+> cached, so later sessions start near-instantly.
+>
+> Do **not** move `prisma generate` into a `postinstall` script: Prisma's generate internally runs
+> `pnpm add @prisma/client`, which re-triggers `postinstall` → `prisma generate` → … in an **infinite
+> loop**. That is why setup is two sequential steps rather than a single `pnpm install`.
 
 Full setup instructions, including seeding, are in
 [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) *(Vietnamese)*.
