@@ -1,3 +1,6 @@
+// PHẢI đứng TRƯỚC mọi import khác: nạp `.env` ở gốc repo vào process.env trước
+// khi @app/db… (hoặc bất kỳ module nào) đọc env. Xem load-env.ts.
+import './load-env.js';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
