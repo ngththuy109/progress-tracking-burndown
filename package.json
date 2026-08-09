@@ -21,6 +21,7 @@
     "db:migrate": "node tools/db/apply-migrations.mjs",
     "db:validate": "prisma validate",
     "auth:grant": "node tools/auth/grant-role.mjs",
+    "auth:testuser": "node tools/auth/add-basic-user.mjs",
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "smoke": "node tools/smoke/smoke.mjs",
     "reconcile": "node tools/smoke/reconcile.mjs"

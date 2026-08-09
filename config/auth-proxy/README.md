@@ -30,30 +30,38 @@ Chưa tạo được App registration Entra? Bảo vệ app cho **vài người 
 **Basic Auth** — cùng mô hình header, **không sửa code**. Đây là bản **tạm**, thay
 bằng SSO khi có app Entra. Cấu hình: `nginx-basic-auth.conf.example`.
 
-1. **Tạo file mật khẩu, thêm người test** — username = **email chữ thường** để khớp
-   `app_user`. Cần `htpasswd` (gói `apache2-utils` / `httpd-tools`):
-
-   ```bash
-   htpasswd -B -c /etc/nginx/burndown.htpasswd you@cty.com     # -c: tạo mới, CHỈ lần đầu
-   htpasswd -B    /etc/nginx/burndown.htpasswd pm@cty.com      # thêm người tiếp theo
-   htpasswd -B    /etc/nginx/burndown.htpasswd tester@cty.com
-   ```
-
-2. **Dựng nginx** theo `nginx-basic-auth.conf.example` (trỏ `root` tới bản build web),
-   **chạy API riêng tư** và mồi admin đầu tiên (chính email của bạn ở bước 1):
+1. **Dựng nginx** theo `nginx-basic-auth.conf.example` (trỏ `root` tới bản build web),
+   **chạy API riêng tư**, áp migration:
 
    ```bash
    pnpm db:migrate
-   HOST=127.0.0.1 AUTH_BOOTSTRAP_ADMINS=you@cty.com pnpm --filter @app/api dev
+   HOST=127.0.0.1 pnpm --filter @app/api dev
    ```
 
-3. **Đăng nhập** bằng email + mật khẩu vừa đặt. Bạn là ADMIN → mở màn hình
-   **Projects** đăng ký project, **Users** cấp PM/Viewer cho người test (họ mặc định
-   là VIEWER cho tới khi được nâng).
+2. **Thêm người bằng MỘT lệnh** — `auth:testuser` gộp cả tạo login (htpasswd) lẫn
+   cấp vai trò (`app_user`); username = email chữ thường. Cần lệnh `htpasswd`
+   (gói `apache2-utils` / `httpd-tools`) và `DATABASE_URL`.
 
-**Giới hạn cần biết:** BẮT BUỘC HTTPS (mật khẩu đi kèm mỗi request); mật khẩu phát
-tay, không có đăng xuất/hết phiên; chỉ hợp cho **vài người, tạm thời**. Gỡ người:
-`htpasswd -D /etc/nginx/burndown.htpasswd tester@cty.com` (và hạ/xoá quyền trong `app_user`).
+   ```bash
+   pnpm auth:testuser --user you@cty.com --role ADMIN         # bạn — admin đầu tiên
+
+   # Gán PM thì đăng ký project TRƯỚC (màn hình Projects, hoặc:
+   #   INSERT INTO "project"(project_key) VALUES ('PAY') ON CONFLICT DO NOTHING;)
+   pnpm auth:testuser --user pm@cty.com --role PM --projects PAY,CRM
+   pnpm auth:testuser --user tester@cty.com                   # mặc định VIEWER
+   ```
+
+   Mỗi lệnh in ra **mật khẩu ngẫu nhiên** để đưa người dùng (hoặc tự đặt bằng
+   `--password`). File htpasswd mặc định `/etc/nginx/burndown.htpasswd` (đổi bằng
+   `--htpasswd`); tạo file lần đầu thì `nginx -s reload`.
+
+3. **Đăng nhập** bằng email + mật khẩu → dùng thử. Admin tinh chỉnh tiếp vai
+   trò/project trên màn hình **Users** / **Projects**.
+
+**Giới hạn cần biết:** BẮT BUỘC HTTPS (mật khẩu đi kèm mỗi request); không đăng
+xuất/hết phiên; chỉ hợp cho **vài người, tạm thời**. Gỡ người: xoá login
+`htpasswd -D /etc/nginx/burndown.htpasswd tester@cty.com`, và hạ/xoá quyền
+(`pnpm auth:grant --user … --role VIEWER` hoặc xoá dòng `app_user`).
 
 ---
 
