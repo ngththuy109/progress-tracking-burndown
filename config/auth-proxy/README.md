@@ -24,7 +24,40 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)
                         └───▶ API  (127.0.0.1:3000)  ──▶ tra app_user → role
 ```
 
-## Các bước triển khai
+## Phương án TẠM: Basic Auth (test nhanh khi chưa có app Entra)
+
+Chưa tạo được App registration Entra? Bảo vệ app cho **vài người test** bằng
+**Basic Auth** — cùng mô hình header, **không sửa code**. Đây là bản **tạm**, thay
+bằng SSO khi có app Entra. Cấu hình: `nginx-basic-auth.conf.example`.
+
+1. **Tạo file mật khẩu, thêm người test** — username = **email chữ thường** để khớp
+   `app_user`. Cần `htpasswd` (gói `apache2-utils` / `httpd-tools`):
+
+   ```bash
+   htpasswd -B -c /etc/nginx/burndown.htpasswd you@cty.com     # -c: tạo mới, CHỈ lần đầu
+   htpasswd -B    /etc/nginx/burndown.htpasswd pm@cty.com      # thêm người tiếp theo
+   htpasswd -B    /etc/nginx/burndown.htpasswd tester@cty.com
+   ```
+
+2. **Dựng nginx** theo `nginx-basic-auth.conf.example` (trỏ `root` tới bản build web),
+   **chạy API riêng tư** và mồi admin đầu tiên (chính email của bạn ở bước 1):
+
+   ```bash
+   pnpm db:migrate
+   HOST=127.0.0.1 AUTH_BOOTSTRAP_ADMINS=you@cty.com pnpm --filter @app/api dev
+   ```
+
+3. **Đăng nhập** bằng email + mật khẩu vừa đặt. Bạn là ADMIN → mở màn hình
+   **Projects** đăng ký project, **Users** cấp PM/Viewer cho người test (họ mặc định
+   là VIEWER cho tới khi được nâng).
+
+**Giới hạn cần biết:** BẮT BUỘC HTTPS (mật khẩu đi kèm mỗi request); mật khẩu phát
+tay, không có đăng xuất/hết phiên; chỉ hợp cho **vài người, tạm thời**. Gỡ người:
+`htpasswd -D /etc/nginx/burndown.htpasswd tester@cty.com` (và hạ/xoá quyền trong `app_user`).
+
+---
+
+## Các bước triển khai (SSO — mục tiêu)
 
 1. **Đăng ký ứng dụng ở Microsoft Entra ID** (Azure Portal → Microsoft Entra ID
    → App registrations → New registration):
