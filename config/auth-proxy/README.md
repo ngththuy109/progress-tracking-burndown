@@ -26,12 +26,21 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)
 
 ## Các bước triển khai
 
-1. **Đăng ký ứng dụng OIDC ở IdP** (Google Workspace / Microsoft Entra ID / Okta
-   / Auth0 / Keycloak…): lấy `client_id`, `client_secret`; đặt redirect URI là
-   `https://<host>/oauth2/callback`; giới hạn theo domain/nhóm công ty.
+1. **Đăng ký ứng dụng ở Microsoft Entra ID** (Azure Portal → Microsoft Entra ID
+   → App registrations → New registration):
+   - Chọn **Single tenant** (chỉ tài khoản trong tổ chức).
+   - Redirect URI (Web): `https://<host>/oauth2/callback`.
+   - Ghi lại **Application (client) ID** và **Directory (tenant) ID**.
+   - **Certificates & secrets → New client secret** → copy giá trị.
+   - **Token configuration → Add optional claim → ID → `email`** (để có claim
+     `email`; nếu tổ chức không gán `mail` thì dùng `preferred_username` — xem
+     ghi chú trong file cfg).
+   - **API permissions**: Microsoft Graph (delegated) `openid`, `email`,
+     `profile` → **Grant admin consent**.
 
 2. **Cấu hình oauth2-proxy** — chép `oauth2-proxy.cfg.example` → `oauth2-proxy.cfg`,
-   điền issuer/client/secret. Nhớ `set_xauthrequest = true` để trả email về nginx.
+   điền `<TENANT_ID>` / `<APPLICATION_CLIENT_ID>` / client secret. Đã đặt sẵn
+   `provider = "oidc"` với endpoint v2.0 và `set_xauthrequest = true`.
 
 3. **Cấu hình nginx** — chép `nginx.conf.example`, trỏ `root` tới thư mục build
    của web (`pnpm --filter @app/web build` → `apps/web/dist`). File mẫu đã đặt
