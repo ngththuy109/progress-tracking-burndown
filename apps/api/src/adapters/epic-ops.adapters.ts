@@ -92,11 +92,15 @@ export function createEpicOpsReadPort(prisma: PrismaClient, statusIdMap: StatusI
 export function createEpicOpsWritePort(prisma: PrismaClient, queue: QueueLike): EpicOpsWritePort {
   return {
     async setStatus(epicKey, status) {
-      await prisma.$executeRawUnsafe(
-        `UPDATE tracked_epic SET status = $2, updated_at = NOW() WHERE epic_key = $1`,
-        epicKey,
-        status,
-      );
+      // Đi qua Prisma CÓ KIỂU, KHÔNG raw SQL: bảng `tracked_epic` KHÔNG có cột
+      // `updated_at` (xem schema.prisma và migration 20260803000000_init — chỉ có
+      // `added_at`, `last_synced_at`). Câu `UPDATE ... SET updated_at = NOW()` cũ
+      // vì thế ném lỗi Postgres `column "updated_at" does not exist`. Đây là thao
+      // tác GHI duy nhất trên đường đồng bộ lại một Epic đang ERROR/PENDING, nên
+      // lỗi đó biến CẢ nút Resync thành 500 INTERNAL_ERROR. Qua
+      // `prisma.trackedEpic.update`, tham chiếu một cột không tồn tại là lỗi BIÊN
+      // DỊCH, không còn lọt xuống runtime được nữa.
+      await prisma.trackedEpic.update({ where: { epicKey }, data: { status } });
     },
 
     async enqueueSync(epicKey, args) {
