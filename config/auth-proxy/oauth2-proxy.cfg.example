@@ -1,0 +1,38 @@
+# Cấu hình MẪU cho oauth2-proxy — mô hình SSO B1.
+#
+# oauth2-proxy lo phần OIDC: chuyển hướng người dùng tới IdP, đổi mã lấy token,
+# xác minh, giữ phiên bằng cookie đã ký. Nó KHÔNG quyết vai trò — vai trò tra ở
+# bảng `app_user` trong API. Nhiệm vụ duy nhất ở đây: khẳng định DANH TÍNH.
+#
+# Chạy: oauth2-proxy --config /etc/oauth2-proxy.cfg
+# Tài liệu: https://oauth2-proxy.github.io/oauth2-proxy/
+
+http_address = "127.0.0.1:4180"
+
+# -- Nhà cung cấp OIDC (đổi theo IdP của bạn) --
+# provider = "oidc" chạy với hầu hết IdP chuẩn OIDC. Có provider riêng cho
+# google, azure, okta… nếu cần nhóm/claim đặc thù.
+provider          = "oidc"
+oidc_issuer_url   = "https://YOUR_IDP/.well-known/openid-configuration đặt gốc issuer ở đây"
+client_id         = "ĐẶT_CLIENT_ID"
+client_secret     = "ĐẶT_CLIENT_SECRET"
+redirect_url      = "https://burndown.your-company.com/oauth2/callback"
+
+# Chỉ cho người trong công ty (đổi theo IdP): giới hạn domain email.
+email_domains     = ["your-company.com"]
+
+# Chuỗi ngẫu nhiên 32 byte (base64) để ký cookie phiên. TUYỆT ĐỐI không commit.
+cookie_secret     = "ĐẶT_COOKIE_SECRET_32_BYTE"
+cookie_secure     = true
+cookie_samesite   = "lax"
+
+# QUAN TRỌNG: trả email đã xác thực về cho nginx qua header
+# `X-Auth-Request-Email` (nginx đọc ở auth_request_set). Không bật thì cổng
+# không biết đặt x-user-id bằng gì.
+set_xauthrequest  = true
+
+# oauth2-proxy đứng sau nginx nên tin proxy để đọc X-Forwarded-*.
+reverse_proxy     = true
+
+# Chỉ để oauth2-proxy phục vụ đúng các đường /oauth2/*; phần còn lại nginx lo.
+skip_provider_button = false

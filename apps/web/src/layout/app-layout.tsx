@@ -1,5 +1,14 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { NAV_ITEMS } from './nav-items.js';
+import { useMe } from '../api/use-me.js';
+import { Badge, type BadgeTone } from '../components/ui/index.js';
+
+/** Màu chip theo vai trò — chỉ để dễ nhìn, không mang ý nghĩa quyền hạn. */
+const ROLE_TONE: Record<string, BadgeTone> = {
+  ADMIN: 'info',
+  PM: 'success',
+  VIEWER: 'neutral',
+};
 
 /**
  * Khung chung: thanh bên điều hướng, thanh trên, vùng nội dung.
@@ -9,6 +18,7 @@ import { NAV_ITEMS } from './nav-items.js';
 export function AppLayout() {
   const location = useLocation();
   const current = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path));
+  const me = useMe();
 
   return (
     <div className="app">
@@ -48,8 +58,18 @@ export function AppLayout() {
 
       <div className="content">
         <header className="topbar">
-          <h1 className="topbar__title">{current?.label ?? 'Burndown Engine'}</h1>
-          {current !== undefined && <p className="topbar__summary">{current.summary}</p>}
+          <div className="topbar__headings">
+            <h1 className="topbar__title">{current?.label ?? 'Burndown Engine'}</h1>
+            {current !== undefined && <p className="topbar__summary">{current.summary}</p>}
+          </div>
+          {me.data != null && (
+            <div className="topbar__user">
+              <span className="topbar__user-id" title={me.data.userId}>
+                {me.data.userId}
+              </span>
+              <Badge tone={ROLE_TONE[me.data.role] ?? 'neutral'}>{me.data.role}</Badge>
+            </div>
+          )}
         </header>
 
         <main className="main" id="main">

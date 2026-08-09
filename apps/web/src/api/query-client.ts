@@ -1,5 +1,6 @@
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { ApiError } from './client.js';
+import { maybeRedirectToSignIn } from './auth-redirect.js';
 
 /**
  * Cấu hình TanStack Query dùng chung.
@@ -37,6 +38,10 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
+    // Một chỗ DUY NHẤT bắt lỗi 401 cho mọi query lẫn mutation: chưa đăng nhập
+    // thì đá qua trang đăng nhập của cổng SSO (nếu đã cấu hình VITE_SIGN_IN_PATH).
+    queryCache: new QueryCache({ onError: maybeRedirectToSignIn }),
+    mutationCache: new MutationCache({ onError: maybeRedirectToSignIn }),
     defaultOptions: {
       queries: {
         staleTime: STALE_TIME_MS,

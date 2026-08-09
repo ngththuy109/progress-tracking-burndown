@@ -139,6 +139,10 @@ code {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 .topbar__title {
   margin: 0;
@@ -147,6 +151,20 @@ code {
 .topbar__summary {
   margin: 2px 0 0;
   color: var(--text-muted);
+}
+.topbar__user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.topbar__user-id {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main {

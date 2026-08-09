@@ -202,3 +202,21 @@ export interface Principal {
   /** Các project user này phụ trách. Chỉ có nghĩa với role `PM`. */
   readonly projects: readonly string[];
 }
+
+// ---------------------------------------------------------------------------
+// GET /api/me — người dùng đang đăng nhập
+// ---------------------------------------------------------------------------
+
+/**
+ * Ai đang đăng nhập, để frontend hiện tên và ẩn/hiện nút theo vai trò.
+ *
+ * Đây CHỈ để phục vụ giao diện; API vẫn tự kiểm quyền ở mỗi endpoint ghi —
+ * ẩn nút không phải là hàng rào bảo mật, chỉ đỡ cho người dùng bấm vào thứ
+ * chắc chắn bị từ chối.
+ */
+export const meResponseSchema = z.object({
+  userId: z.string(),
+  role: z.enum(USER_ROLE),
+  projects: z.array(z.string()),
+});
+export type MeResponse = z.infer<typeof meResponseSchema>;

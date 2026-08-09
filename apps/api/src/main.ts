@@ -16,6 +16,7 @@ import {
 } from '@app/jira';
 import { withTimeout, TimeoutError, type StatusIdMap } from '@app/shared';
 import { createServer, DEFAULT_PORT, type ServerDeps } from './server.js';
+import { authConfigFromEnv } from './adapters/principal.js';
 
 /**
  * Điểm vào tiến trình API.
@@ -193,6 +194,9 @@ async function bootstrap(): Promise<void> {
     backfillQueue,
     statusIdMap,
     cache: createConfigCache(redis),
+    // Danh tính do cổng SSO đặt vào header; vai trò tra `app_user`. Cấu hình
+    // qua AUTH_* (xem adapters/principal.ts và config/auth-proxy/).
+    auth: authConfigFromEnv(process.env),
   };
 
   const app = createServer(deps);
