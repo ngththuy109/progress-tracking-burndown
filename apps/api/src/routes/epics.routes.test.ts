@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { Principal, TrackedEpicStatus } from '@app/shared';
+import {
+  RECOMPUTE_SECONDS_PER_EPIC,
+  addEpicsResponseSchema,
+  type Principal,
+  type TrackedEpicStatus,
+} from '@app/shared';
 import { registerEpicRoutes } from './epics.routes.js';
 import { assertTransition } from '../services/epic-registry.service.js';
 import {
@@ -109,7 +114,8 @@ describe('kiểm tra khi thêm', () => {
     const before = store.rows.size;
     const res = await app.inject(addBody(['CRM-7']));
     expect(res.json().results[0]).toMatchObject({ valid: false, reason: 'ALREADY_TRACKED' });
-    expect(res.json().added).toBe(0);
+    expect(res.json().added).toEqual([]);
+    expect(res.json().skipped).toEqual(['CRM-7']);
     expect(store.rows.size).toBe(before);
     expect(backfill.enqueued).toEqual([]);
   });
@@ -141,7 +147,12 @@ describe('vòng đời', () => {
   it('thêm thành công đặt status = PENDING và đẩy job backfill', async () => {
     const res = await app.inject(addBody(['PAY-100', 'PAY-200']));
     expect(res.statusCode).toBe(200);
-    expect(res.json().added).toBe(2);
+    // Thân phản hồi phải qua được đúng schema mà frontend kiểm tại biên —
+    // chính chỗ từng vỡ với RESPONSE_SHAPE_INVALID.
+    const body = addEpicsResponseSchema.parse(res.json());
+    expect(body.added).toEqual(['PAY-100', 'PAY-200']);
+    expect(body.skipped).toEqual([]);
+    expect(body.estimatedSeconds).toBe(2 * RECOMPUTE_SECONDS_PER_EPIC);
     expect(store.rows.get('PAY-100')!.status).toBe('PENDING');
     expect(backfill.enqueued.sort()).toEqual(['PAY-100', 'PAY-200']);
   });

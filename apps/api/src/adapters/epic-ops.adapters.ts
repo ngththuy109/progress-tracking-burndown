@@ -7,7 +7,7 @@ import {
   storedRemainingSeconds,
 } from '@app/db';
 import type { StatusIdMap, TrackedEpicStatus } from '@app/shared';
-import type { QueueLike } from './epic-registry.adapters.js';
+import { enqueueReplacingFinished, type QueueLike } from './epic-registry.adapters.js';
 import type { EpicOpsReadPort, EpicOpsWritePort } from '../routes/epic-ops.routes.js';
 import { createBurndownReadPort } from './burndown.adapters.js';
 
@@ -106,8 +106,10 @@ export function createEpicOpsWritePort(prisma: PrismaClient, queue: QueueLike): 
     async enqueueSync(epicKey, args) {
       // `jobId` theo Epic để bấm hai lần không tạo hai job cùng chạy (C-6).
       // Dấu `__` chứ không phải `:` — BullMQ cấm `:` trong jobId tuỳ biến.
+      // Đi qua `enqueueReplacingFinished`: xác job resync TRƯỚC còn nằm trong
+      // Redis sẽ nuốt lặng lẽ mọi lượt resync sau nếu không dọn đi.
       const jobId = `${SYNC_JOB_NAME}__${epicKey}`;
-      await queue.add(SYNC_JOB_NAME, { epicKey, ...args }, { jobId });
+      await enqueueReplacingFinished(queue, SYNC_JOB_NAME, { epicKey, ...args }, jobId);
       return jobId;
     },
   };

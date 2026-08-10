@@ -33,7 +33,7 @@ import {
   type IssueTotals,
   type StatusIdMap,
 } from '@app/shared';
-import { createQueues, jobIdFor, type QueueSet } from './queue/queues.js';
+import { addReplacingFinished, createQueues, jobIdFor, type QueueSet } from './queue/queues.js';
 import { QUEUE_NAME } from './queue/queues.js';
 import { JOB_NAME, createSyncWorker, type HandlerMap } from './queue/worker.js';
 import { fetchEpicTree } from './pipeline/fetch-epic-tree.js';
@@ -298,10 +298,13 @@ async function runReconcileJob(ctx: JobContext, rawPayload: unknown): Promise<vo
 async function runNightlySweep(ctx: JobContext): Promise<void> {
   const epics = await listActiveEpics(ctx.prisma);
   for (const epicKey of epics) {
-    await ctx.queues.sync.add(
+    // `addReplacingFinished` dọn xác job hôm trước (completed còn trong 24h giữ
+    // lại, hoặc failed giữ vĩnh viễn) — không dọn thì BullMQ nuốt lượt đêm nay.
+    await addReplacingFinished(
+      ctx.queues.sync,
       JOB_NAME.syncEpic,
       { epicKey },
-      { jobId: jobIdFor(JOB_NAME.syncEpic, epicKey) },
+      jobIdFor(JOB_NAME.syncEpic, epicKey),
     );
   }
   ctx.log({ event: 'nightly.swept', epics: epics.length });
@@ -310,10 +313,11 @@ async function runNightlySweep(ctx: JobContext): Promise<void> {
 async function runWeeklyReconcileSweep(ctx: JobContext): Promise<void> {
   const epics = await listActiveEpics(ctx.prisma);
   for (const epicKey of epics) {
-    await ctx.queues.reconcile.add(
+    await addReplacingFinished(
+      ctx.queues.reconcile,
       JOB_NAME.reconcileEpic,
       { epicKey },
-      { jobId: jobIdFor(JOB_NAME.reconcileEpic, epicKey) },
+      jobIdFor(JOB_NAME.reconcileEpic, epicKey),
     );
   }
   ctx.log({ event: 'weekly-reconcile.swept', epics: epics.length });
@@ -324,10 +328,11 @@ async function runWeeklyReconcileSweep(ctx: JobContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function enqueueBackfill(queues: QueueSet, epicKey: string): Promise<void> {
-  await queues.backfill.add(
+  await addReplacingFinished(
+    queues.backfill,
     JOB_NAME.backfillEpic,
     { epicKey, full: true },
-    { jobId: jobIdFor(JOB_NAME.backfillEpic, epicKey) },
+    jobIdFor(JOB_NAME.backfillEpic, epicKey),
   );
 }
 

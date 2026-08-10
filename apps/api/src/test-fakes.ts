@@ -208,8 +208,8 @@ export class FakeTrackedEpicStore implements TrackedEpicStore {
     return Promise.resolve(new Set(keys.filter((k) => this.rows.has(k))));
   }
 
-  insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<number> {
-    let added = 0;
+  insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<readonly string[]> {
+    const added: string[] = [];
     for (const r of rows) {
       if (this.rows.has(r.epicKey)) continue; // C-6: bỏ qua, không ném lỗi trùng
       this.rows.set(r.epicKey, {
@@ -221,7 +221,7 @@ export class FakeTrackedEpicStore implements TrackedEpicStore {
         calendarId: r.calendarId,
         note: r.note,
       });
-      added += 1;
+      added.push(r.epicKey);
     }
     return Promise.resolve(added);
   }

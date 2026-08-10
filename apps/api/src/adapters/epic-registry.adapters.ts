@@ -282,12 +282,48 @@ function numberOf(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
-/** Đẩy job backfill vào BullMQ. Chỉ cần đúng một lệnh nên khai interface tối thiểu. */
+/** Job đọc lại từ hàng đợi — chỉ hai phương thức mà việc dọn xác job cần. */
+export interface QueueJobLike {
+  getState(): Promise<string>;
+  remove(): Promise<unknown>;
+}
+
+/** Đẩy job vào BullMQ. Khai interface tối thiểu để test không cần Redis. */
 export interface QueueLike {
   add(name: string, data: unknown, opts?: unknown): Promise<unknown>;
+  getJob(jobId: string): Promise<QueueJobLike | undefined | null>;
 }
 
 export const BACKFILL_JOB_NAME = 'backfill-epic';
+
+/**
+ * Đẩy job có `jobId` chống trùng, DỌN xác job cũ đã kết thúc trước khi đẩy.
+ *
+ * BullMQ lặng lẽ BỎ QUA `add` khi còn một job trùng id ở BẤT KỲ trạng thái nào —
+ * kể cả completed/failed đang được giữ lại. Không dọn trước thì lần resync/chạy
+ * bù THỨ HAI của một Epic không bao giờ vào hàng đợi: API vẫn báo "queued" mà
+ * màn hình giám sát không thấy job nào chạy.
+ *
+ * Job đang chờ hoặc đang chạy thì GIỮ NGUYÊN — để BullMQ khử trùng lặp, đúng
+ * mục đích của jobId theo Epic (C-6).
+ */
+export async function enqueueReplacingFinished(
+  queue: QueueLike,
+  name: string,
+  data: unknown,
+  jobId: string,
+): Promise<void> {
+  const existing = await queue.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'completed' || state === 'failed' || state === 'unknown') {
+      // Thua cuộc đua với worker (job vừa chạy lại) thì bỏ qua: `add` bên dưới
+      // sẽ bị khử trùng lặp — đúng hành vi mong muốn.
+      await existing.remove().catch(() => undefined);
+    }
+  }
+  await queue.add(name, data, { jobId });
+}
 
 export function createBackfillQueue(queue: QueueLike): BackfillQueue {
   return {
@@ -296,7 +332,7 @@ export function createBackfillQueue(queue: QueueLike): BackfillQueue {
         // `jobId` theo Epic để bấm "Thêm" hai lần không tạo hai job backfill
         // cùng chạy trên một Epic (C-6). Dấu `__` chứ không phải `:` — BullMQ cấm
         // `:` trong jobId tuỳ biến.
-        await queue.add(BACKFILL_JOB_NAME, { epicKey }, { jobId: `${BACKFILL_JOB_NAME}__${epicKey}` });
+        await enqueueReplacingFinished(queue, BACKFILL_JOB_NAME, { epicKey }, `${BACKFILL_JOB_NAME}__${epicKey}`);
       }
     },
   };

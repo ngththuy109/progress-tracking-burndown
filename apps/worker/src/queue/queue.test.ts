@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryTokenBucketStore } from '@app/jira';
 import {
+  addReplacingFinished,
   BASE_BACKOFF_MS,
   backoffWithJitter,
   DEFAULT_JOB_OPTIONS,
@@ -10,6 +11,7 @@ import {
   QUEUE_NAME,
   QUEUE_PREFIX,
   SYNC_CONCURRENCY,
+  type DedupQueue,
 } from './queues.js';
 import { createShutdown, registerSignalHandlers, type Closable } from './shutdown.js';
 import { dispatchJob, JOB_NAME, UnknownJobError } from './worker.js';
@@ -106,6 +108,72 @@ describe('chống trùng job', () => {
   it('cùng Epic nhưng khác loại job thì KHÔNG bị coi là trùng', () => {
     // Đồng bộ và chạy bù trên cùng một Epic là hai việc khác nhau.
     expect(jobIdFor(JOB_NAME.syncEpic, 'PAY-1')).not.toBe(jobIdFor(JOB_NAME.backfillEpic, 'PAY-1'));
+  });
+});
+
+describe('addReplacingFinished — dọn xác job đã kết thúc trước khi đẩy', () => {
+  function fakeDedupQueue(existingState?: string) {
+    const added: { name: string; jobId?: string | undefined }[] = [];
+    const removed: string[] = [];
+    const queue: DedupQueue = {
+      getJob: (jobId) =>
+        Promise.resolve(
+          existingState === undefined
+            ? undefined
+            : {
+                getState: () => Promise.resolve(existingState),
+                remove: () => {
+                  removed.push(jobId);
+                  return Promise.resolve();
+                },
+              },
+        ),
+      add: (name, _data, opts) => {
+        added.push({ name, jobId: opts?.jobId });
+        return Promise.resolve({});
+      },
+    };
+    return { queue, added, removed };
+  }
+
+  it('xác job completed của đêm trước bị dọn rồi mới đẩy lượt mới', async () => {
+    // BullMQ bỏ qua `add` khi còn job trùng id ở BẤT KỲ trạng thái nào. Không
+    // dọn thì quét đêm nay bị nuốt trong im lặng — không log, không sync_run.
+    const { queue, added, removed } = fakeDedupQueue('completed');
+
+    await addReplacingFinished(queue, JOB_NAME.syncEpic, { epicKey: 'PAY-1' }, 'sync-epic__PAY-1');
+
+    expect(removed).toEqual(['sync-epic__PAY-1']);
+    expect(added).toEqual([{ name: JOB_NAME.syncEpic, jobId: 'sync-epic__PAY-1' }]);
+  });
+
+  it('job failed (giữ vĩnh viễn để điều tra) không được chặn Epic đó mãi mãi', async () => {
+    const { queue, added, removed } = fakeDedupQueue('failed');
+
+    await addReplacingFinished(queue, JOB_NAME.syncEpic, { epicKey: 'PAY-1' }, 'sync-epic__PAY-1');
+
+    expect(removed).toHaveLength(1);
+    expect(added).toHaveLength(1);
+  });
+
+  it('job đang chờ hoặc đang chạy thì GIỮ NGUYÊN — chống trùng C-6 vẫn hoạt động', async () => {
+    for (const state of ['waiting', 'active', 'delayed']) {
+      const { queue, added, removed } = fakeDedupQueue(state);
+
+      await addReplacingFinished(queue, JOB_NAME.syncEpic, { epicKey: 'PAY-1' }, 'sync-epic__PAY-1');
+
+      expect(removed).toEqual([]);
+      expect(added).toHaveLength(1); // BullMQ tự khử trùng lặp ở bước add
+    }
+  });
+
+  it('không có job cũ thì đẩy thẳng', async () => {
+    const { queue, added, removed } = fakeDedupQueue();
+
+    await addReplacingFinished(queue, JOB_NAME.backfillEpic, { epicKey: 'PAY-2' }, 'backfill-epic__PAY-2');
+
+    expect(removed).toEqual([]);
+    expect(added).toEqual([{ name: JOB_NAME.backfillEpic, jobId: 'backfill-epic__PAY-2' }]);
   });
 });
 

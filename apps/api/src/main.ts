@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { Redis } from 'ioredis';
-import { Queue } from 'bullmq';
+import { Queue, type JobsOptions } from 'bullmq';
 import { disconnectPrisma, getPrisma } from '@app/db';
 import {
   JiraClient,
@@ -65,12 +65,25 @@ function readEnv(source: NodeJS.ProcessEnv): Record<EnvName, string> {
   return out;
 }
 
-// Hằng số hàng đợi PHẢI khớp `apps/worker/src/queue/queues.ts` (QUEUE_PREFIX và
-// QUEUE_NAME.backfill). Hai app không được import lẫn nhau (ARCHITECTURE.md §2)
-// nên hằng số này lặp lại có chủ đích — đổi một bên phải đổi cả bên kia, nếu
-// không API đẩy job vào một hàng đợi mà worker không hề lắng nghe.
+// Hằng số hàng đợi PHẢI khớp `apps/worker/src/queue/queues.ts` (QUEUE_PREFIX,
+// QUEUE_NAME.backfill và DEFAULT_JOB_OPTIONS). Hai app không được import lẫn
+// nhau (ARCHITECTURE.md §2) nên hằng số này lặp lại có chủ đích — đổi một bên
+// phải đổi cả bên kia, nếu không API đẩy job vào một hàng đợi mà worker không
+// hề lắng nghe.
 const QUEUE_PREFIX = 'bull:burndown';
 const BACKFILL_QUEUE_NAME = 'backfill';
+
+// Thiếu khối này thì job do API đẩy (backfill khi thêm Epic, sync-epic khi
+// resync) lấy mặc định của BullMQ: KHÔNG thử lại, và bị GIỮ LẠI VĨNH VIỄN sau
+// khi xong — xác job completed đó nuốt lặng lẽ mọi lượt resync sau của cùng
+// Epic vì jobId chống trùng vẫn còn trong Redis.
+const DEFAULT_JOB_OPTIONS: JobsOptions = {
+  attempts: 5,
+  backoff: { type: 'exponential', delay: 1000 },
+  removeOnComplete: { age: 24 * 3600, count: 1000 },
+  // Giữ job hỏng để điều tra — `enqueueReplacingFinished` sẽ dọn khi đẩy lượt mới.
+  removeOnFail: false,
+};
 
 /**
  * Hạn chót cho bước KHỞI ĐỘNG, để một phụ thuộc "treo" không giữ tiến trình ở
@@ -187,7 +200,11 @@ async function bootstrap(): Promise<void> {
   // chỉ ghi id số nên không có bảng này thì không dựng lại trạng thái quá khứ.
   const statusIdMap: StatusIdMap = await loadStatusIdMap(jira, createStatusMapCache(redis));
 
-  const backfillQueue = new Queue(BACKFILL_QUEUE_NAME, { connection: redis, prefix: QUEUE_PREFIX });
+  const backfillQueue = new Queue(BACKFILL_QUEUE_NAME, {
+    connection: redis,
+    prefix: QUEUE_PREFIX,
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
 
   const deps: ServerDeps = {
     prisma,
