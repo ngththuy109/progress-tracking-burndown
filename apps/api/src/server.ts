@@ -27,6 +27,7 @@ import {
 } from './adapters/phase-config.adapters.js';
 import {
   createBackfillQueue,
+  createHierarchyConfigPort,
   createJiraEpicPort,
   createTrackedEpicStore,
   type QueueLike,
@@ -136,6 +137,9 @@ export function createServer(deps: ServerDeps): FastifyInstance {
     store: createTrackedEpicStore(deps.prisma),
     jira: createJiraEpicPort(deps.jira, deps.fieldMapping),
     backfill: createBackfillQueue(deps.backfillQueue),
+    // Root hợp lệ theo Hierarchy Profile của từng project — dự án 2 tầng đăng
+    // ký một ticket Task làm root thay vì Epic.
+    config: createHierarchyConfigPort(deps.prisma),
     resolvePrincipal: getPrincipal,
   });
 

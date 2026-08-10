@@ -10,10 +10,15 @@
 
 ## 1. Ai có Phase, và Phase đến từ đâu
 
+> **Từ khi có Hierarchy Profile** (docs/FLEXIBLE-HIERARCHY-PROPOSAL.md), sơ đồ dưới
+> đây là hành vi của **profile mặc định 3 tầng** — vẫn đúng cho mọi dự án chưa khai
+> gì. Dự án khai profile khác (2 tầng, Phase từ field Jira, FIXED…) đi theo
+> `phaseSource` của profile đó; các tầng gọi theo VAI: ROOT / GROUP / LEAF.
+
 ```
-EPIC      → không có Phase (phase_code = NULL)
-TASK      → suy ra TỪ TITLE của chính nó — nơi DUY NHẤT việc "mapping" xảy ra
-SUB-TASK  → kế thừa 100% Phase của Task cha; title của nó KHÔNG có tiếng nói
+EPIC  (ROOT)     → không có Phase (phase_code = NULL)
+TASK  (GROUP)    → suy ra TỪ TITLE của chính nó — nơi DUY NHẤT việc "mapping" xảy ra
+SUB-TASK (LEAF)  → kế thừa 100% Phase của Task cha; title của nó KHÔNG có tiếng nói
 ```
 
 Ba nguyên tắc đã chốt trong PRD, mã nguồn làm đúng như vậy:
@@ -200,3 +205,5 @@ cậy duy nhất hiện nay.
 | Signboard truy vấn theo `phase_code` của Sub-task | `apps/api/src/adapters/signboard.adapters.ts` |
 | Lưu config + đánh dấu `dirty:epics` | `apps/api/src/services/phase-config.service.ts` |
 | Schema các bảng cấu hình & `jira_issue` | `packages/db/prisma/schema.prisma` |
+| Hierarchy Profile (vai ROOT/GROUP/LEAF, nguồn Phase) | `packages/shared/src/hierarchy.ts` |
+| Khu "Project structure" trên màn Phase settings | `apps/web/src/routes/config-phase/hierarchy-section.tsx` |

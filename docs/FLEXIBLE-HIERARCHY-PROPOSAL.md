@@ -1,7 +1,23 @@
-# Đề xuất: Burndown & Signboard linh hoạt theo cấu trúc dự án — chỉ cần config, không sửa code
+# Burndown & Signboard linh hoạt theo cấu trúc dự án — chỉ cần config, không sửa code
 
-> **Trạng thái: ĐỀ XUẤT — chưa triển khai.** Tài liệu này phân tích hiện trạng và đề xuất
-> thiết kế; mọi tên bảng/cột mới chỉ là dự kiến.
+> **Trạng thái: ĐÃ TRIỂN KHAI.** Phần "Hiện trạng" bên dưới mô tả hệ thống TRƯỚC khi
+> có Hierarchy Profile — giữ nguyên làm bối cảnh thiết kế. Bản đồ mã nguồn:
+>
+> | Mảnh | Ở đâu |
+> |---|---|
+> | Kiểu + zod + profile mặc định | `packages/shared/src/hierarchy.ts` |
+> | Kế thừa + kiểm tra hợp lệ | `packages/engine/src/config/merge-inheritance.ts` |
+> | Bảng 7G + `resolved_role` + backfill | `packages/db/prisma/migrations/20260810000000_hierarchy_profile/` |
+> | Đọc/ghi profile theo version | `packages/db/src/repositories/phase-config.repository.ts` |
+> | Fetch cây theo số tầng | `apps/worker/src/pipeline/fetch-epic-tree.ts` (`fetchIssueTree`) |
+> | Gán vai + 4 chiến lược Phase + nguồn hàng/cột | `apps/worker/src/pipeline/persist-issues.ts` |
+> | Màn đăng ký nhận root theo profile | `apps/api/src/services/epic-registry.service.ts` |
+> | Khu "Project structure" trên màn Phase settings | `apps/web/src/routes/config-phase/hierarchy-section.tsx` |
+>
+> **Cách bật một dự án 2 tầng:** vào Phase settings → chọn phạm vi project → khu
+> *Project structure* → 2 levels, khai issue type của root (ví dụ `Task`), chọn nguồn
+> Phase (ô `[phase]` trong tiêu đề lá, field Jira, hoặc FIXED) → Preview → Confirm →
+> đăng ký ticket root ở màn Epics như thường.
 
 Bối cảnh: hệ thống hiện giả định cây **3 tầng** `Epic → Task (Phase) → Sub-task`. Nhiều dự
 án quản lý khác đi — ví dụ chỉ **2 tầng**: một ticket Task đóng vai "project", các Sub-task

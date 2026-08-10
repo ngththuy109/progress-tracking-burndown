@@ -117,10 +117,24 @@ export interface BackfillQueue {
   enqueue(epicKeys: readonly string[]): Promise<void>;
 }
 
+export interface HierarchyConfigPort {
+  /**
+   * Issue type được chấp nhận làm ROOT theo Hierarchy Profile hiệu lực của
+   * project (tầng `levels[0].issueTypes`). `null`/mảng rỗng = nhận mọi type.
+   * Tên trả về ở dạng đã khai trong config — so KHÔNG phân biệt hoa thường.
+   */
+  rootIssueTypesFor(projectKey: string): Promise<readonly string[] | null>;
+}
+
 export interface EpicRegistryDeps {
   readonly store: TrackedEpicStore;
   readonly jira: JiraEpicPort;
   readonly backfill: BackfillQueue;
+  /**
+   * Vắng mặt = luật cũ "chỉ nhận Epic". Có mặt thì màn đăng ký nhận đúng loại
+   * issue mà cấu trúc dự án khai — dự án 2 tầng đăng ký một ticket Task làm root.
+   */
+  readonly config?: HierarchyConfigPort | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +159,29 @@ export async function validateKeys(
     deps.store.existingKeys(unique),
   ]);
 
+  // Loại issue được nhận làm root, theo Hierarchy Profile của TỪNG project
+  // (mỗi project một profile; tra một lần cho mỗi project xuất hiện).
+  const rootTypesByProject = new Map<string, readonly string[] | null>();
+  if (deps.config) {
+    const projects = new Set(
+      [...lookups.values()].flatMap((r) => (r.ok ? [r.meta.projectKey] : [])),
+    );
+    await Promise.all(
+      [...projects].map(async (p) =>
+        rootTypesByProject.set(p, await deps.config!.rootIssueTypesFor(p)),
+      ),
+    );
+  }
+
+  const acceptsRootType = (projectKey: string, issueType: string): boolean => {
+    // Không có cổng cấu hình thì giữ nguyên luật cũ: chỉ nhận Epic.
+    if (!deps.config) return issueType === 'EPIC';
+    const allowed = rootTypesByProject.get(projectKey);
+    if (!allowed || allowed.length === 0) return true;
+    const needle = issueType.trim().toLowerCase();
+    return allowed.some((t) => t.trim().toLowerCase() === needle);
+  };
+
   const results: EpicValidationResult[] = unique.map((key) => {
     // Xét "đã theo dõi" TRƯỚC: đó là thông tin hữu ích hơn cho PM, và tránh
     // báo NOT_FOUND cho một Epic họ biết chắc là có.
@@ -166,12 +203,13 @@ export async function validateKeys(
       };
     }
 
-    if (found.meta.issueType !== 'EPIC') {
+    if (!acceptsRootType(found.meta.projectKey, found.meta.issueType)) {
       return {
         key,
         valid: false,
+        // Giữ mã lý do cũ để UI không phải đổi; câu chữ nói theo profile.
         reason: 'NOT_AN_EPIC',
-        message: `${key} is a ${found.meta.issueType}, not an Epic`,
+        message: `${key} is a ${found.meta.issueType}, which this project's structure does not accept as a tracking root`,
       };
     }
 

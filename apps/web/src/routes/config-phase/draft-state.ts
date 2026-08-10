@@ -1,7 +1,9 @@
 import {
+  DEFAULT_HIERARCHY_PROFILE,
   INHERITABLE_PARTS,
   type ConfigPayload,
   type EffectiveConfigResponse,
+  type HierarchyProfile,
   type InheritablePartKey,
   type MatchRule,
   type PhaseDefinition,
@@ -63,6 +65,8 @@ export type DraftAction =
   | { readonly type: 'REMOVE_COLUMN'; readonly index: number }
   | { readonly type: 'MOVE_COLUMN'; readonly index: number; readonly delta: -1 | 1 }
   | { readonly type: 'OVERRIDE_PART'; readonly part: InheritablePartKey }
+  /** Thay TOÀN BỘ Hierarchy Profile — khu "Project structure" tự dựng object mới. */
+  | { readonly type: 'SET_HIERARCHY'; readonly profile: HierarchyProfile }
   /** Lưu thành công: bản nháp giờ CHÍNH LÀ bản đang có trên máy chủ. */
   | { readonly type: 'COMMIT' };
 
@@ -101,9 +105,10 @@ function payloadOf(config: EffectiveConfigResponse): ConfigPayload {
     phaseDefinitions: config.phaseDefinitions,
     matchRules: config.matchRules,
     signboardColumns: config.signboardColumns,
-    // Đang KẾ THỪA profile thì bản nháp giữ `null` (chưa khai) — lưu lại không
-    // vô tình biến bản kế thừa thành bản khai riêng của project.
-    hierarchyProfile: config.inherited.hierarchyProfile ? null : config.hierarchyProfile,
+    // Giữ profile ĐẦY ĐỦ trong nháp (kể cả khi đang kế thừa) — giống các phần
+    // mảng: màn hình cần nội dung để hiển thị; `payloadToSave` mới là chỗ trả
+    // phần kế thừa về "chưa khai".
+    hierarchyProfile: config.hierarchyProfile,
   };
 }
 
@@ -294,6 +299,9 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
       });
     }
 
+    case 'SET_HIERARCHY':
+      return edit({ hierarchyProfile: action.profile });
+
     case 'OVERRIDE_PART':
       // Chỉ đổi cờ kế thừa. Nội dung giữ nguyên bản đang thấy, để PM sửa tiếp
       // từ đó chứ không phải bắt đầu lại từ danh sách trống.
@@ -332,12 +340,21 @@ export function isDirty(state: DraftState): boolean {
  * hàng tuần mới có người nhận ra vì sao project đó "không chịu cập nhật".
  */
 export function payloadToSave(state: DraftState): ConfigPayload {
-  if (state.projectKey === null) return state.draft;
+  if (state.projectKey === null) {
+    // Bộ Mặc định: profile y hệt bộ 3 tầng dựng sẵn thì lưu "chưa khai" (null)
+    // — khỏi chèn một dòng cấu hình chỉ để nói "như mặc định".
+    const p = state.draft.hierarchyProfile;
+    return p && JSON.stringify(p) === JSON.stringify(DEFAULT_HIERARCHY_PROFILE)
+      ? { ...state.draft, hierarchyProfile: null }
+      : state.draft;
+  }
 
   const payload: ConfigPayload = { ...state.draft };
   for (const part of INHERITABLE_PARTS) {
     if (state.inherited[part]) {
-      (payload as Record<InheritablePartKey, unknown>)[part] = [];
+      // Profile là MỘT object: "chưa ghi đè" của nó là null, không phải mảng rỗng.
+      (payload as Record<InheritablePartKey, unknown>)[part] =
+        part === 'hierarchyProfile' ? null : [];
     }
   }
   return payload;

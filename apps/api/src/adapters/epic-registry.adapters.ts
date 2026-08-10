@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@app/db';
 import {
+  findActiveConfigSet,
   findByKey,
   insertIfAbsent,
   listMissingDates,
@@ -7,6 +8,7 @@ import {
   removeEpic,
   updateEpic,
 } from '@app/db';
+import { resolveHierarchyProfile } from '@app/shared';
 import {
   JiraHttpError,
   fieldIdsForSearch,
@@ -20,6 +22,7 @@ import {
 import type { TrackedEpicStatus } from '@app/shared';
 import type {
   BackfillQueue,
+  HierarchyConfigPort,
   JiraEpicPort,
   JiraLookupResult,
   TrackedEpicStore,
@@ -33,6 +36,26 @@ import type {
  * (ARCHITECTURE.md §2). Tầng service chỉ nhìn thấy cổng, nên vẫn test được mà
  * không cần Jira sandbox.
  */
+
+/**
+ * Cổng tra Hierarchy Profile cho màn đăng ký: root của project này được phép
+ * là những issue type nào. Đọc thẳng cấu hình hiệu lực (project ghi đè Mặc
+ * định, không ai khai thì profile mặc định 3 tầng — root là Epic như cũ).
+ */
+export function createHierarchyConfigPort(prisma: PrismaClient): HierarchyConfigPort {
+  return {
+    async rootIssueTypesFor(projectKey) {
+      const [global, project] = await Promise.all([
+        findActiveConfigSet(prisma, 'GLOBAL', null),
+        findActiveConfigSet(prisma, 'PROJECT', projectKey),
+      ]);
+      const profile = resolveHierarchyProfile(
+        project?.hierarchyProfile ?? global?.hierarchyProfile,
+      );
+      return profile.levels[0]?.issueTypes ?? null;
+    },
+  };
+}
 
 export function createTrackedEpicStore(prisma: PrismaClient): TrackedEpicStore {
   return {

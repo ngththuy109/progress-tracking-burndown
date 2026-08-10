@@ -92,7 +92,8 @@ describe('kiểm tra khi thêm', () => {
   it('key là Task chứ không phải Epic thì reason = NOT_AN_EPIC', async () => {
     const body = (await app.inject({ method: 'POST', url: '/api/epics/validate', payload: { keys: ['PAY-7'] } })).json();
     expect(body.results[0]).toMatchObject({ valid: false, reason: 'NOT_AN_EPIC' });
-    expect(body.results[0].message).toContain('not an Epic');
+    // Câu chữ giờ nói theo Hierarchy Profile: type này không được nhận làm root.
+    expect(body.results[0].message).toContain('does not accept as a tracking root');
   });
 
   it('key không tồn tại trên Jira thì reason = NOT_FOUND', async () => {

@@ -11,6 +11,7 @@ import {
 } from './draft-state.js';
 import { validateDraftClient } from './client-validation.js';
 import { indexIssues, issuesOf, NO_ISSUES } from './field-errors.js';
+import { HierarchySection } from './hierarchy-section.js';
 import { MatchRulesSection } from './match-rules-section.js';
 import { PhaseDefinitionsSection } from './phase-definitions-section.js';
 import { PreviewPanel } from './preview-panel.js';
@@ -227,6 +228,8 @@ function ConfigEditor({ config }: ConfigEditorProps) {
       )}
 
       {preview.isError && <ErrorState error={preview.error} title="Could not run the preview" onRetry={runPreview} />}
+
+      <HierarchySection state={state} errors={errors} dispatch={dispatch} />
 
       <TitlePatternsSection
         field="titlePatterns"
