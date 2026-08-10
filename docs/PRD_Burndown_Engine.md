@@ -2419,12 +2419,23 @@ Bảng hiện ra khi PM chọn một Phase, ngay bên dưới biểu đồ.
 
 ### 6.1. Cấu trúc bảng
 
+Cột được nhóm **hai tầng**. Một Phase có thể chứa nhiều **Sub-phase** — phần
+`[…]` trong ngoặc vuông **ngay trước Function** ở tiêu đề Sub-task (mục 2.9.1).
+Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dưới từng nhóm.
+
 | Thành phần | Nội dung |
 |---|---|
 | **Hàng** | Các Function của Phase đang chọn, lấy từ tiêu đề Sub-task (mục 2.9). Sắp theo tên A→Z, có ô tìm kiếm |
-| **Cột** | Các loại task theo thứ tự cấu hình: Create → BALReview → FixCommentBAL → JMReview → FixCommentJM |
-| **Ô** | Ngày `plan_start → plan_end` + huy hiệu trạng thái. Ngày thực tế nằm trong tooltip |
-| **Cột Tổng** | Cuối mỗi hàng — trạng thái chung của Function đó |
+| **Nhóm cột (tầng 1)** | Các **Sub-phase** của Phase, xếp tuần tự trái→phải. Sub-phase khớp một Phase trong cấu hình lấy nhãn + `display_order` của Phase đó; Sub-phase lạ xếp sau theo A→Z; Sub-task thiếu `[Sub-phase]` gộp vào nhóm dự phòng "(No sub-phase)" ở cuối |
+| **Cột loại task (tầng 2)** | Trong MỖI Sub-phase: các loại task theo thứ tự cấu hình (Create → BALReview → FixCommentBAL → JMReview → FixCommentJM) — cùng bộ cột cho mọi nhóm để so ngang được |
+| **Ô** | Ngày `plan_start → plan_end` + huy hiệu trạng thái. Ngày thực tế nằm trong tooltip. Gộp theo `(Sub-phase, loại task)` |
+| **Cột Σ (mỗi nhóm)** | Cuối mỗi Sub-phase — trạng thái xấu nhất của Function trong Sub-phase đó |
+| **Cột Tổng (Overall)** | Cuối mỗi hàng — trạng thái chung của Function trên TẤT CẢ Sub-phase |
+
+> **Sub-phase lấy từ tiêu đề, KHÔNG phân loại lại cây Jira.** `[Sub-phase]` chỉ
+> để **nhóm cột trên bảng**; Phase thật của Sub-task vẫn là Phase của Task cha
+> (mục 2.9.2). Sub-task thiếu bracket vẫn lên bảng bình thường, chỉ nằm ở nhóm
+> dự phòng.
 
 ### 6.2. Giao diện
 

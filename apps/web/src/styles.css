@@ -622,6 +622,26 @@ fieldset.field > legend {
   font-weight: 600;
 }
 
+/* Tầng header nhóm Sub-phase — căn giữa, có vạch ngăn trái để tách các nhóm. */
+.signboard__group {
+  text-align: center;
+  border-left: 2px solid var(--border);
+}
+.signboard__group:first-of-type {
+  border-left: 0;
+}
+
+/* Cột "Σ" khép mỗi nhóm Sub-phase: nền nhạt + vạch phải để đóng khung nhóm,
+   khớp đúng vị trí với vạch trái của header nhóm kế tiếp. */
+.signboard__subtotal,
+.signboard__subtotal-head {
+  background: var(--tone-muted-bg);
+  border-right: 2px solid var(--border);
+}
+.signboard__subtotal-head {
+  text-align: center;
+}
+
 .cell {
   display: inline-flex;
   flex-direction: column;

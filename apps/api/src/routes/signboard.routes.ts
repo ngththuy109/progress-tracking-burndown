@@ -11,7 +11,12 @@ import type {
   WorkCalendar,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
-import { buildSignboard, buildUnparsedList, type ColumnSpec } from '../services/signboard.service.js';
+import {
+  buildSignboard,
+  buildUnparsedList,
+  type ColumnSpec,
+  type SubPhaseMetaEntry,
+} from '../services/signboard.service.js';
 
 /**
  * Ba endpoint bảng Signboard — PRD §6.
@@ -33,6 +38,13 @@ export interface SignboardReadPort {
   subtasks(epicKey: string, phaseCode: string): Promise<readonly SignboardSubtask[]>;
   /** Cột đang hiệu lực, đã gộp kế thừa, sắp theo `display_order`. */
   columns(projectKey: string): Promise<readonly ColumnSpec[]>;
+  /**
+   * Nhãn + thứ tự cho nhóm Sub-phase, khoá = `normalize(phaseCode)` của cấu hình.
+   *
+   * Sub-phase (`[…]` trước Function) thường trùng mã một Phase; khớp được thì lấy
+   * nhãn + `display_order` của Phase đó để xếp cột theo đúng thứ tự quy trình.
+   */
+  subPhaseMeta(projectKey: string): Promise<ReadonlyMap<string, SubPhaseMetaEntry>>;
   /** `TaskName` thô bóc từ tiêu đề — chỉ dùng để gợi ý cột mới. */
   rawTaskTypes(epicKey: string, phaseCode: string): Promise<Readonly<Record<string, string | null>>>;
 }
@@ -116,9 +128,10 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
   app.get('/api/signboard/epic/:epicKey/phase/:phaseCode', async (req, reply) =>
     handle(reply, async (): Promise<SignboardResponse> => {
       const { epicKey, phaseCode, meta } = await context(req);
-      const [subtasks, columns] = await Promise.all([
+      const [subtasks, columns, subPhaseMeta] = await Promise.all([
         deps.reads.subtasks(epicKey, phaseCode),
         deps.reads.columns(meta.projectKey),
+        deps.reads.subPhaseMeta(meta.projectKey),
       ]);
 
       return buildSignboard({
@@ -127,6 +140,7 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
         asOfDate: resolveAsOfDate(req, meta.calendar),
         columns,
         subtasks,
+        subPhaseMeta,
       });
     }),
   );

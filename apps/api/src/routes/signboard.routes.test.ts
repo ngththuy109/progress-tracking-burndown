@@ -11,7 +11,7 @@ import {
   type WorkCalendar,
 } from '@app/shared';
 import { registerSignboardRoutes, type SignboardReadPort } from './signboard.routes.js';
-import { type ColumnSpec } from '../services/signboard.service.js';
+import { type ColumnSpec, type SubPhaseMetaEntry } from '../services/signboard.service.js';
 
 const CALENDAR: WorkCalendar = {
   calendarId: 'test',
@@ -35,6 +35,7 @@ function sub(over: Partial<SignboardSubtask> & { issueKey: string }): SignboardS
     summary: `Việc ${over.issueKey}`,
     functionKey: 'login',
     functionName: 'Login',
+    subPhaseRaw: 'Design',
     taskType: 'Create',
     parseStatus: 'OK',
     planStart: '2026-03-02',
@@ -51,6 +52,7 @@ class FakeReads implements SignboardReadPort {
   columnList: ColumnSpec[] = COLUMNS;
   raw: Record<string, string | null> = {};
   phaseList: SignboardPhase[] = [];
+  subPhaseMetaMap: Map<string, SubPhaseMetaEntry> = new Map();
   queries = 0;
 
   async epicMeta() {
@@ -65,6 +67,9 @@ class FakeReads implements SignboardReadPort {
   }
   async columns() {
     return this.columnList;
+  }
+  async subPhaseMeta() {
+    return this.subPhaseMetaMap;
   }
   async rawTaskTypes() {
     return this.raw;
@@ -190,6 +195,144 @@ describe('dựng bảng', () => {
     await get<SignboardResponse>(BOARD);
 
     expect(reads.queries).toBe(1);
+  });
+});
+
+describe('nhóm cột theo Sub-phase', () => {
+  it('mỗi [Sub-phase] thành một nhóm cột; cột lá lặp bộ loại task', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'FUT_ConfirmPoint', taskType: 'Create' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_TestCase', taskType: 'Create' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    // Không có cấu hình → hai Sub-phase lạ, xếp theo nhãn A→Z.
+    expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual([
+      'fut_confirmpoint',
+      'fut_testcase',
+    ]);
+    // 2 Sub-phase × 3 loại task = 6 cột lá, giữ thứ tự nhóm.
+    expect(body.columns).toHaveLength(6);
+    expect(body.columns.map((c) => c.subPhaseKey)).toEqual([
+      'fut_confirmpoint',
+      'fut_confirmpoint',
+      'fut_confirmpoint',
+      'fut_testcase',
+      'fut_testcase',
+      'fut_testcase',
+    ]);
+    // Mỗi nhóm cùng bộ loại task, đúng thứ tự cấu hình.
+    expect(body.columnGroups[0]?.taskColumns.map((c) => c.taskCode)).toEqual([
+      'Create',
+      'BALReview',
+      'JMReview',
+    ]);
+  });
+
+  it('nhãn Sub-phase lạ lấy theo dạng gặp ĐẦU TIÊN, giữ hoa/thường', async () => {
+    reads.subtaskList = [sub({ issueKey: 'S-1', subPhaseRaw: 'FUT_ConfirmPoint' })];
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.columnGroups[0]?.subPhaseLabel).toBe('FUT_ConfirmPoint');
+  });
+
+  it('thứ tự nhóm theo display_order của cấu hình Phase, không phải A→Z', async () => {
+    // TestCase order 1, ConfirmPoint order 2 → TestCase đứng TRƯỚC dù A→Z ngược lại.
+    reads.subPhaseMetaMap = new Map([
+      ['fut_testcase', { label: 'Test Case', order: 1 }],
+      ['fut_confirmpoint', { label: 'Confirm Point', order: 2 }],
+    ]);
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'FUT_ConfirmPoint' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_TestCase' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual([
+      'fut_testcase',
+      'fut_confirmpoint',
+    ]);
+    // Nhãn lấy từ cấu hình, không phải chữ thô trong tiêu đề.
+    expect(body.columnGroups.map((g) => g.subPhaseLabel)).toEqual(['Test Case', 'Confirm Point']);
+  });
+
+  it('Sub-phase khớp cấu hình đứng trước Sub-phase lạ', async () => {
+    reads.subPhaseMetaMap = new Map([['fut_testcase', { label: 'Test Case', order: 5 }]]);
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'Zzz_Khac' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_TestCase' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual(['fut_testcase', 'zzz_khac']);
+  });
+
+  it('ô của Function được xếp đúng vào nhóm Sub-phase của nó', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'A', taskType: 'Create', statusCategory: 'done' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'B', taskType: 'BALReview', statusCategory: 'done' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    const row = body.rows[0];
+
+    // columns: [A/Create, A/BALReview, A/JMReview, B/Create, B/BALReview, B/JMReview]
+    expect(row?.cells[0]).toMatchObject({ present: true, status: 'COMPLETED' }); // A/Create ← S-1
+    expect(row?.cells[1]).toEqual({ present: false }); // A/BALReview trống
+    expect(row?.cells[3]).toEqual({ present: false }); // B/Create trống
+    expect(row?.cells[4]).toMatchObject({ present: true, status: 'COMPLETED' }); // B/BALReview ← S-2
+  });
+
+  it('mỗi hàng có một ô Σ cho MỖI nhóm Sub-phase, và Tổng lấy xấu nhất toàn hàng', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'A', taskType: 'Create', statusCategory: 'done' }),
+      // B: đã bắt đầu nhưng quá ngày kết thúc → DELAY_END.
+      sub({
+        issueKey: 'S-2',
+        subPhaseRaw: 'B',
+        taskType: 'Create',
+        planStart: '2026-03-02',
+        planEnd: '2026-03-06',
+        actualStart: '2026-03-03',
+        statusCategory: 'indeterminate',
+      }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    const row = body.rows[0];
+
+    expect(row?.subtotals).toHaveLength(2);
+    expect(row?.subtotals[0]).toMatchObject({ present: true, status: 'COMPLETED' }); // nhóm A
+    expect(row?.subtotals[1]).toMatchObject({ present: true, status: 'DELAY_END' }); // nhóm B
+    expect(row?.total).toMatchObject({ present: true, status: 'DELAY_END' });
+  });
+
+  it('Sub-task thiếu [Sub-phase] rơi vào nhóm dự phòng, xếp CUỐI', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: null }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_TestCase' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    const keys = body.columnGroups.map((g) => g.subPhaseKey);
+
+    expect(keys[keys.length - 1]).toBe(''); // nhóm dự phòng luôn cuối cùng
+    expect(body.columnGroups.find((g) => g.subPhaseKey === '')?.subPhaseLabel).toBe('(No sub-phase)');
+  });
+
+  it('totalCells = số hàng × (số Sub-phase × số loại task)', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', functionKey: 'a', functionName: 'A', subPhaseRaw: 'P1', taskType: 'Create' }),
+      sub({ issueKey: 'S-2', functionKey: 'b', functionName: 'B', subPhaseRaw: 'P2', taskType: 'Create' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    // 2 hàng × (2 Sub-phase × 3 loại task) = 12.
+    expect(body.summary.totalCells).toBe(12);
+    const counted = Object.values(body.summary.byStatus).reduce((a, b) => a + b, 0);
+    expect(counted + body.summary.emptyCells).toBe(12);
   });
 });
 

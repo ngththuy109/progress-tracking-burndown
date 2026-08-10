@@ -1,6 +1,11 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { SIGNBOARD_STATUS, type SignboardRow, type SignboardStatus } from '@app/shared';
+import {
+  SIGNBOARD_STATUS,
+  type SignboardColumnGroup,
+  type SignboardRow,
+  type SignboardStatus,
+} from '@app/shared';
 import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL, STATUS_TONE } from './signboard-cell.js';
@@ -183,7 +188,12 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
         />
       </div>
 
-      <BoardTable rows={data.rows} columns={data.columns} search={search} filter={filter} />
+      <BoardTable
+        rows={data.rows}
+        columnGroups={data.columnGroups}
+        search={search}
+        filter={filter}
+      />
 
       <UnparsedPanel query={unparsed} />
     </div>
@@ -231,12 +241,12 @@ function SummaryBar({
 
 function BoardTable({
   rows,
-  columns,
+  columnGroups,
   search,
   filter,
 }: {
   readonly rows: readonly SignboardRow[];
-  readonly columns: readonly { readonly taskCode: string; readonly label: string }[];
+  readonly columnGroups: readonly SignboardColumnGroup[];
   readonly search: string;
   readonly filter: SignboardStatus | null;
 }) {
@@ -248,6 +258,18 @@ function BoardTable({
       (r) => r.functionKey.includes(needle) || r.functionName.toLowerCase().includes(needle),
     );
   }, [rows, search]);
+
+  // Vị trí ô LÁ đầu tiên của mỗi nhóm trong `row.cells` (đã làm phẳng). Tính sẵn
+  // một lần thay vì cộng dồn trong vòng lặp render.
+  const groupOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let acc = 0;
+    for (const g of columnGroups) {
+      offsets.push(acc);
+      acc += g.taskColumns.length;
+    }
+    return offsets;
+  }, [columnGroups]);
 
   if (rows.length === 0) {
     return (
@@ -262,22 +284,51 @@ function BoardTable({
     <section className="panel">
       <div className="table-wrap">
         <table className="table signboard">
-          <caption className="table__caption">Function × task type grid</caption>
+          <caption className="table__caption">Function × sub-phase × task type grid</caption>
           <thead>
+            {/* Tầng 1: nhóm Sub-phase. Mỗi nhóm trải trên bộ cột loại task + cột Σ. */}
             <tr>
               {/* Cột Function DÍNH bên trái: bảng rất rộng, cuộn sang phải mà
                   mất tên hàng thì mọi ô trở nên vô nghĩa. */}
-              <th scope="col" className="table__th signboard__sticky">
+              <th
+                scope="col"
+                rowSpan={2}
+                className="table__th signboard__sticky"
+              >
                 Function
               </th>
-              {columns.map((c) => (
-                <th key={c.taskCode} scope="col" className="table__th">
-                  {c.label}
+              {columnGroups.map((g) => (
+                <th
+                  key={g.subPhaseKey}
+                  scope="colgroup"
+                  colSpan={g.taskColumns.length + 1}
+                  className="table__th signboard__group"
+                >
+                  {g.subPhaseLabel}
                 </th>
               ))}
-              <th scope="col" className="table__th">
+              <th scope="col" rowSpan={2} className="table__th">
                 Overall
               </th>
+            </tr>
+            {/* Tầng 2: loại task trong từng nhóm, cộng một cột Σ khép nhóm. */}
+            <tr>
+              {columnGroups.map((g) => (
+                <Fragment key={g.subPhaseKey}>
+                  {g.taskColumns.map((c) => (
+                    <th key={`${g.subPhaseKey}:${c.taskCode}`} scope="col" className="table__th">
+                      {c.label}
+                    </th>
+                  ))}
+                  <th
+                    scope="col"
+                    className="table__th signboard__subtotal-head"
+                    title={`Worst status across ${g.subPhaseLabel}`}
+                  >
+                    Σ
+                  </th>
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -286,10 +337,22 @@ function BoardTable({
                 <th scope="row" className="table__td signboard__sticky">
                   {row.functionName}
                 </th>
-                {row.cells.map((cell, i) => (
-                  <td key={columns[i]?.taskCode ?? i} className="table__td">
-                    <SignboardCellView cell={cell} filter={filter} />
-                  </td>
+                {columnGroups.map((g, gi) => (
+                  <Fragment key={g.subPhaseKey}>
+                    {g.taskColumns.map((c, ci) => {
+                      const cell = row.cells[groupOffsets[gi]! + ci];
+                      return (
+                        <td key={`${g.subPhaseKey}:${c.taskCode}`} className="table__td">
+                          {cell !== undefined && <SignboardCellView cell={cell} filter={filter} />}
+                        </td>
+                      );
+                    })}
+                    <td className="table__td signboard__subtotal">
+                      {row.subtotals[gi] !== undefined && (
+                        <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
+                      )}
+                    </td>
+                  </Fragment>
                 ))}
                 <td className="table__td">
                   <SignboardCellView cell={row.total} filter={null} />
