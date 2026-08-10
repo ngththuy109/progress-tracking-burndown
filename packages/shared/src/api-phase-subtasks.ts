@@ -27,7 +27,16 @@ export const phaseSubtaskTicketSchema = z.object({
   /** `wbs_start_date` / `wbs_end_date` — `null` khi PM chưa điền trên Jira. */
   planStart: z.string().nullable(),
   planEnd: z.string().nullable(),
+  /**
+   * Ngày bắt đầu/kết thúc THỰC TẾ, đọc từ `subtask_actual_dates` (engine suy ra
+   * từ changelog + worklog, T-14). `null` khi job dựng lại chưa chạy hoặc
+   * Sub-task chưa có hoạt động nào.
+   */
+  actualStart: z.string().nullable(),
+  actualEnd: z.string().nullable(),
   originalEstimateHours: z.number(),
+  /** Tổng giờ ĐÃ LOG (worklog) — `jira_issue.time_spent_s` đổi sang giờ. */
+  timeSpentHours: z.number(),
   /** Bóc từ tiêu đề Sub-task (PRD §2.9) — chỉ để nhìn, không phân loại. */
   functionName: z.string().nullable(),
   taskType: z.string().nullable(),
@@ -62,7 +71,10 @@ export interface PhaseSubtaskTicket {
   readonly statusCategory: (typeof STATUS_CATEGORY)[number];
   readonly planStart: string | null;
   readonly planEnd: string | null;
+  readonly actualStart: string | null;
+  readonly actualEnd: string | null;
   readonly originalEstimateHours: number;
+  readonly timeSpentHours: number;
   readonly functionName: string | null;
   readonly taskType: string | null;
 }

@@ -19,8 +19,11 @@ interface SubtaskRow {
   phase_code: string | null;
   status_category: string | null;
   original_estimate_s: bigint | number | null;
+  time_spent_s: bigint | number | null;
   wbs_start_date: Date | null;
   wbs_end_date: Date | null;
+  actual_start: Date | null;
+  actual_end: Date | null;
   function_name: string | null;
   task_type: string | null;
 }
@@ -44,10 +47,14 @@ export function createPhaseSubtaskReadPort(prisma: PrismaClient): PhaseSubtaskRe
       const rows = await prisma.$queryRawUnsafe<SubtaskRow[]>(
         // Dùng index `(epic_key, issue_type)` của T-02. Chỉ lấy ticket ĐANG
         // HOẠT ĐỘNG: đã gỡ khỏi Epic thì không còn thuộc danh sách "hiện tại".
-        `SELECT issue_key, summary, parent_key, phase_code, status_category,
-                original_estimate_s, wbs_start_date, wbs_end_date, function_name, task_type
-           FROM jira_issue
-          WHERE epic_key = $1 AND issue_type = 'SUBTASK' AND removed_at IS NULL`,
+        // Ngày thực tế LEFT JOIN từ `subtask_actual_dates` (job dựng lại ghi,
+        // T-14) — ticket chưa được tính vẫn phải hiện ra, chỉ trống hai ô đó.
+        `SELECT i.issue_key, i.summary, i.parent_key, i.phase_code, i.status_category,
+                i.original_estimate_s, i.time_spent_s, i.wbs_start_date, i.wbs_end_date,
+                i.function_name, i.task_type, a.actual_start, a.actual_end
+           FROM jira_issue i
+           LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
+          WHERE i.epic_key = $1 AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL`,
         epicKey,
       );
 
@@ -61,7 +68,10 @@ export function createPhaseSubtaskReadPort(prisma: PrismaClient): PhaseSubtaskRe
         statusCategory: toCategory(r.status_category),
         planStart: d(r.wbs_start_date),
         planEnd: d(r.wbs_end_date),
+        actualStart: d(r.actual_start),
+        actualEnd: d(r.actual_end),
         originalEstimateSeconds: n(r.original_estimate_s),
+        timeSpentSeconds: n(r.time_spent_s),
         functionName: r.function_name,
         taskType: r.task_type,
       }));

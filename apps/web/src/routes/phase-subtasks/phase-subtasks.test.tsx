@@ -23,7 +23,10 @@ const RESPONSE: PhaseSubtaskResponse = {
           statusCategory: 'new',
           planStart: '2026-03-02',
           planEnd: '2026-03-06',
+          actualStart: '2026-03-03',
+          actualEnd: '2026-03-05',
           originalEstimateHours: 8,
+          timeSpentHours: 6.5,
           functionName: 'Login',
           taskType: 'Create',
         },
@@ -34,7 +37,10 @@ const RESPONSE: PhaseSubtaskResponse = {
           statusCategory: 'done',
           planStart: null,
           planEnd: null,
+          actualStart: null,
+          actualEnd: null,
           originalEstimateHours: 1.5,
+          timeSpentHours: 0,
           functionName: null,
           taskType: null,
         },
@@ -62,7 +68,10 @@ const RESPONSE: PhaseSubtaskResponse = {
           statusCategory: 'indeterminate',
           planStart: null,
           planEnd: null,
+          actualStart: null,
+          actualEnd: null,
           originalEstimateHours: 0,
+          timeSpentHours: 0,
           functionName: null,
           taskType: null,
         },
@@ -117,6 +126,18 @@ describe('PhaseSubtasksScreen', () => {
     // Câu tóm tắt nói rõ số Phase đã định nghĩa (khớp phần đuôi duy nhất, tránh
     // trùng với huy hiệu "not a defined Phase").
     expect(screen.getByText(/across 2 defined Phase/)).toBeTruthy();
+  });
+
+  it('hiện ngày thực tế và tổng giờ đã log của từng ticket', async () => {
+    stubFetch(RESPONSE);
+    renderScreen('/phase-subtasks?epic=PAY-1');
+
+    await waitFor(() => expect(screen.getByText('Login form')).toBeTruthy());
+    // Cột Actual: PAY-11 có ngày thực tế; cột Logged (h): 6.5 giờ đã log.
+    expect(screen.getByText(/2026-03-03/)).toBeTruthy();
+    expect(screen.getByText(/2026-03-05/)).toBeTruthy();
+    expect(screen.getByText('6.5')).toBeTruthy();
+    expect(screen.getAllByText('Logged (h)').length).toBeGreaterThan(0);
   });
 
   it('Phase định nghĩa mà chưa có ticket vẫn hiện, kèm dòng giải thích trống', async () => {

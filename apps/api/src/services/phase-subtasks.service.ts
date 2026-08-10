@@ -34,7 +34,12 @@ export interface LoadedSubtask {
   readonly statusCategory: StatusCategory;
   readonly planStart: string | null;
   readonly planEnd: string | null;
+  /** Từ `subtask_actual_dates`; `null` khi job dựng lại chưa tính cho ticket. */
+  readonly actualStart: string | null;
+  readonly actualEnd: string | null;
   readonly originalEstimateSeconds: number;
+  /** Tổng giờ đã log (worklog) tính bằng GIÂY — `jira_issue.time_spent_s`. */
+  readonly timeSpentSeconds: number;
   readonly functionName: string | null;
   readonly taskType: string | null;
 }
@@ -101,7 +106,10 @@ function toTicket(sub: LoadedSubtask): PhaseSubtaskTicket {
     statusCategory: sub.statusCategory,
     planStart: sub.planStart,
     planEnd: sub.planEnd,
+    actualStart: sub.actualStart,
+    actualEnd: sub.actualEnd,
     originalEstimateHours: sub.originalEstimateSeconds / SECONDS_PER_HOUR,
+    timeSpentHours: sub.timeSpentSeconds / SECONDS_PER_HOUR,
     functionName: sub.functionName,
     taskType: sub.taskType,
   };
