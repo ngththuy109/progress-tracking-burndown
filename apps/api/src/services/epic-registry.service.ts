@@ -1,6 +1,8 @@
 import {
+  RECOMPUTE_SECONDS_PER_EPIC,
   TRACKED_EPIC_TRANSITIONS,
   type AddEpicsRequest,
+  type AddEpicsResponse,
   type BrowsableEpic,
   type EpicAddWarning,
   type EpicValidationResult,
@@ -79,7 +81,8 @@ export interface JiraEpicPort {
 export interface TrackedEpicStore {
   findStatus(epicKey: string): Promise<TrackedEpicStatus | null>;
   existingKeys(keys: readonly string[]): Promise<ReadonlySet<string>>;
-  insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<number>;
+  /** Chèn các dòng chưa có, trả về KEY đã chèn thật sự (key trùng bị bỏ qua). */
+  insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<readonly string[]>;
   update(epicKey: string, data: EpicPatchData): Promise<void>;
   remove(epicKey: string, purge: boolean): Promise<void>;
   listWithHealth(projectKey: string | null): Promise<readonly TrackedEpicSummary[]>;
@@ -212,12 +215,19 @@ export async function addEpics(
   deps: EpicRegistryDeps,
   req: AddEpicsRequest,
   addedBy: string,
-): Promise<ValidateEpicsResponse & { added: number }> {
+): Promise<ValidateEpicsResponse & AddEpicsResponse> {
   assertValidTimezone(req.timezone);
 
   const check = await validateKeys(deps, req.keys);
+
+  // `skipped` = key đã theo dõi rồi — cả loại bị bắt lúc kiểm tra lẫn loại thua
+  // cuộc đua chèn bên dưới. Các lý do từ chối khác vẫn nằm trong `results`.
+  const skipped = check.results
+    .filter((r) => !r.valid && r.reason === 'ALREADY_TRACKED')
+    .map((r) => r.key);
+
   const ok = check.results.filter((r) => r.valid);
-  if (ok.length === 0) return { ...check, added: 0 };
+  if (ok.length === 0) return { ...check, added: [], skipped, estimatedSeconds: 0 };
 
   const lookups = await deps.jira.lookup(ok.map((r) => r.key));
   const rows: InsertEpicRow[] = [];
@@ -237,9 +247,19 @@ export async function addEpics(
   }
 
   const added = await deps.store.insertIfAbsent(rows);
-  if (rows.length > 0) await deps.backfill.enqueue(rows.map((r) => r.epicKey));
+  // CHỈ backfill key vừa chèn: key thua cuộc đua đã có người khác thêm và job
+  // của họ đang chạy — đẩy thêm lần nữa là backfill đúp cùng một Epic.
+  if (added.length > 0) await deps.backfill.enqueue(added);
 
-  return { ...check, added };
+  const insertedSet = new Set(added);
+  skipped.push(...rows.map((r) => r.epicKey).filter((k) => !insertedSet.has(k)));
+
+  return {
+    ...check,
+    added: [...added],
+    skipped,
+    estimatedSeconds: added.length * RECOMPUTE_SECONDS_PER_EPIC,
+  };
 }
 
 export function listEpics(

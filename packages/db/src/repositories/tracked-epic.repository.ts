@@ -31,13 +31,16 @@ export interface UpsertTrackedEpicArgs {
 export async function insertIfAbsent(
   prisma: PrismaClient,
   rows: readonly UpsertTrackedEpicArgs[],
-): Promise<number> {
-  if (rows.length === 0) return 0;
-  const result = await prisma.trackedEpic.createMany({
+): Promise<readonly string[]> {
+  if (rows.length === 0) return [];
+  // Trả về KEY đã chèn chứ không chỉ đếm: API cần nói rõ key nào được thêm và
+  // key nào bị bỏ qua vì thua cuộc đua (một PM khác vừa thêm trước).
+  const inserted = await prisma.trackedEpic.createManyAndReturn({
     data: rows.map((r) => ({ ...r, status: 'PENDING' })),
     skipDuplicates: true,
+    select: { epicKey: true },
   });
-  return result.count;
+  return inserted.map((r) => r.epicKey);
 }
 
 export async function findByKey(prisma: PrismaClient, epicKey: string) {

@@ -49,15 +49,28 @@ interface AddCall {
   readonly opts: { readonly jobId?: string } | undefined;
 }
 
-function fakeQueue() {
+function fakeQueue(existing?: { state: string }) {
   const added: AddCall[] = [];
+  const removed: string[] = [];
   const queue: QueueLike = {
     add: (name, data, opts) => {
       added.push({ name, data, opts: opts as AddCall['opts'] });
       return Promise.resolve({});
     },
+    getJob: (jobId) =>
+      Promise.resolve(
+        existing === undefined
+          ? undefined
+          : {
+              getState: () => Promise.resolve(existing.state),
+              remove: () => {
+                removed.push(jobId);
+                return Promise.resolve();
+              },
+            },
+      ),
   };
-  return { queue, added };
+  return { queue, added, removed };
 }
 
 describe('createEpicOpsWritePort.setStatus — không chạm cột không tồn tại', () => {
@@ -113,5 +126,42 @@ describe('createEpicOpsWritePort.enqueueSync — hợp đồng hàng đợi', ()
     // Chống trùng job theo Epic, và KHÔNG được chứa `:` (BullMQ ném lỗi ngay).
     expect(jobId).toBe(`${SYNC_JOB_NAME}__AIRREGI-158183`);
     expect(jobId).not.toContain(':');
+  });
+
+  it('xác job resync CŨ đã completed bị dọn trước khi đẩy lượt mới', async () => {
+    // BullMQ lặng lẽ bỏ qua `add` khi còn job trùng jobId — kể cả job đã xong.
+    // Không dọn thì lượt resync THỨ HAI của một Epic không bao giờ vào hàng đợi:
+    // API vẫn báo "queued" mà màn hình giám sát không thấy job nào chạy.
+    const { prisma } = fakePrisma();
+    const { queue, added, removed } = fakeQueue({ state: 'completed' });
+    const port = createEpicOpsWritePort(prisma, queue);
+
+    await port.enqueueSync('PAY-1', { from: null, to: null, full: false });
+
+    expect(removed).toEqual([`${SYNC_JOB_NAME}__PAY-1`]);
+    expect(added).toHaveLength(1);
+  });
+
+  it('xác job failed cũng bị dọn — job hỏng giữ lại để điều tra không được chặn lượt mới', async () => {
+    const { prisma } = fakePrisma();
+    const { queue, added, removed } = fakeQueue({ state: 'failed' });
+    const port = createEpicOpsWritePort(prisma, queue);
+
+    await port.enqueueSync('PAY-1', { from: null, to: null, full: true });
+
+    expect(removed).toHaveLength(1);
+    expect(added).toHaveLength(1);
+  });
+
+  it('job đang chờ thì GIỮ NGUYÊN — chống bấm đúp (C-6) vẫn hoạt động', async () => {
+    const { prisma } = fakePrisma();
+    const { queue, added, removed } = fakeQueue({ state: 'waiting' });
+    const port = createEpicOpsWritePort(prisma, queue);
+
+    await port.enqueueSync('PAY-1', { from: null, to: null, full: false });
+
+    // Không xoá job đang chờ; `add` vẫn được gọi và BullMQ tự khử trùng lặp.
+    expect(removed).toEqual([]);
+    expect(added).toHaveLength(1);
   });
 });
