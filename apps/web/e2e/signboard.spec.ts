@@ -4,11 +4,17 @@ import { expect, test, type Page } from '@playwright/test';
  * E2E bảng Signboard — US-13, US-14, US-15.
  */
 
-const COLUMNS = [
+const TASK_COLUMNS = [
   { taskCode: 'Create', label: 'Create' },
   { taskCode: 'BALReview', label: 'BAL review' },
   { taskCode: 'JMReview', label: 'JM review' },
 ];
+
+// Mặc định: MỘT Sub-phase để các assertion cũ (một header 'Create') vẫn đúng.
+const COLUMN_GROUPS = [
+  { subPhaseKey: 'design', subPhaseLabel: 'Design', taskColumns: TASK_COLUMNS },
+];
+const FLAT_COLUMNS = TASK_COLUMNS.map((c) => ({ ...c, subPhaseKey: 'design' }));
 
 const ticket = (issueKey: string, status: string) => ({
   issueKey,
@@ -37,7 +43,8 @@ function boardBody(over: Record<string, unknown> = {}) {
     epicKey: 'PAY-1',
     phaseCode: 'DESIGN',
     asOfDate: '2026-03-10',
-    columns: COLUMNS,
+    columnGroups: COLUMN_GROUPS,
+    columns: FLAT_COLUMNS,
     rows: [
       {
         functionKey: 'login',
@@ -47,6 +54,7 @@ function boardBody(over: Record<string, unknown> = {}) {
           cell('DELAY_END', [ticket('S-2', 'DELAY_START'), ticket('S-3', 'DELAY_END')]),
           EMPTY,
         ],
+        subtotals: [cell('DELAY_END', [ticket('S-3', 'DELAY_END')])],
         total: cell('DELAY_END', [ticket('S-3', 'DELAY_END')]),
       },
       {
@@ -57,6 +65,7 @@ function boardBody(over: Record<string, unknown> = {}) {
           EMPTY,
           EMPTY,
         ],
+        subtotals: [cell('NO_PLAN', [ticket('S-4', 'NO_PLAN')])],
         total: cell('NO_PLAN', [ticket('S-4', 'NO_PLAN')]),
       },
     ],
@@ -66,6 +75,14 @@ function boardBody(over: Record<string, unknown> = {}) {
       totalCells: 6,
     },
     parseHealthWarning: false,
+    ...over,
+  };
+}
+
+function phasesBody(over: Record<string, unknown> = {}) {
+  return {
+    epicKey: 'PAY-1',
+    phases: [{ phaseCode: 'DESIGN', label: 'Design', subtaskCount: 5 }],
     ...over,
   };
 }
@@ -92,7 +109,11 @@ function unparsedBody(over: Record<string, unknown> = {}) {
 
 async function installApi(
   page: Page,
-  over: { board?: Record<string, unknown>; unparsed?: Record<string, unknown> } = {},
+  over: {
+    board?: Record<string, unknown>;
+    unparsed?: Record<string, unknown>;
+    phases?: Record<string, unknown>;
+  } = {},
 ): Promise<void> {
   await page.route(
     (url) => url.pathname.startsWith('/api/'),
@@ -106,6 +127,12 @@ async function installApi(
 
       if (path.endsWith('/unparsed')) {
         await route.fulfill(json(unparsedBody(over.unparsed)));
+        return;
+      }
+      // Bộ chọn Phase gọi endpoint này — phải trả ĐÚNG hình dạng phases, nếu
+      // không PhaseNav báo lỗi và trên trang có thêm một `role="alert"` thứ hai.
+      if (path.endsWith('/phases')) {
+        await route.fulfill(json(phasesBody(over.phases)));
         return;
       }
       if (path.includes('/signboard/epic/')) {
@@ -179,6 +206,51 @@ test('ô thiếu ngày kế hoạch hiện NO_PLAN có kẻ sọc, KHÁC HẲN �
   const empty = page.locator('.cell--empty').first();
   await expect(empty).toHaveText('—');
   await expect(empty).toHaveAttribute('title', /no such step/);
+
+  // Ô trống được tô XÁM cả ô (td.signboard__empty); ô NO_PLAN thì KHÔNG — nó có
+  // việc, chỉ thiếu ngày, nên phải nổi lên chứ không lùi ra sau (§6.6).
+  await expect(page.locator('td.signboard__empty').first()).toBeVisible();
+  await expect(page.locator('td.signboard__empty .cell--no-plan')).toHaveCount(0);
+});
+
+test('ô được tô NỀN theo trạng thái (Done đen, trễ đỏ); NO_PLAN thì không tô', async ({ page }) => {
+  await installApi(page);
+  await page.goto(PAGE);
+
+  // `data-status` nằm trên <td> để phủ màu HẾT ô, không chỉ badge nhỏ.
+  await expect(page.locator('td[data-status="COMPLETED"]').first()).toBeVisible();
+  await expect(page.locator('td[data-status="DELAY_END"]').first()).toBeVisible();
+  // NO_PLAN có trong mock nhưng KHÔNG được tô — giữ kẻ sọc riêng (§6.6).
+  await expect(page.locator('td[data-status="NO_PLAN"]')).toHaveCount(0);
+
+  // Thanh tóm tắt là chú giải: chip số đếm dùng CHUNG màu nền theo trạng thái.
+  await expect(page.locator('.signboard__count[data-status="COMPLETED"]')).toBeVisible();
+  await expect(page.locator('.signboard__count[data-status="DELAY_END"]')).toBeVisible();
+
+  // Ô "không có task" (ô trống, xám) cũng được ghi vào chú giải kèm số đếm.
+  await expect(page.locator('.signboard__count--empty')).toHaveText('3');
+});
+
+test('ô "chưa bắt đầu" (NYS) KHÔNG được tô nền', async ({ page }) => {
+  const nys = cell('NYS', [ticket('S-2', 'NYS')]);
+  await installApi(page, {
+    board: {
+      rows: [
+        {
+          functionKey: 'login',
+          functionName: 'Login',
+          cells: [nys, EMPTY, EMPTY],
+          subtotals: [nys],
+          total: nys,
+        },
+      ],
+      summary: { byStatus: { NYS: 1 }, emptyCells: 2, totalCells: 3 },
+    },
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('rowheader', { name: 'Login' })).toBeVisible();
+  await expect(page.locator('td[data-status="NYS"]')).toHaveCount(0);
 });
 
 test('mỗi ô có CHỮ nói lên trạng thái, không chỉ có màu', async ({ page }) => {
@@ -199,6 +271,7 @@ test('gõ "login" vào ô tìm kiếm cũng tìm ra hàng có tên Ｌｏｇｉ�
           functionKey: 'login',
           functionName: 'Ｌｏｇｉｎ',
           cells: [cell('COMPLETED', [ticket('S-1', 'COMPLETED')]), EMPTY, EMPTY],
+          subtotals: [cell('COMPLETED', [ticket('S-1', 'COMPLETED')])],
           total: cell('COMPLETED', [ticket('S-1', 'COMPLETED')]),
         },
       ],
@@ -208,6 +281,52 @@ test('gõ "login" vào ô tìm kiếm cũng tìm ra hàng có tên Ｌｏｇｉ�
 
   await page.getByLabel('Search Functions').fill('login');
   await expect(page.getByRole('rowheader', { name: 'Ｌｏｇｉｎ' })).toBeVisible();
+});
+
+test('nhiều Sub-phase thì hiện header nhóm và cột lặp dưới từng nhóm', async ({ page }) => {
+  // Phase có 2 Sub-phase: cột loại task lặp lại dưới mỗi nhóm, xếp tuần tự ngang.
+  const twoGroups = [
+    { subPhaseKey: 'fut_confirmpoint', subPhaseLabel: 'FUT_ConfirmPoint', taskColumns: TASK_COLUMNS },
+    { subPhaseKey: 'fut_testcase', subPhaseLabel: 'FUT_TestCase', taskColumns: TASK_COLUMNS },
+  ];
+  const flat = twoGroups.flatMap((g) =>
+    g.taskColumns.map((c) => ({ ...c, subPhaseKey: g.subPhaseKey })),
+  );
+
+  await installApi(page, {
+    board: {
+      columnGroups: twoGroups,
+      columns: flat,
+      rows: [
+        {
+          functionKey: 'login',
+          functionName: 'Login',
+          // 2 nhóm × 3 loại task = 6 ô lá; nhóm ConfirmPoint xong, TestCase trễ.
+          cells: [
+            cell('COMPLETED', [ticket('S-1', 'COMPLETED')]),
+            EMPTY,
+            EMPTY,
+            cell('DELAY_END', [ticket('S-2', 'DELAY_END')]),
+            EMPTY,
+            EMPTY,
+          ],
+          subtotals: [
+            cell('COMPLETED', [ticket('S-1', 'COMPLETED')]),
+            cell('DELAY_END', [ticket('S-2', 'DELAY_END')]),
+          ],
+          total: cell('DELAY_END', [ticket('S-2', 'DELAY_END')]),
+        },
+      ],
+      summary: { byStatus: { COMPLETED: 1, DELAY_END: 1 }, emptyCells: 4, totalCells: 6 },
+    },
+  });
+  await page.goto(PAGE);
+
+  // Hai header nhóm Sub-phase hiện ra.
+  await expect(page.getByRole('columnheader', { name: 'FUT_ConfirmPoint' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'FUT_TestCase' })).toBeVisible();
+  // Loại task 'Create' lặp lại ở CẢ HAI nhóm → có đúng 2 header cùng tên.
+  await expect(page.getByRole('columnheader', { name: 'Create', exact: true })).toHaveCount(2);
 });
 
 test('Sub-task đặt tên sai định dạng hiện ở khu dưới, KHÔNG bị giấu đi', async ({ page }) => {

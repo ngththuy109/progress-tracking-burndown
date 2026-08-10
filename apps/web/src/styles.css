@@ -622,6 +622,26 @@ fieldset.field > legend {
   font-weight: 600;
 }
 
+/* Tầng header nhóm Sub-phase — căn giữa, có vạch ngăn trái để tách các nhóm. */
+.signboard__group {
+  text-align: center;
+  border-left: 2px solid var(--border);
+}
+.signboard__group:first-of-type {
+  border-left: 0;
+}
+
+/* Cột "Σ" khép mỗi nhóm Sub-phase: nền nhạt + vạch phải để đóng khung nhóm,
+   khớp đúng vị trí với vạch trái của header nhóm kế tiếp. */
+.signboard__subtotal,
+.signboard__subtotal-head {
+  background: var(--tone-muted-bg);
+  border-right: 2px solid var(--border);
+}
+.signboard__subtotal-head {
+  text-align: center;
+}
+
 .cell {
   display: inline-flex;
   flex-direction: column;
@@ -640,8 +660,94 @@ fieldset.field > legend {
 .cell--empty {
   color: var(--border);
 }
+
+/* Ô TRỐNG — Function vốn không có khâu đó: tô xám cả ô để nó lùi ra sau, PM
+   lướt qua không dừng lại. KHÁC HẲN `NO_PLAN` (có việc nhưng thiếu ngày) vẫn
+   giữ nền sáng + kẻ sọc để nổi lên như một việc cần sửa (PRD §6.6). */
+.signboard__empty {
+  background: var(--tone-neutral-bg);
+}
 .cell--dimmed {
   color: var(--border);
+}
+
+/* Tô NỀN CẢ Ô theo trạng thái (PRD §6.3, §6.7) — lướt bảng thấy ngay hàng nào
+   đỏ. `data-status` chỉ đặt trên <td> cho đúng bốn trạng thái này (xem
+   index.tsx: tdStatus), nên `td[data-status]` = "ô đã được tô".
+     • Done          → đen   • On schedule → xanh dương
+     • Late start/finish → đỏ
+   `NYS` cố ý KHÔNG tô; `NO_PLAN` giữ kẻ sọc; ô trống giữ xám.
+
+   Chip số đếm ở thanh tóm tắt (`.signboard__count`) DÙNG CHUNG đúng các màu này
+   để chú giải khớp với bảng — một nguồn màu duy nhất, không lệch được. */
+td[data-status='COMPLETED'],
+.signboard__count[data-status='COMPLETED'] {
+  background: var(--text);
+}
+td[data-status='ON_SCHEDULE'],
+.signboard__count[data-status='ON_SCHEDULE'] {
+  background: var(--tone-info);
+}
+td[data-status='DELAY_START'],
+td[data-status='DELAY_END'],
+.signboard__count[data-status='DELAY_START'],
+.signboard__count[data-status='DELAY_END'] {
+  background: var(--tone-danger);
+}
+
+/* Trên ô đã tô đậm: chữ trắng để đọc được; badge chuyển sang viền trắng nền
+   trong suốt để không chọi màu nền mà vẫn giữ CHỮ trạng thái (màu không phải
+   thứ duy nhất mang nghĩa). */
+td[data-status] .cell {
+  color: #fff;
+}
+td[data-status] .cell__dates,
+td[data-status] .cell__count {
+  color: #fff;
+  opacity: 0.85;
+}
+td[data-status] .badge {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+/* Chip số đếm ở thanh tóm tắt — hình viên thuốc như badge, nhưng nền LẤY THEO
+   trạng thái (ở trên) để đúng bằng màu ô. Mặc định chữ trắng cho ba màu đậm;
+   NYS ("không tô") và NO_PLAN (kẻ sọc) giữ nền NHẠT + chữ tối, khớp việc ô của
+   chúng không được tô đặc. */
+.signboard__count {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  /* Viền trong suốt sẵn để chip NYS thêm màu viền mà KHÔNG đổi kích thước. */
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+}
+/* NYS = ô "không tô màu" (nền trắng) → chip cũng TRẮNG + viền, KHÔNG phải xám —
+   để khỏi lẫn với chip "no task" (xám) của ô trống ngay bên cạnh. */
+.signboard__count[data-status='NYS'] {
+  background: var(--surface);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.signboard__count[data-status='NO_PLAN'] {
+  background: var(--tone-muted-bg);
+  color: var(--tone-muted);
+}
+/* Ô "không có task" (ô trống) — chip XÁM đúng bằng nền ô trống (.signboard__empty). */
+.signboard__count--empty {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral);
+}
+.signboard__legend-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* `NO_PLAN` có KẺ SỌC + biểu tượng ⚠, không chỉ đổi màu — người mù màu và bản

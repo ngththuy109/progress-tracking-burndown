@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { SIGNBOARD_STATUS, type SignboardRow, type SignboardStatus } from '@app/shared';
+import {
+  SIGNBOARD_STATUS,
+  type SignboardCell,
+  type SignboardColumnGroup,
+  type SignboardRow,
+  type SignboardStatus,
+} from '@app/shared';
 import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
-import { SignboardCellView, STATUS_LABEL, STATUS_TONE } from './signboard-cell.js';
+import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
 
 /**
  * Bảng Signboard — PRD §6.
@@ -183,7 +189,12 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
         />
       </div>
 
-      <BoardTable rows={data.rows} columns={data.columns} search={search} filter={filter} />
+      <BoardTable
+        rows={data.rows}
+        columnGroups={data.columnGroups}
+        search={search}
+        filter={filter}
+      />
 
       <UnparsedPanel query={unparsed} />
     </div>
@@ -215,11 +226,22 @@ function SummaryBar({
             // tải lại trang.
             onClick={() => onFilter(active ? null : status)}
           >
-            <Badge tone={STATUS_TONE[status]}>{count}</Badge> {STATUS_LABEL[status]}
+            {/* Chip số đếm dùng CHUNG màu nền với ô của bảng (data-status) để
+                thanh tóm tắt là chú giải khớp đúng: Done đen, đúng tiến độ xanh
+                dương, trễ đỏ, chưa bắt đầu xám, chưa có ngày tím. */}
+            <span className="signboard__count" data-status={status}>
+              {count}
+            </span>{' '}
+            {STATUS_LABEL[status]}
           </button>
         );
       })}
-      <span className="muted">{summary.emptyCells} empty cells (not counted)</span>
+      {/* Ô "không có task" đã tô XÁM trên bảng → ghi vào chú giải luôn, cùng đúng
+          màu xám đó, để thanh tóm tắt phản ánh đầy đủ những gì thấy trên bảng. */}
+      <span className="signboard__legend-empty">
+        <span className="signboard__count signboard__count--empty">{summary.emptyCells}</span> No
+        task <span className="muted">(empty · not counted)</span>
+      </span>
       {filter !== null && (
         <span className="notice notice--ok" role="status">
           Filtering by <strong>{STATUS_LABEL[filter]}</strong> — other cells are dimmed, not removed.
@@ -229,14 +251,42 @@ function SummaryBar({
   );
 }
 
+/**
+ * Các trạng thái được TÔ NỀN cả ô (PRD §6.3, §6.7): Done → đen, On schedule →
+ * xanh dương, Late start/finish → đỏ. `NYS` cố ý KHÔNG tô (task chưa bắt đầu),
+ * `NO_PLAN` giữ kẻ sọc riêng. Màu chỉ để lướt cho nhanh — chữ + badge vẫn còn.
+ */
+const TINTED_STATUS: ReadonlySet<SignboardStatus> = new Set([
+  'COMPLETED',
+  'ON_SCHEDULE',
+  'DELAY_START',
+  'DELAY_END',
+]);
+
+/**
+ * Trạng thái để tô nền `<td>`, hoặc `undefined` khi ô không được tô.
+ *
+ * Đặt trên `<td>` (không phải `<span>` bên trong) để màu phủ HẾT ô. Khi đang lọc,
+ * ô không khớp bị làm mờ thành `·` nên cũng không tô — thành ra lọc lại nổi bật
+ * đúng những ô đang quan tâm.
+ */
+function tdStatus(
+  cell: SignboardCell | undefined,
+  filter: SignboardStatus | null,
+): SignboardStatus | undefined {
+  if (cell === undefined || !cell.present) return undefined;
+  if (filter !== null && cell.status !== filter) return undefined;
+  return TINTED_STATUS.has(cell.status) ? cell.status : undefined;
+}
+
 function BoardTable({
   rows,
-  columns,
+  columnGroups,
   search,
   filter,
 }: {
   readonly rows: readonly SignboardRow[];
-  readonly columns: readonly { readonly taskCode: string; readonly label: string }[];
+  readonly columnGroups: readonly SignboardColumnGroup[];
   readonly search: string;
   readonly filter: SignboardStatus | null;
 }) {
@@ -248,6 +298,18 @@ function BoardTable({
       (r) => r.functionKey.includes(needle) || r.functionName.toLowerCase().includes(needle),
     );
   }, [rows, search]);
+
+  // Vị trí ô LÁ đầu tiên của mỗi nhóm trong `row.cells` (đã làm phẳng). Tính sẵn
+  // một lần thay vì cộng dồn trong vòng lặp render.
+  const groupOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let acc = 0;
+    for (const g of columnGroups) {
+      offsets.push(acc);
+      acc += g.taskColumns.length;
+    }
+    return offsets;
+  }, [columnGroups]);
 
   if (rows.length === 0) {
     return (
@@ -262,22 +324,51 @@ function BoardTable({
     <section className="panel">
       <div className="table-wrap">
         <table className="table signboard">
-          <caption className="table__caption">Function × task type grid</caption>
+          <caption className="table__caption">Function × sub-phase × task type grid</caption>
           <thead>
+            {/* Tầng 1: nhóm Sub-phase. Mỗi nhóm trải trên bộ cột loại task + cột Σ. */}
             <tr>
               {/* Cột Function DÍNH bên trái: bảng rất rộng, cuộn sang phải mà
                   mất tên hàng thì mọi ô trở nên vô nghĩa. */}
-              <th scope="col" className="table__th signboard__sticky">
+              <th
+                scope="col"
+                rowSpan={2}
+                className="table__th signboard__sticky"
+              >
                 Function
               </th>
-              {columns.map((c) => (
-                <th key={c.taskCode} scope="col" className="table__th">
-                  {c.label}
+              {columnGroups.map((g) => (
+                <th
+                  key={g.subPhaseKey}
+                  scope="colgroup"
+                  colSpan={g.taskColumns.length + 1}
+                  className="table__th signboard__group"
+                >
+                  {g.subPhaseLabel}
                 </th>
               ))}
-              <th scope="col" className="table__th">
+              <th scope="col" rowSpan={2} className="table__th">
                 Overall
               </th>
+            </tr>
+            {/* Tầng 2: loại task trong từng nhóm, cộng một cột Σ khép nhóm. */}
+            <tr>
+              {columnGroups.map((g) => (
+                <Fragment key={g.subPhaseKey}>
+                  {g.taskColumns.map((c) => (
+                    <th key={`${g.subPhaseKey}:${c.taskCode}`} scope="col" className="table__th">
+                      {c.label}
+                    </th>
+                  ))}
+                  <th
+                    scope="col"
+                    className="table__th signboard__subtotal-head"
+                    title={`Worst status across ${g.subPhaseLabel}`}
+                  >
+                    Σ
+                  </th>
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -286,12 +377,31 @@ function BoardTable({
                 <th scope="row" className="table__td signboard__sticky">
                   {row.functionName}
                 </th>
-                {row.cells.map((cell, i) => (
-                  <td key={columns[i]?.taskCode ?? i} className="table__td">
-                    <SignboardCellView cell={cell} filter={filter} />
-                  </td>
+                {columnGroups.map((g, gi) => (
+                  <Fragment key={g.subPhaseKey}>
+                    {g.taskColumns.map((c, ci) => {
+                      const cell = row.cells[groupOffsets[gi]! + ci];
+                      // Ô TRỐNG (Function không có khâu đó) tô nền xám cả ô để lùi
+                      // ra sau — khác hẳn `NO_PLAN` (có việc, thiếu ngày) vẫn nổi.
+                      const empty = cell === undefined || !cell.present;
+                      return (
+                        <td
+                          key={`${g.subPhaseKey}:${c.taskCode}`}
+                          className={`table__td${empty ? ' signboard__empty' : ''}`}
+                          data-status={tdStatus(cell, filter)}
+                        >
+                          {cell !== undefined && <SignboardCellView cell={cell} filter={filter} />}
+                        </td>
+                      );
+                    })}
+                    <td className="table__td signboard__subtotal" data-status={tdStatus(row.subtotals[gi], null)}>
+                      {row.subtotals[gi] !== undefined && (
+                        <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
+                      )}
+                    </td>
+                  </Fragment>
                 ))}
-                <td className="table__td">
+                <td className="table__td" data-status={tdStatus(row.total, null)}>
                   <SignboardCellView cell={row.total} filter={null} />
                 </td>
               </tr>

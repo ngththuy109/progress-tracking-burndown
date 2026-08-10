@@ -3,12 +3,13 @@ import {
   UNPARSED_BANNER_RATIO,
   type DateOnly,
   type SignboardCell,
+  type SignboardColumnGroup,
   type SignboardResponse,
   type SignboardStatus,
   type SignboardSubtask,
   type UnparsedResponse,
 } from '@app/shared';
-import { mergeCell, mergeCellStatus, resolveCellStatus } from '@app/engine';
+import { mergeCell, mergeCellStatus, normalize, normalizePreservingCase, resolveCellStatus } from '@app/engine';
 
 /**
  * Dựng bảng Signboard — PRD §6.
@@ -16,11 +17,22 @@ import { mergeCell, mergeCellStatus, resolveCellStatus } from '@app/engine';
  * HÀM THUẦN: nhận Sub-task đã nạp sẵn và "hôm nay" qua tham số, trả về bảng.
  * Toàn bộ phần quyết định trạng thái nằm ở engine (T-22); file này chỉ nhóm
  * hàng, nhóm cột và đếm.
+ *
+ * Cột được nhóm hai tầng: tầng trên là **Sub-phase** (`[Sub-phase]` ngay trước
+ * Function trong tiêu đề — PRD §2.9.1), tầng dưới là loại task. Cùng một bộ loại
+ * task lặp lại dưới mỗi Sub-phase; `cells`/`columns` là mảng LÁ đã làm phẳng theo
+ * thứ tự nhóm, nên `SignboardCell` và logic ô ở engine không phải đổi.
  */
 
 export interface ColumnSpec {
   readonly taskCode: string;
   readonly label: string;
+}
+
+/** Nhãn + thứ tự hiển thị của một Sub-phase, tra theo khoá đã chuẩn hoá. */
+export interface SubPhaseMetaEntry {
+  readonly label: string;
+  readonly order: number;
 }
 
 export interface BuildSignboardArgs {
@@ -29,30 +41,96 @@ export interface BuildSignboardArgs {
   readonly asOfDate: DateOnly;
   readonly columns: readonly ColumnSpec[];
   readonly subtasks: readonly SignboardSubtask[];
+  /**
+   * Nhãn + thứ tự cho từng Sub-phase, khoá = `normalize(phaseCode)` của cấu hình.
+   * Sub-phase khớp một Phase trong cấu hình lấy nhãn + `display_order` của Phase
+   * đó; Sub-phase lạ xếp sau theo A→Z. Bỏ trống thì mọi Sub-phase là "lạ".
+   */
+  readonly subPhaseMeta?: ReadonlyMap<string, SubPhaseMetaEntry>;
 }
 
 const EMPTY_CELL: SignboardCell = { present: false };
 
+/**
+ * Khoá nhóm dự phòng cho Sub-task thiếu `[Sub-phase]` trong tiêu đề.
+ *
+ * Không Sub-phase THẬT nào chuẩn hoá về chuỗi rỗng: parser đã `trim() || null`,
+ * nên bracket rỗng thành `null`, không phải `''`.
+ */
+const NO_SUB_PHASE_KEY = '';
+const NO_SUB_PHASE_LABEL = '(No sub-phase)';
+/** Nối khoá ô: `\u0000` không xuất hiện trong mã đã chuẩn hoá nên không đụng độ. */
+const CELL_KEY_SEP = '\u0000';
+
+interface SubPhaseAgg {
+  readonly key: string;
+  readonly label: string;
+}
+
 export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
+  const meta = args.subPhaseMeta ?? new Map<string, SubPhaseMetaEntry>();
+
   // Gộp hàng theo `functionKey` (đã NFKC + chữ thường), KHÔNG theo `functionName`.
   // Dùng nhầm thì `Login`, `login` và `Ｌｏｇｉｎ` thành ba hàng riêng và bảng trở
-  // nên vô dụng (E-31).
-  const byFunction = new Map<string, { name: string; byColumn: Map<string, SignboardSubtask[]> }>();
+  // nên vô dụng (E-31). Ô gộp theo `(subPhaseKey, taskType)`.
+  const subPhases = new Map<string, SubPhaseAgg>();
+  const byFunction = new Map<string, { name: string; byCell: Map<string, SignboardSubtask[]> }>();
 
   for (const s of args.subtasks) {
     if (s.functionKey === null || s.taskType === null) continue;
 
+    const raw = s.subPhaseRaw !== null && s.subPhaseRaw.trim() !== '' ? s.subPhaseRaw.trim() : null;
+    const spKey = raw === null ? NO_SUB_PHASE_KEY : normalize(raw);
+
+    if (!subPhases.has(spKey)) {
+      // Nhãn: Phase khớp trong cấu hình → nhãn cấu hình; lạ → chữ gốc (giữ hoa
+      // thường, gặp lần ĐẦU); thiếu bracket → nhãn dự phòng cố định.
+      const label =
+        spKey === NO_SUB_PHASE_KEY
+          ? NO_SUB_PHASE_LABEL
+          : (meta.get(spKey)?.label ?? normalizePreservingCase(raw ?? spKey));
+      subPhases.set(spKey, { key: spKey, label });
+    }
+
     let row = byFunction.get(s.functionKey);
     if (row === undefined) {
       // Tên hiển thị lấy theo lần gặp ĐẦU TIÊN — dạng đã chuẩn hoá đọc rất khó.
-      row = { name: s.functionName ?? s.functionKey, byColumn: new Map() };
+      row = { name: s.functionName ?? s.functionKey, byCell: new Map() };
       byFunction.set(s.functionKey, row);
     }
 
-    const list = row.byColumn.get(s.taskType);
+    const cellKey = spKey + CELL_KEY_SEP + s.taskType;
+    const list = row.byCell.get(cellKey);
     if (list) list.push(s);
-    else row.byColumn.set(s.taskType, [s]);
+    else row.byCell.set(cellKey, [s]);
   }
+
+  // Thứ tự nhóm Sub-phase: khớp cấu hình → theo `display_order` (rồi A→Z cho hoà);
+  // lạ → xếp sau theo nhãn A→Z; nhóm dự phòng LUÔN xếp cuối cùng.
+  const orderedSubPhases = [...subPhases.values()].sort((a, b) => {
+    const fa = a.key === NO_SUB_PHASE_KEY ? 1 : 0;
+    const fb = b.key === NO_SUB_PHASE_KEY ? 1 : 0;
+    if (fa !== fb) return fa - fb;
+
+    const oa = meta.get(a.key)?.order;
+    const ob = meta.get(b.key)?.order;
+    if (oa !== undefined && ob !== undefined) return oa - ob || a.label.localeCompare(b.label, 'vi');
+    if (oa !== undefined) return -1;
+    if (ob !== undefined) return 1;
+    return a.label.localeCompare(b.label, 'vi');
+  });
+
+  const columnGroups: SignboardColumnGroup[] = orderedSubPhases.map((sp) => ({
+    subPhaseKey: sp.key,
+    subPhaseLabel: sp.label,
+    // Cùng bộ cột cấu hình cho MỌI nhóm — giữ lưới đều để so ngang giữa các Sub-phase.
+    taskColumns: args.columns.map((c) => ({ taskCode: c.taskCode, label: c.label })),
+  }));
+
+  // Cột LÁ đã làm phẳng — 1:1 với `cells` của mỗi hàng.
+  const flatColumns = orderedSubPhases.flatMap((sp) =>
+    args.columns.map((c) => ({ taskCode: c.taskCode, label: c.label, subPhaseKey: sp.key })),
+  );
 
   const byStatus: Record<string, number> = {};
   let emptyCells = 0;
@@ -61,38 +139,47 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     // Sắp theo tên hiển thị, đối chiếu tiếng Việt.
     .sort((a, b) => a[1].name.localeCompare(b[1].name, 'vi'))
     .map(([functionKey, row]) => {
-      const cells = args.columns.map((col) => {
-        const tickets = row.byColumn.get(col.taskCode) ?? [];
-        if (tickets.length === 0) {
-          emptyCells += 1;
-          return EMPTY_CELL;
-        }
+      const cells: SignboardCell[] = [];
+      const subtotals: SignboardCell[] = [];
 
-        const cell = mergeCell(
-          tickets.map((t) => ({
-            issueKey: t.issueKey,
-            planStart: t.planStart,
-            planEnd: t.planEnd,
-            actualStart: t.actualStart,
-            actualEnd: t.actualEnd,
-            status: resolveCellStatus(
-              {
-                statusCategory: t.statusCategory,
-                planStart: t.planStart,
-                planEnd: t.planEnd,
-                actualStart: t.actualStart,
-              },
-              args.asOfDate,
-            ),
-          })),
-        );
+      for (const sp of orderedSubPhases) {
+        const groupCells = args.columns.map((col) => {
+          const tickets = row.byCell.get(sp.key + CELL_KEY_SEP + col.taskCode) ?? [];
+          if (tickets.length === 0) {
+            emptyCells += 1;
+            return EMPTY_CELL;
+          }
 
-        if (cell.present) byStatus[cell.status] = (byStatus[cell.status] ?? 0) + 1;
-        else emptyCells += 1;
-        return cell;
-      });
+          const cell = mergeCell(
+            tickets.map((t) => ({
+              issueKey: t.issueKey,
+              planStart: t.planStart,
+              planEnd: t.planEnd,
+              actualStart: t.actualStart,
+              actualEnd: t.actualEnd,
+              status: resolveCellStatus(
+                {
+                  statusCategory: t.statusCategory,
+                  planStart: t.planStart,
+                  planEnd: t.planEnd,
+                  actualStart: t.actualStart,
+                },
+                args.asOfDate,
+              ),
+            })),
+          );
 
-      return { functionKey, functionName: row.name, cells, total: totalCell(cells) };
+          if (cell.present) byStatus[cell.status] = (byStatus[cell.status] ?? 0) + 1;
+          else emptyCells += 1;
+          return cell;
+        });
+
+        cells.push(...groupCells);
+        // Ô "Σ" của nhóm: trạng thái xấu nhất TRONG Sub-phase đó.
+        subtotals.push(totalCell(groupCells));
+      }
+
+      return { functionKey, functionName: row.name, cells, subtotals, total: totalCell(cells) };
     });
 
   const unparsed = args.subtasks.filter((s) => s.parseStatus !== 'OK').length;
@@ -101,13 +188,14 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     epicKey: args.epicKey,
     phaseCode: args.phaseCode,
     asOfDate: args.asOfDate,
-    columns: args.columns.map((c) => ({ taskCode: c.taskCode, label: c.label })),
+    columnGroups,
+    columns: flatColumns,
     rows,
     summary: {
       byStatus,
       // Ô trống KHÔNG được đếm vào bất kỳ trạng thái nào (§6.5).
       emptyCells,
-      totalCells: rows.length * args.columns.length,
+      totalCells: rows.length * flatColumns.length,
     },
     parseHealthWarning:
       args.subtasks.length > 0 && unparsed / args.subtasks.length > UNPARSED_BANNER_RATIO,

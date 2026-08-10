@@ -42,6 +42,29 @@ export const signboardCellSchema = z.union([
 export const signboardColumnHeaderSchema = z.object({
   taskCode: z.string(),
   label: z.string(),
+  /**
+   * Khoá nhóm Sub-phase mà cột LÁ này thuộc về (NFKC + chữ thường).
+   *
+   * Cùng một loại task lặp lại một lần dưới MỖI Sub-phase, nên `taskCode` không
+   * còn là khoá duy nhất — cần kèm `subPhaseKey` để xác định đúng cột. `''` là
+   * nhóm dự phòng cho Sub-task không có `[Sub-phase]` trong tiêu đề.
+   */
+  subPhaseKey: z.string(),
+});
+
+/**
+ * Một nhóm cột theo Sub-phase — tầng header TRÊN của bảng (PRD §6.1).
+ *
+ * `[Sub-phase]` là cặp ngoặc vuông NGAY TRƯỚC Function trong tiêu đề Sub-task
+ * (PRD §2.9.1). Một Phase có thể chứa nhiều Sub-phase; mỗi Sub-phase thành một
+ * nhóm cột, xếp tuần tự trái→phải theo `display_order` của cấu hình Phase.
+ */
+export const signboardColumnGroupSchema = z.object({
+  subPhaseKey: z.string(),
+  /** Nhãn hiển thị: nhãn Phase khớp trong cấu hình, nếu không thì chữ gốc. */
+  subPhaseLabel: z.string(),
+  /** Các loại task trong nhóm — cùng bộ cột cấu hình, cùng thứ tự cho mọi nhóm. */
+  taskColumns: z.array(z.object({ taskCode: z.string(), label: z.string() })),
 });
 
 export const signboardRowSchema = z.object({
@@ -49,9 +72,11 @@ export const signboardRowSchema = z.object({
   functionKey: z.string(),
   /** Dạng hiển thị — lấy theo lần gặp ĐẦU TIÊN. */
   functionName: z.string(),
-  /** Cùng thứ tự với `columns`. */
+  /** Cùng thứ tự (và cùng độ dài) với `columns` — mảng cột LÁ đã làm phẳng. */
   cells: z.array(signboardCellSchema),
-  /** Ô "Tổng" của hàng: trạng thái xấu nhất trong các ô có mặt. */
+  /** Ô "Σ" của mỗi nhóm Sub-phase — cùng thứ tự với `columnGroups`. */
+  subtotals: z.array(signboardCellSchema),
+  /** Ô "Tổng" của hàng: trạng thái xấu nhất trong các ô có mặt (mọi Sub-phase). */
   total: signboardCellSchema,
 });
 
@@ -67,6 +92,9 @@ export const signboardResponseSchema = z.object({
   phaseCode: z.string(),
   /** Ngày dùng để tính trạng thái. Luôn trả ra để người xem biết đang so với hôm nào. */
   asOfDate: z.string(),
+  /** Nhóm cột theo Sub-phase, xếp trái→phải — tầng header trên (PRD §6.1). */
+  columnGroups: z.array(signboardColumnGroupSchema),
+  /** Cột LÁ đã làm phẳng theo thứ tự nhóm; 1:1 với `cells` của mỗi hàng. */
   columns: z.array(signboardColumnHeaderSchema),
   rows: z.array(signboardRowSchema),
   summary: signboardSummarySchema,
@@ -82,10 +110,19 @@ export const signboardResponseSchema = z.object({
  * nó là thứ T-22 đã kiểm bằng 38 test. Schema zod ở trên vẫn dùng để frontend
  * kiểm dữ liệu tại biên.
  */
+export interface SignboardColumnGroup {
+  readonly subPhaseKey: string;
+  readonly subPhaseLabel: string;
+  readonly taskColumns: readonly { readonly taskCode: string; readonly label: string }[];
+}
+
 export interface SignboardRow {
   readonly functionKey: string;
   readonly functionName: string;
+  /** 1:1 với `columns` (mảng cột lá đã làm phẳng). */
   readonly cells: readonly SignboardCell[];
+  /** 1:1 với `columnGroups` — ô "Σ" mỗi Sub-phase. */
+  readonly subtotals: readonly SignboardCell[];
   readonly total: SignboardCell;
 }
 
@@ -93,7 +130,12 @@ export interface SignboardResponse {
   readonly epicKey: string;
   readonly phaseCode: string;
   readonly asOfDate: string;
-  readonly columns: readonly { readonly taskCode: string; readonly label: string }[];
+  readonly columnGroups: readonly SignboardColumnGroup[];
+  readonly columns: readonly {
+    readonly taskCode: string;
+    readonly label: string;
+    readonly subPhaseKey: string;
+  }[];
   readonly rows: readonly SignboardRow[];
   readonly summary: {
     readonly byStatus: Readonly<Record<string, number>>;
@@ -178,6 +220,12 @@ export interface SignboardSubtask {
   readonly summary: string;
   readonly functionKey: string | null;
   readonly functionName: string | null;
+  /**
+   * `[Sub-phase]` bóc từ tiêu đề — cặp ngoặc NGAY TRƯỚC Function (PRD §2.9.1),
+   * lưu thô ở `jira_issue.sb_phase_raw`. Dùng để NHÓM CỘT trên Signboard. `null`
+   * khi mẫu tiêu đề không có ô `{phase}` → rơi vào nhóm dự phòng.
+   */
+  readonly subPhaseRaw: string | null;
   readonly taskType: string | null;
   readonly parseStatus: string;
   readonly planStart: string | null;

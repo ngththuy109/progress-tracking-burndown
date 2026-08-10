@@ -67,6 +67,9 @@
 | **T-32** | [Màn hình cấu hình cột Signboard](./T-32-signboard-column-config.md) | medium | sonnet | T-21, T-28 | `apps/web/routes/config-signboard` |
 | **T-33** | [Dashboard giám sát vận hành](./T-33-ops-dashboard.md) | medium | sonnet | T-20, T-25, T-27, T-29 | `apps/web/routes/ops`, `apps/api` |
 | **T-34** | [Runbook vận hành và bàn giao](./T-34-runbook-handover.md) | medium | sonnet | T-27, T-29, T-30, T-31, T-33 | `docs/`, `tools/smoke` |
+| **T-35** | [Signboard nhóm cột theo Sub-phase](./T-35-signboard-sub-phase-layout.md) | medium | opus | T-22, T-28, T-31 | `apps/api`, `apps/web/routes/signboard`, `shared` |
+
+> **T-35 là card bổ sung sau kế hoạch 34 card gốc** — thêm nhóm cột theo Sub-phase (`[Phase]` trước Function) cho bảng Signboard. Không có trong sơ đồ phụ thuộc bên dưới.
 
 ---
 

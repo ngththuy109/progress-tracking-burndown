@@ -1,7 +1,8 @@
 import type { PrismaClient } from '@app/db';
 import type { SignboardPhase, SignboardSubtask } from '@app/shared';
+import { normalize } from '@app/engine';
 import type { SignboardReadPort } from '../routes/signboard.routes.js';
-import type { ColumnSpec } from '../services/signboard.service.js';
+import type { ColumnSpec, SubPhaseMetaEntry } from '../services/signboard.service.js';
 import { createBurndownReadPort } from './burndown.adapters.js';
 
 /**
@@ -16,6 +17,7 @@ interface SubtaskRow {
   summary: string | null;
   function_key: string | null;
   function_name: string | null;
+  sb_phase_raw: string | null;
   task_type: string | null;
   sb_parse_status: string | null;
   wbs_start_date: Date | null;
@@ -93,8 +95,8 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
     async subtasks(epicKey, phaseCode): Promise<readonly SignboardSubtask[]> {
       // Dùng index `(epic_key, phase_code, function_name, task_type)` của T-02.
       const rows = await prisma.$queryRawUnsafe<SubtaskRow[]>(
-        `SELECT i.issue_key, i.summary, i.function_key, i.function_name, i.task_type,
-                i.sb_parse_status, i.wbs_start_date, i.wbs_end_date, i.status_category,
+        `SELECT i.issue_key, i.summary, i.function_key, i.function_name, i.sb_phase_raw,
+                i.task_type, i.sb_parse_status, i.wbs_start_date, i.wbs_end_date, i.status_category,
                 a.actual_start, a.actual_end
            FROM jira_issue i
            LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
@@ -109,6 +111,7 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
         summary: r.summary ?? r.issue_key,
         functionKey: r.function_key,
         functionName: r.function_name,
+        subPhaseRaw: r.sb_phase_raw,
         taskType: r.task_type,
         parseStatus: r.sb_parse_status ?? 'UNPARSED',
         planStart: d(r.wbs_start_date),
@@ -138,6 +141,31 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
         if (!seen.has(r.task_code)) seen.set(r.task_code, { taskCode: r.task_code, label: r.label_vi });
       }
       return [...seen.values()];
+    },
+
+    async subPhaseMeta(projectKey): Promise<ReadonlyMap<string, SubPhaseMetaEntry>> {
+      // Cùng nguồn nhãn + thứ tự với `phases()`: định nghĩa Phase đang hiệu lực,
+      // bản project ghi đè bản Mặc định. Khoá theo `normalize(phase_code)` để
+      // khớp với `[Sub-phase]` thô trong tiêu đề (đã chuẩn hoá cùng cách).
+      const defs = await prisma.$queryRawUnsafe<
+        { phase_code: string; label_vi: string; display_order: number }[]
+      >(
+        `SELECT d.phase_code, d.label_vi, d.display_order
+           FROM phase_definition d
+           JOIN phase_config_set s ON s.id = d.config_set_id
+          WHERE s.is_active = true
+            AND (s.project_key = $1 OR s.scope = 'GLOBAL')
+          ORDER BY CASE WHEN s.project_key = $1 THEN 0 ELSE 1 END, d.display_order`,
+        projectKey,
+      );
+
+      const meta = new Map<string, SubPhaseMetaEntry>();
+      for (const d of defs) {
+        const key = normalize(d.phase_code);
+        // Bản project đứng trước → giữ lần gặp ĐẦU (ghi đè bản Mặc định).
+        if (!meta.has(key)) meta.set(key, { label: d.label_vi, order: d.display_order });
+      }
+      return meta;
     },
 
     async rawTaskTypes(epicKey, phaseCode) {

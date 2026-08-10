@@ -47,7 +47,7 @@ compares against the stored snapshot, and names the culprit — who edited the e
 |---|---|
 | **Epics** | Which Epics are tracked, how each is syncing, and what data is missing |
 | **Burndown chart** | Whole Epic, a single Phase, or several Phases side by side |
-| **Signboard** | Function × task-type grid — which function is late, at which step |
+| **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase |
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
 | **Signboard columns** | Which task types become columns |
 | **Phase settings** | Title patterns and matching rules, with a preview before saving |
