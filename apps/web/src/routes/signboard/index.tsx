@@ -9,7 +9,7 @@ import {
 } from '@app/shared';
 import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
-import { SignboardCellView, STATUS_LABEL, STATUS_TONE } from './signboard-cell.js';
+import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
 
 /**
  * Bảng Signboard — PRD §6.
@@ -226,7 +226,13 @@ function SummaryBar({
             // tải lại trang.
             onClick={() => onFilter(active ? null : status)}
           >
-            <Badge tone={STATUS_TONE[status]}>{count}</Badge> {STATUS_LABEL[status]}
+            {/* Chip số đếm dùng CHUNG màu nền với ô của bảng (data-status) để
+                thanh tóm tắt là chú giải khớp đúng: Done đen, đúng tiến độ xanh
+                dương, trễ đỏ, chưa bắt đầu xám, chưa có ngày tím. */}
+            <span className="signboard__count" data-status={status}>
+              {count}
+            </span>{' '}
+            {STATUS_LABEL[status]}
           </button>
         );
       })}

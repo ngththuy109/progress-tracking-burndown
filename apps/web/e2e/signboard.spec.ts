@@ -222,6 +222,10 @@ test('ô được tô NỀN theo trạng thái (Done đen, trễ đỏ); NO_PLAN
   await expect(page.locator('td[data-status="DELAY_END"]').first()).toBeVisible();
   // NO_PLAN có trong mock nhưng KHÔNG được tô — giữ kẻ sọc riêng (§6.6).
   await expect(page.locator('td[data-status="NO_PLAN"]')).toHaveCount(0);
+
+  // Thanh tóm tắt là chú giải: chip số đếm dùng CHUNG màu nền theo trạng thái.
+  await expect(page.locator('.signboard__count[data-status="COMPLETED"]')).toBeVisible();
+  await expect(page.locator('.signboard__count[data-status="DELAY_END"]')).toBeVisible();
 });
 
 test('ô "chưa bắt đầu" (NYS) KHÔNG được tô nền', async ({ page }) => {

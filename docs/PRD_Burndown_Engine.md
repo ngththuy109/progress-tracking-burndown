@@ -2448,8 +2448,9 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 | `NoPlan` | Kẻ sọc ⚠ (mục 6.6) | Bình thường |
 | Ô trống `—` | Xám | — |
 
-> Đây là **lớp màu để nhìn nhanh**, cố ý đậm hơn bảng màu badge ở §6.4 (badge vẫn
-> giữ nguyên ở thanh tóm tắt/chú giải). Chữ trạng thái vẫn nằm trong mỗi ô, nên
+> Đây là **lớp màu để nhìn nhanh**. **Thanh tóm tắt / chú giải dùng CHUNG đúng bộ
+> màu này** (chip số đếm cùng nền với ô) — một nguồn màu duy nhất nên chú giải
+> không lệch được với bảng. Chữ trạng thái vẫn nằm trong mỗi ô và mỗi chip, nên
 > **màu không phải thứ duy nhất mang nghĩa** — người mù màu và bản in đen trắng
 > vẫn đọc được (§6.3).
 
