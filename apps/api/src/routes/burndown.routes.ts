@@ -145,6 +145,7 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
       epicKey: args.epicKey,
       mode: args.mode,
       workdays: listWorkdays(from, to, meta.calendar),
+      calendar: meta.calendar,
       snapshots,
       rollups,
       planShifts,
