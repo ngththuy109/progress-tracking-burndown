@@ -209,6 +209,7 @@ All under [`docs/`](./docs), in Vietnamese:
 | File | For whom |
 |---|---|
 | [`PRD_Burndown_Engine.md`](./docs/PRD_Burndown_Engine.md) | The full product spec — rules, edge cases, risks |
+| [`PHASE-MAPPING.md`](./docs/PHASE-MAPPING.md) | How a ticket gets its Phase, and when a settings change shows up on screens |
 | [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Package boundaries and why they exist |
 | [`ONBOARDING.md`](./docs/ONBOARDING.md) | A new developer, day one |
 | [`RUNBOOK.md`](./docs/RUNBOOK.md) | Whoever is on call, possibly at 2am |
