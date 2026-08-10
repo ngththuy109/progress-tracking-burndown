@@ -189,6 +189,20 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
         />
       </div>
 
+      {/* Chỗ chỉnh thứ tự Sub-phase KHÔNG nằm ở màn này (T-35 cố ý tái dùng
+          `display_order` của Phase settings thay vì thêm bảng cấu hình riêng),
+          nên khi bảng có nhiều nhóm phải NÓI RA — không thì PM đi tìm một nút
+          setting không tồn tại. Chỉ hiện khi ≥ 2 nhóm: một nhóm thì thứ tự vô
+          nghĩa, hint chỉ gây nhiễu. */}
+      {data.columnGroups.length > 1 && (
+        <p className="muted">
+          Sub-phase groups follow the Phase list order in{' '}
+          <Link to="/config/phase">Phase settings</Link>: a sub-phase whose code matches a Phase
+          there uses that Phase&rsquo;s position; the rest come after it A→Z, and &ldquo;(No
+          sub-phase)&rdquo; is always last. To reorder the groups, reorder those Phases.
+        </p>
+      )}
+
       <BoardTable
         rows={data.rows}
         columnGroups={data.columnGroups}
