@@ -36,7 +36,7 @@ function formatHours(hours: number): string {
   return String(Number(hours.toFixed(2)));
 }
 
-function PlanRange({ start, end }: { readonly start: string | null; readonly end: string | null }) {
+function DateRange({ start, end }: { readonly start: string | null; readonly end: string | null }) {
   if (start === null && end === null) return <span className="muted">no dates</span>;
   return (
     <span>
@@ -77,9 +77,17 @@ const COLUMNS: readonly Column<PhaseSubtaskTicket>[] = [
   {
     key: 'plan',
     header: 'Planned',
-    render: (t) => <PlanRange start={t.planStart} end={t.planEnd} />,
+    render: (t) => <DateRange start={t.planStart} end={t.planEnd} />,
     // `null` xuống cuối bảng, không lên đầu (DataTable tự lo hướng).
     sortKey: (t) => t.planStart,
+  },
+  {
+    // Ngày thực tế do engine suy từ changelog + worklog; trống nghĩa là job
+    // dựng lại chưa chạy hoặc ticket chưa có hoạt động nào.
+    key: 'actual',
+    header: 'Actual',
+    render: (t) => <DateRange start={t.actualStart} end={t.actualEnd} />,
+    sortKey: (t) => t.actualStart,
   },
   {
     key: 'estimate',
@@ -87,6 +95,13 @@ const COLUMNS: readonly Column<PhaseSubtaskTicket>[] = [
     align: 'right',
     render: (t) => formatHours(t.originalEstimateHours),
     sortKey: (t) => t.originalEstimateHours,
+  },
+  {
+    key: 'logged',
+    header: 'Logged (h)',
+    align: 'right',
+    render: (t) => formatHours(t.timeSpentHours),
+    sortKey: (t) => t.timeSpentHours,
   },
 ];
 

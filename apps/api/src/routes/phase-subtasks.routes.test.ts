@@ -13,7 +13,10 @@ function sub(over: Partial<LoadedSubtask> & { issueKey: string; phaseCode: strin
     statusCategory: 'new',
     planStart: '2026-03-02',
     planEnd: '2026-03-06',
+    actualStart: null,
+    actualEnd: null,
     originalEstimateSeconds: 3600,
+    timeSpentSeconds: 0,
     functionName: 'Login',
     taskType: 'Create',
     ...over,
@@ -107,6 +110,24 @@ describe('dựng danh sách', () => {
     const { body } = await get<PhaseSubtaskResponse>(URL);
 
     expect(body.groups[0]?.tickets[0]?.originalEstimateHours).toBe(2);
+  });
+
+  it('ticket trả về kèm ngày thực tế và tổng giờ đã log (đổi sang giờ)', async () => {
+    reads.subtaskList = [
+      sub({
+        issueKey: 'S-1',
+        phaseCode: 'DESIGN',
+        actualStart: '2026-03-03',
+        actualEnd: '2026-03-05',
+        timeSpentSeconds: 5400,
+      }),
+    ];
+    const { body } = await get<PhaseSubtaskResponse>(URL);
+
+    const ticket = body.groups[0]?.tickets[0];
+    expect(ticket?.actualStart).toBe('2026-03-03');
+    expect(ticket?.actualEnd).toBe('2026-03-05');
+    expect(ticket?.timeSpentHours).toBe(1.5);
   });
 
   it('chỉ chạy MỘT truy vấn lấy Sub-task', async () => {
