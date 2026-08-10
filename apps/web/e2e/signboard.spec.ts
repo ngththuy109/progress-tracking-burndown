@@ -213,6 +213,39 @@ test('ô thiếu ngày kế hoạch hiện NO_PLAN có kẻ sọc, KHÁC HẲN �
   await expect(page.locator('td.signboard__empty .cell--no-plan')).toHaveCount(0);
 });
 
+test('ô được tô NỀN theo trạng thái (Done đen, trễ đỏ); NO_PLAN thì không tô', async ({ page }) => {
+  await installApi(page);
+  await page.goto(PAGE);
+
+  // `data-status` nằm trên <td> để phủ màu HẾT ô, không chỉ badge nhỏ.
+  await expect(page.locator('td[data-status="COMPLETED"]').first()).toBeVisible();
+  await expect(page.locator('td[data-status="DELAY_END"]').first()).toBeVisible();
+  // NO_PLAN có trong mock nhưng KHÔNG được tô — giữ kẻ sọc riêng (§6.6).
+  await expect(page.locator('td[data-status="NO_PLAN"]')).toHaveCount(0);
+});
+
+test('ô "chưa bắt đầu" (NYS) KHÔNG được tô nền', async ({ page }) => {
+  const nys = cell('NYS', [ticket('S-2', 'NYS')]);
+  await installApi(page, {
+    board: {
+      rows: [
+        {
+          functionKey: 'login',
+          functionName: 'Login',
+          cells: [nys, EMPTY, EMPTY],
+          subtotals: [nys],
+          total: nys,
+        },
+      ],
+      summary: { byStatus: { NYS: 1 }, emptyCells: 2, totalCells: 3 },
+    },
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('rowheader', { name: 'Login' })).toBeVisible();
+  await expect(page.locator('td[data-status="NYS"]')).toHaveCount(0);
+});
+
 test('mỗi ô có CHỮ nói lên trạng thái, không chỉ có màu', async ({ page }) => {
   // Khoảng 8% nam giới không phân biệt được đỏ với xanh lá.
   await installApi(page);

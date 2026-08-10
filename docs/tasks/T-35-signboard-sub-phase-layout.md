@@ -90,3 +90,10 @@ Thêm 8 test đơn vị ở `signboard.routes.test.ts` (nhóm theo `[Sub-phase]`
 
 ### Sửa kèm: mock e2e trả sai hình dạng cho `/phases`
 Trong lúc chạy e2e phát hiện `installApi` trả **board body** cho endpoint `/phases`, làm PhaseNav báo lỗi và trang có hai `role="alert"` — một lỗi **có sẵn từ trước**, chỉ không lộ vì môi trường này thiếu đúng bản trình duyệt Playwright. Đã thêm nhánh `/phases` trả đúng hình dạng `{ epicKey, phases }`; test banner "hơn 30%" hết va vào alert thứ hai.
+
+## Bổ sung sau (theo yêu cầu tiếp theo của PM)
+
+Hai điều chỉnh giao diện thuần web (`signboard/index.tsx` + `styles.css` + e2e), không đụng API/engine:
+
+1. **Ô trống tô xám.** Ô `present:false` (Function không có khâu đó) nay có nền `--tone-neutral-bg` phủ cả ô để lùi ra sau. Vẫn khác hẳn `NO_PLAN` (giữ kẻ sọc, nổi lên).
+2. **Tô nền cả ô theo trạng thái** (PRD §6.1, bảng màu mới): Done → đen/chữ trắng, On schedule → xanh dương, Late start/finish → đỏ, NYS → không tô, NO_PLAN → giữ kẻ sọc. `data-status` được đưa lên `<td>` (không chỉ `<span>`) để màu phủ hết ô; badge trên ô đã tô chuyển sang viền trắng nền trong suốt, chữ trạng thái vẫn còn nên màu không phải thứ duy nhất mang nghĩa. Áp cho cả cột Σ và Overall để lướt là thấy hàng đỏ.

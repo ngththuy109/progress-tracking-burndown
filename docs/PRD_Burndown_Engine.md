@@ -2437,6 +2437,22 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 > (mục 2.9.2). Sub-task thiếu bracket vẫn lên bảng bình thường, chỉ nằm ở nhóm
 > dự phòng.
 
+**Tô nền cả ô theo trạng thái** để lướt bảng thấy ngay hàng nào đang đỏ:
+
+| Trạng thái | Nền ô | Chữ |
+|---|---|---|
+| `Completed` (Done) | Đen | Trắng |
+| `OnSchedule` (đúng tiến độ) | Xanh dương | Trắng |
+| `Delay Start` / `Delay End` (trễ) | Đỏ | Trắng |
+| `NYS` (chưa bắt đầu) | Không tô | Bình thường |
+| `NoPlan` | Kẻ sọc ⚠ (mục 6.6) | Bình thường |
+| Ô trống `—` | Xám | — |
+
+> Đây là **lớp màu để nhìn nhanh**, cố ý đậm hơn bảng màu badge ở §6.4 (badge vẫn
+> giữ nguyên ở thanh tóm tắt/chú giải). Chữ trạng thái vẫn nằm trong mỗi ô, nên
+> **màu không phải thứ duy nhất mang nghĩa** — người mù màu và bản in đen trắng
+> vẫn đọc được (§6.3).
+
 ### 6.2. Giao diện
 
 ```

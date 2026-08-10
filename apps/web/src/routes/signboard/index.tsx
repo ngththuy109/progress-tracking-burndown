@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   SIGNBOARD_STATUS,
+  type SignboardCell,
   type SignboardColumnGroup,
   type SignboardRow,
   type SignboardStatus,
@@ -239,6 +240,34 @@ function SummaryBar({
   );
 }
 
+/**
+ * Các trạng thái được TÔ NỀN cả ô (PRD §6.3, §6.7): Done → đen, On schedule →
+ * xanh dương, Late start/finish → đỏ. `NYS` cố ý KHÔNG tô (task chưa bắt đầu),
+ * `NO_PLAN` giữ kẻ sọc riêng. Màu chỉ để lướt cho nhanh — chữ + badge vẫn còn.
+ */
+const TINTED_STATUS: ReadonlySet<SignboardStatus> = new Set([
+  'COMPLETED',
+  'ON_SCHEDULE',
+  'DELAY_START',
+  'DELAY_END',
+]);
+
+/**
+ * Trạng thái để tô nền `<td>`, hoặc `undefined` khi ô không được tô.
+ *
+ * Đặt trên `<td>` (không phải `<span>` bên trong) để màu phủ HẾT ô. Khi đang lọc,
+ * ô không khớp bị làm mờ thành `·` nên cũng không tô — thành ra lọc lại nổi bật
+ * đúng những ô đang quan tâm.
+ */
+function tdStatus(
+  cell: SignboardCell | undefined,
+  filter: SignboardStatus | null,
+): SignboardStatus | undefined {
+  if (cell === undefined || !cell.present) return undefined;
+  if (filter !== null && cell.status !== filter) return undefined;
+  return TINTED_STATUS.has(cell.status) ? cell.status : undefined;
+}
+
 function BoardTable({
   rows,
   columnGroups,
@@ -348,19 +377,20 @@ function BoardTable({
                         <td
                           key={`${g.subPhaseKey}:${c.taskCode}`}
                           className={`table__td${empty ? ' signboard__empty' : ''}`}
+                          data-status={tdStatus(cell, filter)}
                         >
                           {cell !== undefined && <SignboardCellView cell={cell} filter={filter} />}
                         </td>
                       );
                     })}
-                    <td className="table__td signboard__subtotal">
+                    <td className="table__td signboard__subtotal" data-status={tdStatus(row.subtotals[gi], null)}>
                       {row.subtotals[gi] !== undefined && (
                         <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
                       )}
                     </td>
                   </Fragment>
                 ))}
-                <td className="table__td">
+                <td className="table__td" data-status={tdStatus(row.total, null)}>
                   <SignboardCellView cell={row.total} filter={null} />
                 </td>
               </tr>

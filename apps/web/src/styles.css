@@ -671,6 +671,40 @@ fieldset.field > legend {
   color: var(--border);
 }
 
+/* Tô NỀN CẢ Ô theo trạng thái (PRD §6.3, §6.7) — lướt bảng thấy ngay hàng nào
+   đỏ. `data-status` chỉ đặt trên <td> cho đúng bốn trạng thái này (xem
+   index.tsx: tdStatus), nên `td[data-status]` = "ô đã được tô".
+     • Done          → đen   • On schedule → xanh dương
+     • Late start/finish → đỏ
+   `NYS` cố ý KHÔNG tô; `NO_PLAN` giữ kẻ sọc; ô trống giữ xám. */
+td[data-status='COMPLETED'] {
+  background: var(--text);
+}
+td[data-status='ON_SCHEDULE'] {
+  background: var(--tone-info);
+}
+td[data-status='DELAY_START'],
+td[data-status='DELAY_END'] {
+  background: var(--tone-danger);
+}
+
+/* Trên ô đã tô đậm: chữ trắng để đọc được; badge chuyển sang viền trắng nền
+   trong suốt để không chọi màu nền mà vẫn giữ CHỮ trạng thái (màu không phải
+   thứ duy nhất mang nghĩa). */
+td[data-status] .cell {
+  color: #fff;
+}
+td[data-status] .cell__dates,
+td[data-status] .cell__count {
+  color: #fff;
+  opacity: 0.85;
+}
+td[data-status] .badge {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
 /* `NO_PLAN` có KẺ SỌC + biểu tượng ⚠, không chỉ đổi màu — người mù màu và bản
    in đen trắng vẫn phải phân biệt được. */
 .cell--no-plan {
