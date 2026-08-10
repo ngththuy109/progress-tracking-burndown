@@ -157,10 +157,9 @@ test('chọn một Phase thì thấy ma trận Function × loại task', async (
   await expect(page.getByRole('rowheader', { name: 'Login' })).toBeVisible();
   await expect(page.getByRole('rowheader', { name: 'Thanh toán' })).toBeVisible();
 
-  // Chỉ MỘT Sub-phase → không có gì để xếp thứ tự, hint dẫn sang Phase settings
-  // không được hiện kẻo gây nhiễu. Scope vào #main vì thanh điều hướng bên trái
-  // CŨNG có link "Phase settings" (luôn hiện, không liên quan hint này).
-  await expect(page.locator('#main').getByRole('link', { name: 'Phase settings' })).toHaveCount(0);
+  // Chỉ MỘT Sub-phase → không có gì để xếp thứ tự, link khai thứ tự Sub-phase
+  // không được hiện kẻo gây nhiễu.
+  await expect(page.getByRole('link', { name: 'Set sub-phase order' })).toHaveCount(0);
 });
 
 test('hai ticket cùng một ô thì hiện huy hiệu ≡2 và trạng thái xấu nhất', async ({ page }) => {
@@ -333,13 +332,12 @@ test('nhiều Sub-phase thì hiện header nhóm và cột lặp dưới từng 
   // Loại task 'Create' lặp lại ở CẢ HAI nhóm → có đúng 2 header cùng tên.
   await expect(page.getByRole('columnheader', { name: 'Create', exact: true })).toHaveCount(2);
 
-  // Nhiều nhóm → hint nói rõ thứ tự Sub-phase chỉnh ở đâu, kèm link mở thẳng
-  // Phase settings — không có nó PM đi tìm nút setting không tồn tại trên màn này.
-  await expect(page.getByText('Sub-phase groups follow the Phase list order')).toBeVisible();
-  // Scope vào #main để không trùng link "Phase settings" luôn có ở thanh điều hướng.
-  await expect(page.locator('#main').getByRole('link', { name: 'Phase settings' })).toHaveAttribute(
+  // Nhiều nhóm → hiện link mở khu "⑤ Sub-phase order" ở màn Signboard columns,
+  // kèm sẵn Phase đang xem + các Sub-phase đang có (khoá đã chuẩn hoá) để điền
+  // trước — không có nó PM đi tìm nút setting không tồn tại trên màn này.
+  await expect(page.getByRole('link', { name: 'Set sub-phase order' })).toHaveAttribute(
     'href',
-    '/config/phase',
+    '/config/signboard?orderPhase=DESIGN&subs=fut_confirmpoint%2Cfut_testcase',
   );
 });
 

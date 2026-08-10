@@ -30,6 +30,7 @@ const PAYLOAD: ConfigPayload = {
     { taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 },
     { taskCode: 'BALReview', labelVi: 'BAL review', displayOrder: 2 },
   ],
+  subPhaseOrders: [],
 };
 
 const CONFIG: EffectiveConfig = {
@@ -43,6 +44,7 @@ const CONFIG: EffectiveConfig = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 };
 

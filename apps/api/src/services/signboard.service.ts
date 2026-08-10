@@ -33,6 +33,12 @@ export interface ColumnSpec {
 export interface SubPhaseMetaEntry {
   readonly label: string;
   readonly order: number;
+  /**
+   * `true` = thứ tự đến từ cấu hình Sub-phase order RIÊNG của Phase đang xem
+   * (bảng `sub_phase_order`) — thắng tuyệt đối. Vắng mặt/`false` = thứ tự chỉ là
+   * "mượn" `display_order` của Phase trùng mã, xếp SAU các Sub-phase đã khai riêng.
+   */
+  readonly pinned?: boolean;
 }
 
 export interface BuildSignboardArgs {
@@ -42,9 +48,10 @@ export interface BuildSignboardArgs {
   readonly columns: readonly ColumnSpec[];
   readonly subtasks: readonly SignboardSubtask[];
   /**
-   * Nhãn + thứ tự cho từng Sub-phase, khoá = `normalize(phaseCode)` của cấu hình.
-   * Sub-phase khớp một Phase trong cấu hình lấy nhãn + `display_order` của Phase
-   * đó; Sub-phase lạ xếp sau theo A→Z. Bỏ trống thì mọi Sub-phase là "lạ".
+   * Nhãn + thứ tự cho từng Sub-phase, khoá đã chuẩn hoá (NFKC + chữ thường).
+   * Entry `pinned` đến từ cấu hình Sub-phase order riêng của Phase này — đứng
+   * trước tất cả; entry thường "mượn" `display_order` của Phase trùng mã; không
+   * có entry thì xếp A→Z. Bỏ trống thì mọi Sub-phase là "lạ".
    */
   readonly subPhaseMeta?: ReadonlyMap<string, SubPhaseMetaEntry>;
 }
@@ -105,18 +112,26 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     else row.byCell.set(cellKey, [s]);
   }
 
-  // Thứ tự nhóm Sub-phase: khớp cấu hình → theo `display_order` (rồi A→Z cho hoà);
-  // lạ → xếp sau theo nhãn A→Z; nhóm dự phòng LUÔN xếp cuối cùng.
+  // Thứ tự nhóm Sub-phase, bốn bậc từ trái sang phải:
+  //   0. khai trong cấu hình Sub-phase order của Phase này (`pinned`) → theo đúng
+  //      thứ tự PM đã xếp — thắng tuyệt đối;
+  //   1. trùng mã một Phase trong cấu hình → "mượn" `display_order` của Phase đó;
+  //   2. lạ hoàn toàn → A→Z theo nhãn;
+  //   3. nhóm dự phòng "(No sub-phase)" LUÔN cuối cùng.
+  const tierOf = (key: string): number => {
+    if (key === NO_SUB_PHASE_KEY) return 3;
+    const m = meta.get(key);
+    if (m === undefined) return 2;
+    return m.pinned === true ? 0 : 1;
+  };
   const orderedSubPhases = [...subPhases.values()].sort((a, b) => {
-    const fa = a.key === NO_SUB_PHASE_KEY ? 1 : 0;
-    const fb = b.key === NO_SUB_PHASE_KEY ? 1 : 0;
-    if (fa !== fb) return fa - fb;
+    const ta = tierOf(a.key);
+    const tb = tierOf(b.key);
+    if (ta !== tb) return ta - tb;
 
     const oa = meta.get(a.key)?.order;
     const ob = meta.get(b.key)?.order;
     if (oa !== undefined && ob !== undefined) return oa - ob || a.label.localeCompare(b.label, 'vi');
-    if (oa !== undefined) return -1;
-    if (ob !== undefined) return 1;
     return a.label.localeCompare(b.label, 'vi');
   });
 

@@ -189,17 +189,16 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
         />
       </div>
 
-      {/* Chỗ chỉnh thứ tự Sub-phase KHÔNG nằm ở màn này (T-35 cố ý tái dùng
-          `display_order` của Phase settings thay vì thêm bảng cấu hình riêng),
-          nên khi bảng có nhiều nhóm phải NÓI RA — không thì PM đi tìm một nút
-          setting không tồn tại. Chỉ hiện khi ≥ 2 nhóm: một nhóm thì thứ tự vô
-          nghĩa, hint chỉ gây nhiễu. */}
+      {/* Chỗ chỉnh thứ tự Sub-phase là khu ⑤ ở màn Signboard columns; link dưới
+          mở thẳng sang đó KÈM Phase này và các Sub-phase đang có trên bảng để
+          điền sẵn — PM chỉ việc bấm mũi tên xếp lại rồi Lưu. Chỉ hiện khi ≥ 2
+          nhóm: một nhóm thì thứ tự vô nghĩa, hint chỉ gây nhiễu. */}
       {data.columnGroups.length > 1 && (
         <p className="muted">
-          Sub-phase groups follow the Phase list order in{' '}
-          <Link to="/config/phase">Phase settings</Link>: a sub-phase whose code matches a Phase
-          there uses that Phase&rsquo;s position; the rest come after it A→Z, and &ldquo;(No
-          sub-phase)&rdquo; is always last. To reorder the groups, reorder those Phases.
+          <Link to={subPhaseOrderLink(phaseCode, data.columnGroups)}>Set sub-phase order</Link> —
+          opens Signboard settings with this Phase&rsquo;s sub-phases pre-filled. Sub-phases not
+          declared there fall back to: match a Phase&rsquo;s code → that Phase&rsquo;s position,
+          otherwise A→Z, with &ldquo;(No sub-phase)&rdquo; always last.
         </p>
       )}
 
@@ -263,6 +262,24 @@ function SummaryBar({
       )}
     </div>
   );
+}
+
+/**
+ * Link mở khu "⑤ Sub-phase order" ở màn Signboard columns, điền sẵn Phase đang
+ * xem + các Sub-phase đang có trên bảng.
+ *
+ * Gửi `subPhaseKey` (đã chuẩn hoá) chứ KHÔNG gửi nhãn: nhãn có thể là tên đẹp
+ * của Phase trùng mã (ví dụ "Test Case") — lưu nhãn đó làm mã thì không khớp
+ * lại được với `[Sub-phase]` thô trong tiêu đề. Nhóm "(No sub-phase)" (khoá
+ * rỗng) không gửi — nó luôn đứng cuối, không xếp được.
+ */
+function subPhaseOrderLink(
+  phaseCode: string,
+  groups: readonly SignboardColumnGroup[],
+): string {
+  const subs = groups.map((g) => g.subPhaseKey).filter((k) => k !== '');
+  const params = new URLSearchParams({ orderPhase: phaseCode, subs: subs.join(',') });
+  return `/config/signboard?${params.toString()}`;
 }
 
 /**

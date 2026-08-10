@@ -20,6 +20,7 @@ const CONFIG: EffectiveConfigResponse = {
   ],
   matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 }],
   signboardColumns: [],
+  subPhaseOrders: [],
   projectKey: null,
   globalVersion: 4,
   projectVersion: null,
@@ -29,6 +30,7 @@ const CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    subPhaseOrders: false,
   },
 };
 
@@ -41,6 +43,7 @@ const PROJECT_CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 };
 
@@ -210,6 +213,7 @@ describe('ConfigPhaseScreen', () => {
       phaseDefinitions: [],
       matchRules: [],
       signboardColumns: [],
+      subPhaseOrders: [],
       projectKey: null,
       globalVersion: 0,
       projectVersion: null,
@@ -219,6 +223,7 @@ describe('ConfigPhaseScreen', () => {
         phaseDefinitions: false,
         matchRules: false,
         signboardColumns: false,
+        subPhaseOrders: false,
       },
     };
     vi.stubGlobal(

@@ -268,6 +268,49 @@ describe('nhóm cột theo Sub-phase', () => {
     expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual(['fut_testcase', 'zzz_khac']);
   });
 
+  it('cấu hình Sub-phase order riêng (pinned) THẮNG thứ tự mượn của Phase', async () => {
+    // Theo display_order mượn: TestCase (1) trước ConfirmPoint (2). Nhưng PM đã
+    // khai thứ tự riêng cho Phase này: ConfirmPoint đứng trước (pinned, order 1)
+    // → phải thắng, kể cả khi TestCase cũng khớp một Phase trong cấu hình.
+    reads.subPhaseMetaMap = new Map([
+      ['fut_testcase', { label: 'Test Case', order: 1 }],
+      ['fut_confirmpoint', { label: 'Confirm Point', order: 1, pinned: true }],
+    ]);
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'FUT_TestCase' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_ConfirmPoint' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual([
+      'fut_confirmpoint',
+      'fut_testcase',
+    ]);
+  });
+
+  it('nhiều Sub-phase pinned xếp theo đúng thứ tự PM đã khai', async () => {
+    reads.subPhaseMetaMap = new Map([
+      ['b_sau', { label: 'B sau', order: 2, pinned: true }],
+      ['a_truoc', { label: 'A trước', order: 1, pinned: true }],
+      ['fut_testcase', { label: 'Test Case', order: 1 }],
+    ]);
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'B_Sau' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_TestCase' }),
+      sub({ issueKey: 'S-3', subPhaseRaw: 'A_Truoc' }),
+      sub({ issueKey: 'S-4', subPhaseRaw: null }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    // pinned theo order khai → rồi nhóm mượn cấu hình Phase → "(No sub-phase)" cuối.
+    expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual([
+      'a_truoc',
+      'b_sau',
+      'fut_testcase',
+      '',
+    ]);
+  });
+
   it('ô của Function được xếp đúng vào nhóm Sub-phase của nó', async () => {
     reads.subtaskList = [
       sub({ issueKey: 'S-1', subPhaseRaw: 'A', taskType: 'Create', statusCategory: 'done' }),
