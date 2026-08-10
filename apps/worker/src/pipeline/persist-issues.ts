@@ -1,4 +1,4 @@
-import type { EffectiveConfig } from '@app/shared';
+import type { EffectiveConfig, SubtaskParseResult } from '@app/shared';
 import { UNCLASSIFIED_PHASE } from '@app/shared';
 import { SubtaskTitleParser, TaskTitleParser } from '@app/engine';
 import { readWbsDates, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
@@ -81,6 +81,94 @@ const TRACKED_CHANGELOG_FIELDS = new Set(['status', 'timeestimate', 'timeorigina
  */
 export const RETRO_LOG_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Giới hạn độ dài (ĐẾM THEO KÝ TỰ) của sáu cột VARCHAR bóc từ tiêu đề Sub-task.
+ * PHẢI khớp `model JiraIssue` trong `packages/db/prisma/schema.prisma`.
+ *
+ * Vì sao phải siết ở tầng này: ô giữ chỗ `{task}` trong mẫu là `.+?` NUỐT TRỌN
+ * phần đuôi tiêu đề, còn `{project|team|phase|function}` nuốt trọn phần giữa hai
+ * ngoặc. Một tiêu đề dài bất thường vì thế khiến `prisma.jiraIssue.upsert()` ném
+ * "value too long for the column's type" và làm HỎNG CẢ LƯỢT đồng bộ Epic — dù
+ * lỗi chỉ nằm ở đúng một Sub-task — rồi đẩy Epic sang trạng thái ERROR (xem
+ * issue.repository.ts + khối catch của sync-epic.job.ts).
+ *
+ * `phase_code`/`task_type` KHÔNG nằm ở đây: chúng do cấu hình sinh ra (mã Phase,
+ * mã cột Signboard) nên đã tự bị chặn độ dài từ chính cấu hình.
+ *
+ * Cắt cho vừa cột đúng theo tinh thần E-27: tiêu đề đặt sai vẫn được GHI và cộng
+ * dồn đầy đủ vào Burndown, chỉ là phần hiển thị trên Signboard bị cắt ngắn. Cắt
+ * là phép THUẦN và TẤT ĐỊNH nên chạy hai lần vẫn ra kết quả y hệt (C-6).
+ */
+const SUBTASK_COLUMN_LIMITS = {
+  sbProject: 64,
+  sbTeam: 64,
+  sbPhaseRaw: 64,
+  functionName: 128,
+  functionKey: 128,
+  sbTaskRaw: 64,
+} as const;
+
+/**
+ * Cắt chuỗi cho vừa `maxChars`, ĐẾM THEO CODE POINT.
+ *
+ * Duyệt bằng `Array.from` (theo code point) chứ không `slice`: `slice` cắt theo
+ * code unit UTF-16 nên có thể xé đôi một cặp surrogate (emoji, CJK ở mặt phẳng bổ
+ * sung) thành nửa ký tự rác mà Postgres từ chối mã hoá UTF-8 — tránh được lỗi này
+ * lại rơi vào lỗi khác. Postgres cũng đo độ dài VARCHAR theo code point nên đếm
+ * cách này mới khớp đúng giới hạn cột.
+ */
+function fitColumn(value: string, maxChars: number): string {
+  const cps = Array.from(value);
+  return cps.length <= maxChars ? value : cps.slice(0, maxChars).join('');
+}
+
+/**
+ * Siết sáu trường bóc từ tiêu đề Sub-task cho vừa cột VARCHAR, và ghi một cảnh
+ * báo `FIELD_TRUNCATED` gộp chung nếu có trường bị cắt.
+ *
+ * Cảnh báo chứ không im lặng: cắt dữ liệu người dùng mà không báo thì Signboard
+ * hiển thị thiếu chữ trông y như tiêu đề gõ sai, rất khó lần ra.
+ */
+function fitSubtaskColumns(
+  parsed: SubtaskParseResult,
+  issueKey: string,
+  warnings: { code: string; message: string }[],
+): Pick<
+  IssueRecord,
+  'sbProject' | 'sbTeam' | 'sbPhaseRaw' | 'functionName' | 'functionKey' | 'sbTaskRaw'
+> {
+  const truncated: string[] = [];
+
+  const fit = (value: string | null, max: number, column: string): string | null => {
+    if (value === null) return null;
+    const clamped = fitColumn(value, max);
+    if (clamped !== value) truncated.push(`${column} (${Array.from(value).length}→${max})`);
+    return clamped;
+  };
+
+  const L = SUBTASK_COLUMN_LIMITS;
+  const out = {
+    sbProject: fit(parsed.sbProject, L.sbProject, 'sb_project'),
+    sbTeam: fit(parsed.sbTeam, L.sbTeam, 'sb_team'),
+    sbPhaseRaw: fit(parsed.sbPhaseRaw, L.sbPhaseRaw, 'sb_phase_raw'),
+    functionName: fit(parsed.functionName, L.functionName, 'function_name'),
+    functionKey: fit(parsed.functionKey, L.functionKey, 'function_key'),
+    sbTaskRaw: fit(parsed.sbTaskRaw, L.sbTaskRaw, 'sb_task_raw'),
+  };
+
+  if (truncated.length > 0) {
+    warnings.push({
+      code: 'FIELD_TRUNCATED',
+      message:
+        `Sub-task ${issueKey}: tiêu đề vượt quá giới hạn cột, đã cắt bớt khi lưu: ` +
+        `${truncated.join(', ')}. Bản ghi vẫn được lưu và số liệu Burndown không đổi; ` +
+        `rút gọn tiêu đề trên Jira nếu cần Signboard hiển thị đủ.`,
+    });
+  }
+
+  return out;
+}
+
 export function buildRecords(args: {
   epicKey: string;
   tree: EpicTree;
@@ -130,13 +218,11 @@ export function buildRecords(args: {
       // bảng Signboard.
       phaseCode: parsed.phaseCode,
       rawPhaseLabel: null,
-      sbProject: parsed.sbProject,
-      sbTeam: parsed.sbTeam,
-      sbPhaseRaw: parsed.sbPhaseRaw,
-      functionName: parsed.functionName,
-      functionKey: parsed.functionKey,
+      // Sáu trường bóc từ tiêu đề được siết cho vừa cột VARCHAR NGAY TẠI ĐÂY.
+      // Một tiêu đề dài bất thường mà không siết sẽ làm cả lượt đồng bộ Epic đổ
+      // vì "value too long" (xem `fitSubtaskColumns`).
+      ...fitSubtaskColumns(parsed, s.key, warnings),
       taskType: parsed.taskType,
-      sbTaskRaw: parsed.sbTaskRaw,
       sbParseStatus: parsed.sbParseStatus,
     });
   }

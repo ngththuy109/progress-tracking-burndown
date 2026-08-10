@@ -143,5 +143,9 @@ export const WARNING_CODE = [
   'ESTIMATE_HISTORY_MISSING',
   'MISSING_ESTIMATE',
   'NO_PHASE_FOUND',
+  // Trường bóc từ tiêu đề dài quá cột VARCHAR nên phải cắt bớt khi lưu — xem
+  // persist-issues.ts. Anh em với HISTORY_TRUNCATED: dữ liệu Jira vượt giới hạn,
+  // không phải cấu hình sai.
+  'FIELD_TRUNCATED',
 ] as const;
 export type WarningCode = (typeof WARNING_CODE)[number];

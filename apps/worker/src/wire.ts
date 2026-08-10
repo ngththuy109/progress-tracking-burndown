@@ -188,6 +188,19 @@ async function runSyncJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
     ports: {
       syncFromJira: async (key, { ignoreWatermark }) => {
         const result = await syncEpic(syncDeps, key, { ignoreWatermark });
+        // Cảnh báo từ bước phân tách/ghi (PHASE_MISMATCH, FIELD_TRUNCATED, …)
+        // trước đây bị bỏ rơi ngay tại đây. Đẩy ra log — cùng khuôn `*.warning`
+        // như reconstruct — để vận hành thấy tiêu đề nào đặt sai mà không phải dò
+        // DB. Khử trùng lặp theo (code, detail): cảnh báo cấu hình như
+        // NO_SUBTASK_PATTERN bị lặp lại một lần cho MỖI Sub-task trong
+        // `buildRecords`, còn cảnh báo theo issue (kèm key) thì vẫn khác nhau.
+        const seen = new Set<string>();
+        for (const w of result.warnings) {
+          const dedupKey = `${w.code} ${w.message}`;
+          if (seen.has(dedupKey)) continue;
+          seen.add(dedupKey);
+          ctx.log({ event: 'sync.warning', epicKey: key, code: w.code, detail: w.message });
+        }
         // syncEpic KHÔNG ném lỗi (nó tự ghi ERROR + sync_run FAILED), nhưng nếu
         // đọc Jira hỏng thì đừng dựng snapshot từ dữ liệu cũ — để job đổ và thử lại.
         if (result.status === 'FAILED') {
