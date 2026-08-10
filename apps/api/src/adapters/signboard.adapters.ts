@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@app/db';
-import type { SignboardSubtask } from '@app/shared';
+import type { SignboardPhase, SignboardSubtask } from '@app/shared';
 import type { SignboardReadPort } from '../routes/signboard.routes.js';
 import type { ColumnSpec } from '../services/signboard.service.js';
 import { createBurndownReadPort } from './burndown.adapters.js';
@@ -36,6 +36,59 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
 
   return {
     epicMeta: (epicKey) => burndown.epicMeta(epicKey),
+
+    async phases(epicKey, projectKey): Promise<readonly SignboardPhase[]> {
+      // Đếm Sub-task theo Phase, đọc THẲNG từ `jira_issue` — cùng nguồn với truy
+      // vấn dựng bảng bên dưới. Bảo đảm mỗi Phase liệt kê ở đây mở ra là có ô;
+      // dùng `phase_rollup` sẽ lệch khi job tính lại chưa chạy.
+      const counts = await prisma.$queryRawUnsafe<{ phase_code: string; subtask_count: number }[]>(
+        `SELECT i.phase_code, COUNT(*)::int AS subtask_count
+           FROM jira_issue i
+          WHERE i.epic_key = $1
+            AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL
+            AND i.phase_code IS NOT NULL
+          GROUP BY i.phase_code`,
+        epicKey,
+      );
+
+      // Nhãn + thứ tự hiển thị lấy từ cấu hình đang hiệu lực (bản project ghi đè
+      // bản Mặc định), giống cách `phaseLabels` của Burndown làm.
+      const defs = await prisma.$queryRawUnsafe<
+        { phase_code: string; label_vi: string; display_order: number }[]
+      >(
+        `SELECT d.phase_code, d.label_vi, d.display_order
+           FROM phase_definition d
+           JOIN phase_config_set s ON s.id = d.config_set_id
+          WHERE s.is_active = true
+            AND (s.project_key = $1 OR s.scope = 'GLOBAL')
+          ORDER BY CASE WHEN s.project_key = $1 THEN 0 ELSE 1 END, d.display_order`,
+        projectKey,
+      );
+
+      const meta = new Map<string, { label: string; order: number }>();
+      for (const d of defs) {
+        if (!meta.has(d.phase_code)) meta.set(d.phase_code, { label: d.label_vi, order: d.display_order });
+      }
+
+      const phases: SignboardPhase[] = counts.map((c) => ({
+        phaseCode: c.phase_code,
+        label: meta.get(c.phase_code)?.label ?? null,
+        subtaskCount: Number(c.subtask_count),
+      }));
+
+      // Phase có trong cấu hình đứng trước, theo `display_order`; Phase lạ (chưa
+      // định nghĩa) xếp sau, theo mã — không im lặng bỏ chúng đi.
+      phases.sort((a, b) => {
+        const oa = meta.get(a.phaseCode)?.order;
+        const ob = meta.get(b.phaseCode)?.order;
+        if (oa !== undefined && ob !== undefined) return oa - ob || a.phaseCode.localeCompare(b.phaseCode);
+        if (oa !== undefined) return -1;
+        if (ob !== undefined) return 1;
+        return a.phaseCode.localeCompare(b.phaseCode);
+      });
+
+      return phases;
+    },
 
     async subtasks(epicKey, phaseCode): Promise<readonly SignboardSubtask[]> {
       // Dùng index `(epic_key, phase_code, function_name, task_type)` của T-02.
