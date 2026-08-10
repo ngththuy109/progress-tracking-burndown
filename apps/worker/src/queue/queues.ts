@@ -71,6 +71,40 @@ export function jobIdFor(jobName: string, epicKey: string): string {
   return `${jobName}__${epicKey}`;
 }
 
+/** Interface tối thiểu cho `addReplacingFinished` — để test không cần Redis. */
+export interface DedupQueue {
+  getJob(jobId: string): Promise<{ getState(): Promise<string>; remove(): Promise<unknown> } | undefined | null>;
+  add(name: string, data: unknown, opts?: { jobId?: string }): Promise<unknown>;
+}
+
+/**
+ * Đẩy job có `jobId` chống trùng, DỌN xác job cũ đã kết thúc trước khi đẩy.
+ *
+ * BullMQ lặng lẽ BỎ QUA `add` khi còn job trùng id ở BẤT KỲ trạng thái nào — kể
+ * cả completed (giữ tới 24h) và failed (giữ vĩnh viễn, xem DEFAULT_JOB_OPTIONS).
+ * Không dọn thì một đêm job của Epic nào đó hỏng hết 5 lần thử là quét đêm bỏ
+ * qua Epic đó MÃI MÃI trong im lặng — không log, không sync_run, không ai biết.
+ *
+ * Job đang chờ hoặc đang chạy thì GIỮ NGUYÊN — đó chính là chống trùng (C-6).
+ */
+export async function addReplacingFinished(
+  queue: DedupQueue,
+  name: string,
+  data: unknown,
+  jobId: string,
+): Promise<void> {
+  const existing = await queue.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'completed' || state === 'failed' || state === 'unknown') {
+      // Thua cuộc đua (job vừa được nhặt chạy lại) thì thôi: `add` bên dưới sẽ
+      // bị khử trùng lặp — đúng hành vi mong muốn.
+      await existing.remove().catch(() => undefined);
+    }
+  }
+  await queue.add(name, data, { jobId });
+}
+
 export interface QueueSet {
   readonly sync: Queue;
   readonly backfill: Queue;
