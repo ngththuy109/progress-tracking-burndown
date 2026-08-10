@@ -229,9 +229,12 @@ Stated plainly, because a green test suite can hide this:
   wired and verified end-to-end (add Epic → backfill → sync from Jira → phase rollups → daily
   snapshots → burndown chart); this one adapter needs that table (a view over issues + changelog) or
   a rewrite.
-- **The ops endpoints (`/metrics`, `/api/ops/health`) are not mounted.** The route module and its
-  ports exist and are tested, but `createServer` does not register them yet — the composition root
-  exposes a lightweight `/healthz` liveness check (pinging Postgres + Redis) instead.
+- **The banner-alert endpoint (`/api/epic/:epicKey/alerts`) is not mounted.** Its route exists in
+  `ops.routes.ts` but no P3 alert evaluator is wired yet, so `registerOpsRoutes` leaves it off; no
+  screen consumes it. `/metrics` and `/api/ops/health` (the monitoring dashboard) are now mounted —
+  `createServer` registers them and `opsHealth()` reads the four metric groups straight from Postgres
+  (`sync_run`, `tracked_epic`, `daily_snapshot`, `jira_issue`, `plan_shift_history`, `phase_rollup`).
+  The composition root still owns `/healthz` (pinging Postgres + Redis).
 - **The p95 ≤ 800 ms target is unmeasured.** It needs PostgreSQL loaded with realistic volume.
 - **`ONBOARDING.md` has never been followed on a clean machine** by someone new. File-scanning tests
   catch documentation that has gone stale; they cannot catch documentation that was never complete.

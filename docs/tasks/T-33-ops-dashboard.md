@@ -9,6 +9,11 @@ touches:
   - apps/web/src/routes/ops/
   - apps/web/src/api/use-ops.ts
   - apps/api/src/routes/ops.routes.ts
+  - apps/api/src/routes/ops.routes.test.ts
+  - apps/api/src/services/ops-health.service.ts
+  - apps/api/src/services/ops-health.service.test.ts
+  - apps/api/src/adapters/ops.adapters.ts
+  - apps/api/src/server.ts
   - apps/web/e2e/ops.spec.ts
   - packages/shared/src/api-ops.ts
   - apps/web/src/routes/app-routes.tsx
@@ -110,6 +115,23 @@ DevOps bị đánh thức lúc 2 giờ sáng vì cảnh báo, mở dashboard, v�
 - **Dashboard gọi 6 endpoint sẽ tự làm nặng thêm hệ thống đang tải nặng** — đúng lúc không nên.
 - **Tự làm mới mà không hiện thời điểm lấy dữ liệu là cách chắc chắn để ai đó ra quyết định trên số liệu của 20 phút trước.**
 - **Tuyệt đối không in token, cookie hay header xác thực ra màn hình.** `redact` của Fastify đã chặn ở tầng log, nhưng endpoint mới này là một đường thoát mới.
+
+## Sửa sau khi bàn giao — Monitoring 404: endpoint chưa lắp, bộ đọc số liệu chưa viết
+
+Màn hình Monitoring trả **404 `Route GET:/api/ops/health not found`** và cả dashboard chết. Đúng hai lỗ hổng mà mục *"Chưa kiểm được ở đây"* bên dưới đã lường trước:
+
+1. **`createServer` chưa bao giờ gọi `registerOpsRoutes`.** Route module và cổng `opsHealth()` có sẵn nhưng không được lắp vào điểm lắp ráp, nên endpoint không tồn tại lúc chạy — mọi route khác đăng ký đủ, riêng nhóm ops thì không.
+2. **Bộ đọc số liệu thật (`opsHealth()`) chỉ có interface, chưa có phần thân.** Không adapter nào đọc PostgreSQL, nên kể cả có lắp route cũng chẳng có gì để trả.
+
+Đã nối xong, thêm **22 test**:
+
+- `apps/api/src/services/ops-health.service.ts` — **hàm thuần** `buildOpsHealth()`: nhận số đếm thô, gắn ngưỡng + mức cho từng số đo. Dùng lại `HEALTH_THRESHOLD`/`levelOf` (T-27) cho bốn tỉ lệ chất lượng dữ liệu, và `PLAN_SHIFT_WARN_RATIO` (R-11) cho trôi kế hoạch. Canh đúng ba cạm bẫy của card: luôn hiện ngưỡng; chưa đo được thì `null` (→ "chưa đo được"), không phải 0; chỉ ghép số đếm nên không có đường nào lộ token.
+- `apps/api/src/adapters/ops.adapters.ts` — phần I/O: đọc cả bốn nhóm từ `sync_run`, `tracked_epic`, `daily_snapshot`, `jira_issue`, `plan_shift_history`, `phase_rollup` bằng một loạt truy vấn song song, rồi giao cho hàm thuần. **Không đọc lại từ Jira** — T-33 chỉ HIỆN số đo của T-27, không tự đo lại.
+- `apps/api/src/server.ts` — lắp `registerOpsRoutes` kèm một `MetricsRegistry` cho tiến trình + `registerHttpMetrics`; mở `/api/ops/health` và `/metrics`.
+- `apps/api/src/routes/ops.routes.ts` — cho `checks`/`bannerAlerts` thành **tuỳ chọn**. `main.ts` đã tự mở `/healthz` bằng Prisma/Redis thật; nếu `registerOpsRoutes` cũng mở `/healthz` vô điều kiện thì Fastify ném `FST_ERR_DUPLICATED_ROUTE` lúc khởi động và **sập cả server**. Banner cảnh báo P3 (`/api/epic/:key/alerts`) chưa có nơi gọi nên cũng để tắt.
+- Test: 16 test hàm thuần (ngưỡng, sắp xếp, trạng thái rỗng, và khớp đúng `opsHealthResponseSchema` mà web client parse) + 6 test route inject thật — khẳng định `/api/ops/health` trả **200 chứ không còn 404**, và `/healthz` không bị khai hai lần.
+
+**Còn lại cần hạ tầng:** lượt đọc end-to-end thật trên một PostgreSQL đã có dữ liệu. Toàn bộ logic số đo và câu chữ thì đã kiểm bằng hàm thuần + Prisma giả, chạy không cần cơ sở dữ liệu.
 
 ## Đã làm gì
 

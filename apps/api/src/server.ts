@@ -1,8 +1,11 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import type { PrismaClient } from '@app/db';
-import type { Principal, StatusIdMap } from '@app/shared';
+import { MetricsRegistry, type Principal, type StatusIdMap } from '@app/shared';
 import type { JiraClient, ResolvedFieldMapping } from '@app/jira';
 import { registerConfigPhaseRoutes } from './routes/config-phase.routes.js';
+import { registerOpsRoutes } from './routes/ops.routes.js';
+import { registerHttpMetrics } from './observability/http-metrics.js';
+import { createOpsHealthPort } from './adapters/ops.adapters.js';
 import { registerEpicRoutes } from './routes/epics.routes.js';
 import { registerBurndownRoutes } from './routes/burndown.routes.js';
 import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
@@ -79,6 +82,12 @@ export function createServer(deps: ServerDeps): FastifyInstance {
     },
     genReqId: () => cryptoRandomId(),
   });
+
+  // Số đo HTTP (PRD §9.5): một registry cho tiến trình này, ghi thời gian mọi
+  // response rồi phát ra ở `/metrics`. Registry theo tiến trình nên số đo là của
+  // riêng API — worker phát số đo của nó ở registry riêng.
+  const registry = new MetricsRegistry();
+  registerHttpMetrics(app, registry);
 
   // Phân giải danh tính → principal một lần mỗi request. Danh tính đến từ header
   // do cổng SSO đặt; vai trò tra bảng `app_user`. KHÔNG tin `role` từ header.
@@ -159,6 +168,16 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   registerPhaseSubtaskRoutes(app, {
     reads: createPhaseSubtaskReadPort(deps.prisma),
     resolvePrincipal: getPrincipal,
+  });
+
+  // Dashboard giám sát (T-33): `/api/ops/health` gom cả bốn nhóm số đo trong một
+  // lần đọc, và `/metrics` phát số đo Prometheus. `checks`/`bannerAlerts` cố ý bỏ
+  // trống — `main.ts` đã tự mở `/healthz` bằng Prisma/Redis thật (khai lại ở đây
+  // sẽ trùng route), còn banner cảnh báo P3 chưa có nơi gọi.
+  const opsHealthPort = createOpsHealthPort(deps.prisma);
+  registerOpsRoutes(app, {
+    registry,
+    opsHealth: () => opsHealthPort.opsHealth(),
   });
 
   return app;
