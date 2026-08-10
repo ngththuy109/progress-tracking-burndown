@@ -341,8 +341,14 @@ function BoardTable({
                   <Fragment key={g.subPhaseKey}>
                     {g.taskColumns.map((c, ci) => {
                       const cell = row.cells[groupOffsets[gi]! + ci];
+                      // Ô TRỐNG (Function không có khâu đó) tô nền xám cả ô để lùi
+                      // ra sau — khác hẳn `NO_PLAN` (có việc, thiếu ngày) vẫn nổi.
+                      const empty = cell === undefined || !cell.present;
                       return (
-                        <td key={`${g.subPhaseKey}:${c.taskCode}`} className="table__td">
+                        <td
+                          key={`${g.subPhaseKey}:${c.taskCode}`}
+                          className={`table__td${empty ? ' signboard__empty' : ''}`}
+                        >
                           {cell !== undefined && <SignboardCellView cell={cell} filter={filter} />}
                         </td>
                       );

@@ -660,6 +660,13 @@ fieldset.field > legend {
 .cell--empty {
   color: var(--border);
 }
+
+/* Ô TRỐNG — Function vốn không có khâu đó: tô xám cả ô để nó lùi ra sau, PM
+   lướt qua không dừng lại. KHÁC HẲN `NO_PLAN` (có việc nhưng thiếu ngày) vẫn
+   giữ nền sáng + kẻ sọc để nổi lên như một việc cần sửa (PRD §6.6). */
+.signboard__empty {
+  background: var(--tone-neutral-bg);
+}
 .cell--dimmed {
   color: var(--border);
 }

@@ -206,6 +206,11 @@ test('ô thiếu ngày kế hoạch hiện NO_PLAN có kẻ sọc, KHÁC HẲN �
   const empty = page.locator('.cell--empty').first();
   await expect(empty).toHaveText('—');
   await expect(empty).toHaveAttribute('title', /no such step/);
+
+  // Ô trống được tô XÁM cả ô (td.signboard__empty); ô NO_PLAN thì KHÔNG — nó có
+  // việc, chỉ thiếu ngày, nên phải nổi lên chứ không lùi ra sau (§6.6).
+  await expect(page.locator('td.signboard__empty').first()).toBeVisible();
+  await expect(page.locator('td.signboard__empty .cell--no-plan')).toHaveCount(0);
 });
 
 test('mỗi ô có CHỮ nói lên trạng thái, không chỉ có màu', async ({ page }) => {
