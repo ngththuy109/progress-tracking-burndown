@@ -75,7 +75,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                   COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
                   COUNT(*) FILTER (WHERE sb_parse_status = 'UNPARSED')::bigint AS unparsed
              FROM jira_issue
-            WHERE issue_type = 'SUBTASK' AND removed_at IS NULL`,
+            WHERE resolved_role = 'LEAF' AND removed_at IS NULL`,
         ),
         // 20 lần chạy job gần nhất — mới nhất trước.
         prisma.$queryRawUnsafe<

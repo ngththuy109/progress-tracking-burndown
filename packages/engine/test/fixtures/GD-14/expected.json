@@ -25,6 +25,7 @@
     "subtaskPatterns": true,
     "phaseDefinitions": true,
     "matchRules": true,
-    "signboardColumns": true
+    "signboardColumns": true,
+    "hierarchyProfile": true
   }
 }

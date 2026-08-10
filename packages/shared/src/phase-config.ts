@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CONFIG_SCOPE, MATCH_MODE } from './enums.js';
+import { hierarchyProfileSchema, type HierarchyProfile } from './hierarchy.js';
 
 /**
  * Cấu hình nhận diện Phase — PRD §2.2.
@@ -58,13 +59,28 @@ export const configPayloadSchema = z.object({
   phaseDefinitions: z.array(phaseDefinitionSchema),
   matchRules: z.array(matchRuleSchema),
   signboardColumns: z.array(signboardColumnSchema),
+  /**
+   * Cấu trúc dự án (số tầng, nguồn Phase, nguồn hàng/cột Signboard).
+   * `null` = chưa khai — kế thừa từ bộ Mặc định, và nếu cả Mặc định cũng chưa
+   * khai thì dùng `DEFAULT_HIERARCHY_PROFILE` (3 tầng, hành vi cũ). Nhờ mặc
+   * định là "vắng mặt" nên seed và dữ liệu có sẵn không phải đổi gì.
+   */
+  hierarchyProfile: hierarchyProfileSchema.nullable().default(null),
 });
 
 export type TitlePattern = z.infer<typeof titlePatternSchema>;
 export type PhaseDefinition = z.infer<typeof phaseDefinitionSchema>;
 export type MatchRule = z.infer<typeof matchRuleSchema>;
 export type SignboardColumn = z.infer<typeof signboardColumnSchema>;
-export type ConfigPayload = z.infer<typeof configPayloadSchema>;
+/**
+ * `hierarchyProfile` là TUỲ CHỌN ở mức type (zod vẫn điền `null` lúc parse):
+ * vắng mặt và `null` cùng nghĩa "chưa khai — dùng kế thừa/mặc định", nên code
+ * dựng payload bằng tay (seed, test) không phải khai một trường chỉ để nói
+ * "không có gì".
+ */
+export type ConfigPayload = Omit<z.infer<typeof configPayloadSchema>, 'hierarchyProfile'> & {
+  hierarchyProfile?: HierarchyProfile | null;
+};
 
 /**
  * Bộ cấu hình RỖNG — điểm xuất phát khi CHƯA có gì được cấu hình.
@@ -81,6 +97,7 @@ export const EMPTY_CONFIG_PAYLOAD: ConfigPayload = {
   phaseDefinitions: [],
   matchRules: [],
   signboardColumns: [],
+  hierarchyProfile: null,
 };
 
 export interface ConfigSetMeta {
@@ -111,8 +128,15 @@ export interface EffectiveConfig extends ConfigPayload {
   readonly projectKey: string | null;
   readonly globalVersion: number;
   readonly projectVersion: number | null;
+  /**
+   * KHÁC `ConfigPayload`: sau khi gộp kế thừa thì profile LUÔN có — không ai
+   * khai thì là `DEFAULT_HIERARCHY_PROFILE`. Đường chạy không phải xử lý null.
+   */
+  readonly hierarchyProfile: HierarchyProfile;
   /** true = phần đó lấy từ bộ Mặc định, chưa được project ghi đè. */
-  readonly inherited: Readonly<Record<InheritablePart | 'signboardColumns' | 'subtaskPatterns', boolean>>;
+  readonly inherited: Readonly<
+    Record<InheritablePart | 'signboardColumns' | 'subtaskPatterns' | 'hierarchyProfile', boolean>
+  >;
 }
 
 /** Kết quả kiểm tra hợp lệ khi lưu — PRD §2.2.4. */

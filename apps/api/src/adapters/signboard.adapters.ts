@@ -47,7 +47,7 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
         `SELECT i.phase_code, COUNT(*)::int AS subtask_count
            FROM jira_issue i
           WHERE i.epic_key = $1
-            AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL
+            AND i.resolved_role = 'LEAF' AND i.removed_at IS NULL
             AND i.phase_code IS NOT NULL
           GROUP BY i.phase_code`,
         epicKey,
@@ -101,7 +101,7 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
            FROM jira_issue i
            LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
           WHERE i.epic_key = $1 AND i.phase_code = $2
-            AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL`,
+            AND i.resolved_role = 'LEAF' AND i.removed_at IS NULL`,
         epicKey,
         phaseCode,
       );
@@ -175,7 +175,7 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
         `SELECT issue_key, sb_task_raw
            FROM jira_issue
           WHERE epic_key = $1 AND phase_code = $2
-            AND issue_type = 'SUBTASK' AND removed_at IS NULL
+            AND resolved_role = 'LEAF' AND removed_at IS NULL
             AND task_type IS NULL`,
         epicKey,
         phaseCode,

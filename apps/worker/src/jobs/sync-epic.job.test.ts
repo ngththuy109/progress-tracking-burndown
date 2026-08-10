@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { JiraClient, TokenBucketRateLimiter, InMemoryTokenBucketStore, type ResolvedFieldMapping } from '@app/jira';
-import type { ConfigPayload, EffectiveConfig } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE, type ConfigPayload, type EffectiveConfig } from '@app/shared';
 import { syncEpic, type SyncEpicOptions } from './sync-epic.job.js';
 import { toJqlTimestamp, skewedWatermark, WATERMARK_SKEW_MINUTES } from '../pipeline/fetch-epic-tree.js';
 import { FakeJira, FakeStore, portsOf, type FakeIssue, type FakeJiraOptions } from '../test-fakes.js';
@@ -34,6 +34,7 @@ const PAYLOAD: ConfigPayload = {
 
 const CONFIG: EffectiveConfig = {
   ...PAYLOAD,
+  hierarchyProfile: DEFAULT_HIERARCHY_PROFILE,
   projectKey: null,
   globalVersion: 1,
   projectVersion: null,
@@ -43,6 +44,7 @@ const CONFIG: EffectiveConfig = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    hierarchyProfile: true,
   },
 };
 
@@ -94,14 +96,19 @@ function makeClient(jira: FakeJira): JiraClient {
   });
 }
 
-function run(opts: FakeJiraOptions, epicKey = 'PAY-100', options: SyncEpicOptions = {}) {
+function run(
+  opts: FakeJiraOptions,
+  epicKey = 'PAY-100',
+  options: SyncEpicOptions = {},
+  config: EffectiveConfig = CONFIG,
+) {
   const jira = new FakeJira(opts);
   const client = makeClient(jira);
   const ports = portsOf(store);
   return {
     jira,
     result: syncEpic(
-      { jira: client, fields: FIELDS, config: CONFIG, ...ports, now: () => NOW },
+      { jira: client, fields: FIELDS, config, ...ports, now: () => NOW },
       epicKey,
       options,
     ),
@@ -523,6 +530,99 @@ describe('vòng đời và nhật ký', () => {
   it('đồng bộ Epic không có trong sổ thì ném lỗi', async () => {
     await expect(run({ issues: sampleTree() }, 'KHONG-CO').result).rejects.toThrow(
       /không có trong sổ theo dõi/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hierarchy Profile 2 tầng — ticket Task là "project", Sub-task là task của
+// từng phase, Phase đọc từ ô [phase] trong chính tiêu đề Sub-task.
+// ---------------------------------------------------------------------------
+
+const TWO_TIER_CONFIG: EffectiveConfig = {
+  ...CONFIG,
+  hierarchyProfile: {
+    levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+    phaseSource: { type: 'SELF_TITLE_SLOT', ref: 'phase' },
+    signboard: {
+      row: { source: 'TITLE_SLOT', ref: 'function' },
+      column: { source: 'TITLE_SLOT', ref: 'task' },
+    },
+  },
+};
+
+function twoTierTree(): FakeIssue[] {
+  return [
+    { id: '5000', key: 'OPS-1', type: 'TASK', summary: 'Vận hành quý 2' },
+    {
+      id: '5001', key: 'OPS-10', type: 'SUBTASK', parent: 'OPS-1',
+      summary: '[OPS][TeamB][Design][Dashboard]_Create',
+      originalEstimate: 3600, wbsStart: '2026-03-02', wbsEnd: '2026-03-06',
+    },
+    {
+      id: '5002', key: 'OPS-11', type: 'SUBTASK', parent: 'OPS-1',
+      summary: '[OPS][TeamB][Development][Dashboard]_BALReview',
+      originalEstimate: 7200, wbsStart: '2026-03-04', wbsEnd: '2026-03-10',
+    },
+  ];
+}
+
+describe('đồng bộ dự án 2 tầng (chỉ đổi cấu hình, không đổi mã)', () => {
+  beforeEach(() => {
+    store.epicState.set('OPS-1', { status: 'BACKFILLING', lastSyncedAt: null, lastError: null });
+  });
+
+  it('cây 2 tầng vẫn chỉ tốn 2 lần search: key = root rồi parent IN (root)', async () => {
+    const { jira, result } = run({ issues: twoTierTree() }, 'OPS-1', {}, TWO_TIER_CONFIG);
+    const r = await result;
+
+    expect(r.status).toBe('SUCCESS');
+    expect(r.issuesRead).toBe(3); // 1 root + 2 lá
+    expect(jira.searchCount).toBe(2);
+    expect(jira.jqls[0]).toBe('key = "OPS-1"');
+    expect(jira.jqls[1]).toContain('parent IN ("OPS-1")');
+  });
+
+  it('vai gán theo vị trí trong cây: root TASK → ROOT, con → LEAF', async () => {
+    await run({ issues: twoTierTree() }, 'OPS-1', {}, TWO_TIER_CONFIG).result;
+
+    expect(store.issues.get('OPS-1')?.resolvedRole).toBe('ROOT');
+    // issue_type là dữ liệu MÔ TẢ — root của dự án 2 tầng đúng là một Task.
+    expect(store.issues.get('OPS-1')?.issueType).toBe('TASK');
+    expect(store.issues.get('OPS-10')?.resolvedRole).toBe('LEAF');
+  });
+
+  it('Phase đọc từ ô [phase] của CHÍNH tiêu đề lá, qua luật khớp từ khoá', async () => {
+    const { result } = run({ issues: twoTierTree() }, 'OPS-1', {}, TWO_TIER_CONFIG);
+    const r = await result;
+
+    expect(store.issues.get('OPS-10')?.phaseCode).toBe('DESIGN');
+    expect(store.issues.get('OPS-11')?.phaseCode).toBe('DEVELOPMENT');
+    // Nguồn Phase là chính tiêu đề — không được sinh cảnh báo PHASE_MISMATCH rác.
+    expect(r.warnings.every((w) => w.code !== 'PHASE_MISMATCH')).toBe(true);
+  });
+
+  it('hàng/cột Signboard vẫn bóc được từ tiêu đề như 3 tầng', async () => {
+    await run({ issues: twoTierTree() }, 'OPS-1', {}, TWO_TIER_CONFIG).result;
+
+    const leaf = store.issues.get('OPS-11')!;
+    expect(leaf.functionKey).toBe('dashboard');
+    expect(leaf.taskType).toBe('BALReview');
+    expect(leaf.sbParseStatus).toBe('OK');
+  });
+
+  it('profile 3 tầng mặc định chạy y nguyên hành vi cũ (không hồi quy)', async () => {
+    const { jira, result } = run({ issues: sampleTree() });
+    const r = await result;
+
+    expect(r.status).toBe('SUCCESS');
+    expect(jira.searchCount).toBe(2);
+    expect(store.issues.get('PAY-100')?.resolvedRole).toBe('ROOT');
+    expect(store.issues.get('PAY-101')?.resolvedRole).toBe('GROUP');
+    expect(store.issues.get('PAY-200')?.resolvedRole).toBe('LEAF');
+    // Phase của lá vẫn là Phase của Task cha (PRD §2.9.2).
+    expect(store.issues.get('PAY-200')?.phaseCode).toBe(
+      store.issues.get('PAY-101')?.phaseCode,
     );
   });
 });

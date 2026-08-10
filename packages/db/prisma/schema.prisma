@@ -48,6 +48,14 @@ model JiraIssue {
   issueId   BigInt @unique @map("issue_id")
   issueType String @map("issue_type") @db.VarChar(16) // EPIC | TASK | SUBTASK
 
+  // VAI trong cây theo Hierarchy Profile (ROOT | GROUP | LEAF) — gán lúc đồng
+  // bộ theo VỊ TRÍ trong cây, không theo tên issue type (tên khác nhau ở mỗi
+  // Jira). Đây là cột mọi truy vấn lọc "ticket lá" phải dùng thay cho
+  // issue_type = 'SUBTASK' — nhờ vậy dự án 2 tầng (LEAF là Task con của một
+  // ticket root) chạy được mà không sửa truy vấn nào nữa.
+  // issue_type giữ nguyên làm dữ liệu MÔ TẢ (hiển thị, điều tra).
+  resolvedRole String @default("LEAF") @map("resolved_role") @db.VarChar(8)
+
   parentKey String? @map("parent_key") @db.VarChar(32)
   epicKey   String? @map("epic_key") @db.VarChar(32)
   summary   String
@@ -276,9 +284,42 @@ model PhaseConfigSet {
   phaseDefinitions     PhaseDefinition[]
   matchRules           PhaseMatchRule[]
   signboardColumns     SignboardColumn[]
+  hierarchyProfile     HierarchyProfile?
 
   @@unique([scope, projectKey, version], map: "uq_config_version")
   @@map("phase_config_set")
+}
+
+// ============================================================================
+// Bảng 7G: Hierarchy Profile — cấu trúc dự án ánh xạ vào 3 vai ROOT/GROUP/LEAF
+// (docs/FLEXIBLE-HIERARCHY-PROPOSAL.md).
+//
+// 0..1 dòng cho mỗi config set. KHÔNG có dòng = dùng DEFAULT_HIERARCHY_PROFILE
+// (3 tầng Epic → Task → Sub-task, hành vi cũ) — nhờ vậy seed và dữ liệu có sẵn
+// không phải đổi gì.
+//
+// Cột có kiểu rõ để DB chặn sai sớm; riêng `levels` là JSON vì lặp theo tầng
+// (mảng {role, issueTypes?}) — hình dạng do zod `hierarchyProfileSchema` giữ.
+// ============================================================================
+model HierarchyProfile {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @unique @map("config_set_id")
+
+  levels Json
+
+  phaseSourceType String  @map("phase_source_type") @db.VarChar(24) // GROUP_TITLE | SELF_TITLE_SLOT | FIELD | FIXED
+  phaseSourceRef  String? @map("phase_source_ref") @db.VarChar(64)
+  // CHỈ với GROUP_TITLE ở cây ≥ 4 tầng: index tầng GROUP mang Phase.
+  phaseGroupLevel Int?    @map("phase_group_level") @db.SmallInt
+
+  sbRowSource String @map("sb_row_source") @db.VarChar(16) // TITLE_SLOT | FIELD
+  sbRowRef    String @map("sb_row_ref") @db.VarChar(64)
+  sbColSource String @map("sb_col_source") @db.VarChar(16)
+  sbColRef    String @map("sb_col_ref") @db.VarChar(64)
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@map("hierarchy_profile")
 }
 
 // ============================================================================

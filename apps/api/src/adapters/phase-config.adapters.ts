@@ -55,7 +55,7 @@ export function createIssueReadPort(prisma: PrismaClient): IssueReadPort {
       const rows = await prisma.jiraIssue.findMany({
         where: {
           epicKey: { in: epicKeys },
-          issueType: 'TASK',
+          resolvedRole: 'GROUP',
           // Issue đã gỡ khỏi Epic không còn là thứ PM cần xem thử phân loại.
           removedAt: null,
         },
@@ -78,7 +78,7 @@ export function createIssueReadPort(prisma: PrismaClient): IssueReadPort {
       const rows = await prisma.jiraIssue.findMany({
         where: {
           epicKey: { in: epicKeys },
-          issueType: 'TASK',
+          resolvedRole: 'GROUP',
           removedAt: null,
           phaseCode: UNCLASSIFIED_PHASE,
         },

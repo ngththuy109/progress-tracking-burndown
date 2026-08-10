@@ -14,6 +14,7 @@ export const SHARED_PACKAGE_VERSION = '0.1.0' as const;
 export * from './enums.js';
 export * from './issue-history.js';
 export * from './phase-config.js';
+export * from './hierarchy.js';
 export * from './issue-path.js';
 export * from './subtask-parse.js';
 export * from './api-config.js';

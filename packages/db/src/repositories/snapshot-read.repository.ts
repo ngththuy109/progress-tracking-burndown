@@ -123,7 +123,7 @@ export async function loadDataQualityRatios(
             COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
             COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs
        FROM jira_issue
-      WHERE epic_key = $1 AND issue_type = 'SUBTASK' AND removed_at IS NULL`,
+      WHERE epic_key = $1 AND resolved_role = 'LEAF' AND removed_at IS NULL`,
     epicKey,
   );
 

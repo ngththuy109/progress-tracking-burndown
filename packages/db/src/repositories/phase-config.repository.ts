@@ -1,4 +1,10 @@
-import type { ConfigPayload, ConfigSet, EffectiveConfig } from '@app/shared';
+import type {
+  ConfigPayload,
+  ConfigSet,
+  EffectiveConfig,
+  HierarchyLevel,
+  HierarchyProfile,
+} from '@app/shared';
 import type { PrismaClient } from '../client.js';
 
 /**
@@ -13,6 +19,44 @@ export interface ConfigCache {
 }
 
 export const CONFIG_CACHE_PREFIX = 'meta:phaseconfig';
+
+/** Hình dạng dòng `hierarchy_profile` mà hai hàm dưới cùng dùng. */
+interface HierarchyProfileRow {
+  levels: unknown;
+  phaseSourceType: string;
+  phaseSourceRef: string | null;
+  phaseGroupLevel: number | null;
+  sbRowSource: string;
+  sbRowRef: string;
+  sbColSource: string;
+  sbColRef: string;
+}
+
+/**
+ * Dòng DB → `HierarchyProfile`. Các trường tuỳ chọn chỉ đưa vào khi CÓ —
+ * `exactOptionalPropertyTypes` phân biệt "vắng mặt" với "bằng undefined".
+ */
+function profileFromRow(row: HierarchyProfileRow | null): HierarchyProfile | null {
+  if (!row) return null;
+  return {
+    levels: row.levels as HierarchyLevel[],
+    phaseSource: {
+      type: row.phaseSourceType as HierarchyProfile['phaseSource']['type'],
+      ref: row.phaseSourceRef,
+      ...(row.phaseGroupLevel !== null ? { groupLevel: row.phaseGroupLevel } : {}),
+    },
+    signboard: {
+      row: {
+        source: row.sbRowSource as HierarchyProfile['signboard']['row']['source'],
+        ref: row.sbRowRef,
+      },
+      column: {
+        source: row.sbColSource as HierarchyProfile['signboard']['column']['source'],
+        ref: row.sbColRef,
+      },
+    },
+  };
+}
 
 export function configCacheKey(projectKey: string | null): string {
   return `${CONFIG_CACHE_PREFIX}:${projectKey ?? 'GLOBAL'}`;
@@ -32,6 +76,7 @@ export async function findActiveConfigSet(
       phaseDefinitions: { orderBy: { displayOrder: 'asc' } },
       matchRules: { orderBy: { matchPriority: 'asc' } },
       signboardColumns: { orderBy: { displayOrder: 'asc' } },
+      hierarchyProfile: true,
     },
   });
   if (!row) return null;
@@ -74,6 +119,7 @@ export async function findActiveConfigSet(
       labelJa: c.labelJa,
       displayOrder: c.displayOrder,
     })),
+    hierarchyProfile: profileFromRow(row.hierarchyProfile),
   };
 }
 
@@ -162,6 +208,24 @@ export async function saveNewVersion(
             displayOrder: c.displayOrder,
           })),
         },
+        // KHÔNG khai profile = không có dòng — đường đọc rơi về profile mặc
+        // định 3 tầng, xem `hierarchy_profile` trong schema.prisma.
+        ...(payload.hierarchyProfile
+          ? {
+              hierarchyProfile: {
+                create: {
+                  levels: payload.hierarchyProfile.levels,
+                  phaseSourceType: payload.hierarchyProfile.phaseSource.type,
+                  phaseSourceRef: payload.hierarchyProfile.phaseSource.ref ?? null,
+                  phaseGroupLevel: payload.hierarchyProfile.phaseSource.groupLevel ?? null,
+                  sbRowSource: payload.hierarchyProfile.signboard.row.source,
+                  sbRowRef: payload.hierarchyProfile.signboard.row.ref,
+                  sbColSource: payload.hierarchyProfile.signboard.column.source,
+                  sbColRef: payload.hierarchyProfile.signboard.column.ref,
+                },
+              },
+            }
+          : {}),
       },
     });
 
@@ -196,6 +260,7 @@ export async function rollbackToVersion(
       phaseDefinitions: { orderBy: { displayOrder: 'asc' } },
       matchRules: { orderBy: { matchPriority: 'asc' } },
       signboardColumns: { orderBy: { displayOrder: 'asc' } },
+      hierarchyProfile: true,
     },
   });
 
@@ -242,6 +307,7 @@ export async function rollbackToVersion(
           labelJa: c.labelJa,
           displayOrder: c.displayOrder,
         })),
+        hierarchyProfile: profileFromRow(old.hierarchyProfile),
       },
     },
     cache,

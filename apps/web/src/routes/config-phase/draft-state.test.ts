@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { EffectiveConfigResponse } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE, type EffectiveConfigResponse } from '@app/shared';
 import {
   canMove,
   draftReducer,
@@ -30,6 +30,7 @@ const GLOBAL_CONFIG: EffectiveConfigResponse = {
     { keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
   ],
   signboardColumns: [],
+  hierarchyProfile: DEFAULT_HIERARCHY_PROFILE,
   projectKey: null,
   globalVersion: 4,
   projectVersion: null,
@@ -39,6 +40,7 @@ const GLOBAL_CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    hierarchyProfile: true,
   },
 };
 
@@ -53,6 +55,7 @@ const PROJECT_CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    hierarchyProfile: true,
   },
 };
 

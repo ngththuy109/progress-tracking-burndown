@@ -36,7 +36,7 @@ import {
 import { createQueues, jobIdFor, type QueueSet } from './queue/queues.js';
 import { QUEUE_NAME } from './queue/queues.js';
 import { JOB_NAME, createSyncWorker, type HandlerMap } from './queue/worker.js';
-import { fetchEpicTree } from './pipeline/fetch-epic-tree.js';
+import { fetchIssueTree } from './pipeline/fetch-epic-tree.js';
 import { syncEpic, type SyncEpicDeps } from './jobs/sync-epic.job.js';
 import { reconstructEpic, type ReconstructDeps } from './jobs/reconstruct-epic.job.js';
 import { reconcileEpic, type ReconcileDeps } from './jobs/reconcile-epic.job.js';
@@ -399,7 +399,7 @@ async function earliestDataDate(prisma: PrismaClient, epicKey: string): Promise<
 
   const plan = await prisma.jiraIssue.aggregate({
     _min: { wbsStartDate: true },
-    where: { epicKey, issueType: 'SUBTASK', removedAt: null },
+    where: { epicKey, resolvedRole: 'LEAF', removedAt: null },
   });
   if (plan._min.wbsStartDate) return toDateString(plan._min.wbsStartDate);
 
@@ -433,8 +433,16 @@ async function earliestMissingSnapshotDate(
 }
 
 async function jiraTotals(ctx: JobContext, epicKey: string): Promise<readonly IssueTotals[]> {
-  const tree = await fetchEpicTree(ctx.jira, { epicKey, fields: ctx.fields, since: null });
-  return [...tree.tasks, ...tree.subtasks].map((i) => ({
+  // Cần profile để biết cây sâu bao nhiêu tầng — đối chiếu phải đi ĐÚNG những
+  // tầng mà đồng bộ đã đi, nếu không sẽ báo lệch giả.
+  const { config } = await loadEpicContext(ctx, epicKey);
+  const tree = await fetchIssueTree(ctx.jira, {
+    epicKey,
+    fields: ctx.fields,
+    since: null,
+    profile: config.hierarchyProfile,
+  });
+  return [...tree.groupLevels.flat(), ...tree.leaves].map((i) => ({
     issueKey: i.key,
     timeSpentS: numberOf(i.fields['timespent']),
     originalEstimateS: numberOf(i.fields['timeoriginalestimate']),

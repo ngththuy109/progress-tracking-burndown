@@ -8,6 +8,7 @@ import type {
   SignboardCell,
   SubtaskRecord,
 } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE } from '@app/shared';
 import {
   buildSnapshotForDay,
   computePhaseRollups,
@@ -202,6 +203,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
       labelVi: taskCode,
       displayOrder: i + 1,
     })),
+    hierarchyProfile: DEFAULT_HIERARCHY_PROFILE,
     projectKey: null,
     globalVersion: 1,
     projectVersion: null,
@@ -211,6 +213,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
       phaseDefinitions: false,
       matchRules: false,
       signboardColumns: false,
+      hierarchyProfile: false,
     },
   };
 }

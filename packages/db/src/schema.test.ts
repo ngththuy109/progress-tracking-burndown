@@ -117,6 +117,53 @@ describe('migration init — các lớp bảo vệ Prisma không tự sinh đư�
 });
 
 // ===========================================================================
+// Nhóm 1b — Migration hierarchy_profile: các lớp bảo vệ viết tay (CHECK,
+// partial index, backfill) mà Prisma không tự sinh được.
+// ===========================================================================
+describe('migration hierarchy_profile — cấu trúc dự án linh hoạt', () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((d) => d.endsWith('_hierarchy_profile'));
+  if (!dir) throw new Error('Không tìm thấy migration _hierarchy_profile');
+  const sql = readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf8');
+
+  it('thêm resolved_role và backfill từ issue_type (EPIC→ROOT, TASK→GROUP, còn lại→LEAF)', () => {
+    expect(sql).toMatch(/ADD COLUMN "resolved_role" VARCHAR\(8\) NOT NULL/);
+    expect(sql).toMatch(/WHEN 'EPIC' THEN 'ROOT'/);
+    expect(sql).toMatch(/WHEN 'TASK' THEN 'GROUP'/);
+    expect(sql).toMatch(/ELSE 'LEAF'/);
+  });
+
+  it('vai lạ bị CHECK constraint chặn', () => {
+    expect(sql).toMatch(/ck_issue_resolved_role[\s\S]*?CHECK \("resolved_role" IN \('ROOT', 'GROUP', 'LEAF'\)\)/);
+  });
+
+  it('partial index Signboard chuyển vị ngữ sang resolved_role, gỡ index cũ', () => {
+    expect(sql).toMatch(
+      /CREATE INDEX "idx_issue_signboard_role"[\s\S]*?WHERE resolved_role = 'LEAF' AND removed_at IS NULL/,
+    );
+    expect(sql).toMatch(/DROP INDEX IF EXISTS "idx_issue_signboard"/);
+  });
+
+  it('bảng hierarchy_profile 1-1 với phase_config_set, xoá theo cascade', () => {
+    expect(sql).toMatch(/CREATE TABLE "hierarchy_profile"/);
+    expect(sql).toMatch(/UNIQUE \("config_set_id"\)/);
+    expect(sql).toMatch(/REFERENCES "phase_config_set"\("id"\)\s*\n?\s*ON DELETE CASCADE/);
+  });
+
+  it('nguồn Phase và nguồn hàng/cột bị CHECK chặn giá trị lạ', () => {
+    expect(sql).toMatch(/CHECK \("phase_source_type" IN \('GROUP_TITLE', 'SELF_TITLE_SLOT', 'FIELD', 'FIXED'\)\)/);
+    expect(sql).toMatch(/CHECK \("sb_row_source" IN \('TITLE_SLOT', 'FIELD'\)\)/);
+    expect(sql).toMatch(/CHECK \("sb_col_source" IN \('TITLE_SLOT', 'FIELD'\)\)/);
+  });
+
+  it('có kịch bản rollback đi kèm, tái tạo lại index cũ (C-13)', () => {
+    const rollback = readFileSync(join(MIGRATIONS_DIR, dir, 'ROLLBACK.sql'), 'utf8');
+    expect(rollback).toContain('DROP TABLE IF EXISTS "hierarchy_profile"');
+    expect(rollback).toContain('DROP COLUMN IF EXISTS "resolved_role"');
+    expect(rollback).toMatch(/CREATE INDEX "idx_issue_signboard"/);
+  });
+});
+
+// ===========================================================================
 // Nhóm 2 — Hằng số seed. Không cần database.
 // ===========================================================================
 describe('seed lịch làm việc', () => {

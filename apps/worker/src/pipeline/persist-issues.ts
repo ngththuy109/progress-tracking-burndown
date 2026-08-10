@@ -1,8 +1,8 @@
-import type { EffectiveConfig, SubtaskParseResult } from '@app/shared';
-import { UNCLASSIFIED_PHASE } from '@app/shared';
-import { SubtaskTitleParser, TaskTitleParser } from '@app/engine';
+import type { EffectiveConfig, HierarchyRole, SubtaskParseResult, TitleSlot } from '@app/shared';
+import { phaseCarrierLevelIndex, UNCLASSIFIED_PHASE } from '@app/shared';
+import { SubtaskTitleParser, TaskTitleParser, toFunctionKey } from '@app/engine';
 import { readWbsDates, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
-import type { EpicTree } from './fetch-epic-tree.js';
+import type { IssueTree } from './fetch-epic-tree.js';
 
 /**
  * GIAI ĐOẠN 3 — đổi dữ liệu thô của Jira thành bản ghi sẵn sàng ghi xuống DB,
@@ -10,6 +10,9 @@ import type { EpicTree } from './fetch-epic-tree.js';
  *
  * Toàn bộ file này là HÀM THUẦN. Không gọi mạng, không chạm database, không đọc
  * đồng hồ — nên test được ngay, và đó là chỗ chứa mọi quy tắc dễ sai nhất.
+ *
+ * Vai (ROOT/GROUP/LEAF) và nguồn Phase/hàng/cột Signboard đến từ
+ * `config.hierarchyProfile` — xem docs/FLEXIBLE-HIERARCHY-PROPOSAL.md.
  */
 
 export const ISSUE_TYPE = { EPIC: 'EPIC', TASK: 'TASK', SUBTASK: 'SUBTASK' } as const;
@@ -18,6 +21,7 @@ export interface IssueRecord {
   issueKey: string;
   issueId: bigint;
   issueType: string;
+  resolvedRole: string;
   parentKey: string | null;
   epicKey: string | null;
   summary: string;
@@ -169,61 +173,184 @@ function fitSubtaskColumns(
   return out;
 }
 
+/**
+ * Giá trị chuỗi của một field Jira, chấp nhận mọi hình dạng thường gặp:
+ * chuỗi trần (labels từng cái), mảng chuỗi (labels), mảng object có `name`
+ * (components) hoặc `value` (select). Field vắng mặt → mảng rỗng.
+ */
+function fieldStringValues(fields: Record<string, unknown>, ref: string): string[] {
+  const unwrap = (v: unknown): string | null => {
+    if (typeof v === 'string') return v.trim() || null;
+    if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      if (typeof o['name'] === 'string') return o['name'].trim() || null;
+      if (typeof o['value'] === 'string') return o['value'].trim() || null;
+    }
+    return null;
+  };
+
+  const raw = fields[ref];
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list.map(unwrap).filter((s): s is string => s !== null);
+}
+
+/** Giá trị một Ô của kết quả phân tách tiêu đề, theo tên ô. */
+function slotValue(parsed: SubtaskParseResult, slot: TitleSlot): string | null {
+  switch (slot) {
+    case 'project':
+      return parsed.sbProject;
+    case 'team':
+      return parsed.sbTeam;
+    case 'phase':
+      return parsed.sbPhaseRaw;
+    case 'function':
+      return parsed.functionName;
+    case 'task':
+      return parsed.sbTaskRaw;
+  }
+}
+
 export function buildRecords(args: {
   epicKey: string;
-  tree: EpicTree;
+  tree: IssueTree;
   worklogsByIssue: ReadonlyMap<string, readonly JiraWorklog[]>;
   changelogByIssue: ReadonlyMap<string, readonly JiraChangelogEntry[]>;
   config: EffectiveConfig;
   fields: ResolvedFieldMapping;
 }): BuiltRecords {
   const { epicKey, tree, config, fields } = args;
+  const profile = config.hierarchyProfile;
   const warnings: { code: string; message: string }[] = [];
 
   const taskParser = new TaskTitleParser(config);
   const subtaskParser = new SubtaskTitleParser(config);
 
   const issues: IssueRecord[] = [];
-  const phaseOfTask = new Map<string, string>();
+  /** Phase của MỌI issue tầng GROUP (kể cả kế thừa từ cha ở cây ≥ 4 tầng). */
+  const phaseOfGroup = new Map<string, string>();
 
-  if (tree.epic) {
-    issues.push(baseRecord(tree.epic, ISSUE_TYPE.EPIC, epicKey, fields));
+  if (tree.root) {
+    issues.push(baseRecord(tree.root, 'ROOT', epicKey, fields));
   }
 
-  for (const t of tree.tasks) {
-    const parsed = taskParser.parse(stringField(t.fields['summary']));
-    phaseOfTask.set(t.key, parsed.phaseCode);
-    warnings.push(...parsed.warnings);
+  // Tầng GROUP mang thông tin Phase khi phaseSource = GROUP_TITLE. Ở cây ≥ 4
+  // tầng, các tầng GROUP sâu hơn tầng này KẾ THỪA phase của cha.
+  const carrierLevel = profile.phaseSource.type === 'GROUP_TITLE'
+    ? phaseCarrierLevelIndex(profile)
+    : null;
 
-    issues.push({
-      ...baseRecord(t, ISSUE_TYPE.TASK, epicKey, fields),
-      phaseCode: parsed.phaseCode,
-      rawPhaseLabel: parsed.rawPhaseLabel,
-    });
-  }
+  tree.groupLevels.forEach((rows, i) => {
+    const levelIndex = i + 1; // groupLevels[0] là tầng ngay dưới ROOT
+    for (const g of rows) {
+      let phaseCode: string | null = null;
+      let rawPhaseLabel: string | null = null;
 
-  for (const s of tree.subtasks) {
-    // Sub-task LUÔN lấy Phase từ Task cha, không lấy từ `[Phase]` trong tiêu đề
-    // của chính nó (PRD §2.9.2). Cây Jira là cấu trúc thật, tiêu đề chỉ là chữ.
+      if (carrierLevel !== null && levelIndex === carrierLevel) {
+        const parsed = taskParser.parse(stringField(g.fields['summary']));
+        phaseCode = parsed.phaseCode;
+        rawPhaseLabel = parsed.rawPhaseLabel;
+        warnings.push(...parsed.warnings);
+      } else if (carrierLevel !== null && levelIndex > carrierLevel) {
+        const parentKey = parentKeyOf(g.fields);
+        phaseCode = (parentKey ? phaseOfGroup.get(parentKey) : undefined) ?? UNCLASSIFIED_PHASE;
+      }
+
+      if (phaseCode !== null) phaseOfGroup.set(g.key, phaseCode);
+
+      issues.push({
+        ...baseRecord(g, 'GROUP', epicKey, fields),
+        phaseCode,
+        rawPhaseLabel,
+      });
+    }
+  });
+
+  // Phase của Task cha là nguồn sự thật CHỈ khi profile nói vậy (GROUP_TITLE —
+  // PRD §2.9.2). Các nguồn khác tắt phép so PHASE_MISMATCH: đem nguồn so với
+  // chính nó chỉ sinh cảnh báo rác.
+  const phaseFromParent = profile.phaseSource.type === 'GROUP_TITLE';
+
+  for (const s of tree.leaves) {
     const parentKey = parentKeyOf(s.fields);
-    const parentPhase = (parentKey ? phaseOfTask.get(parentKey) : undefined) ?? UNCLASSIFIED_PHASE;
+    const parentPhase = (parentKey ? phaseOfGroup.get(parentKey) : undefined) ?? UNCLASSIFIED_PHASE;
 
-    const parsed = subtaskParser.parse(stringField(s.fields['summary']), parentPhase);
+    const parsed = subtaskParser.parse(
+      stringField(s.fields['summary']),
+      phaseFromParent ? parentPhase : UNCLASSIFIED_PHASE,
+      { comparePhaseWithParent: phaseFromParent },
+    );
     warnings.push(...parsed.warnings);
 
+    // ---- Phase theo chiến lược của profile (mọi đường đều đổ về phase_code,
+    //      từ đó trở đi rollup/snapshot/signboard không phân biệt gì nữa) ----
+    let phaseCode = parsed.phaseCode;
+    let rawPhaseLabel: string | null = null;
+    switch (profile.phaseSource.type) {
+      case 'GROUP_TITLE':
+        break; // parsed.phaseCode đã là phase của Task cha
+      case 'SELF_TITLE_SLOT': {
+        const raw = slotValue(parsed, (profile.phaseSource.ref ?? 'phase') as TitleSlot);
+        phaseCode = raw === null ? UNCLASSIFIED_PHASE : subtaskParser.resolvePhaseText(raw);
+        rawPhaseLabel = raw;
+        break;
+      }
+      case 'FIELD': {
+        // Field nhiều giá trị (2 component…): lấy giá trị ĐẦU TIÊN khớp được
+        // một Phase; không cái nào khớp thì UNCLASSIFIED + giữ nguyên giá trị
+        // thô đầu tiên để màn hình "nhãn chưa khớp" gợi ý luật mới.
+        const values = fieldStringValues(s.fields, profile.phaseSource.ref ?? '');
+        const hit = values
+          .map((v) => ({ v, code: subtaskParser.resolvePhaseText(v) }))
+          .find((r) => r.code !== UNCLASSIFIED_PHASE);
+        phaseCode = hit?.code ?? UNCLASSIFIED_PHASE;
+        rawPhaseLabel = hit?.v ?? values[0] ?? null;
+        break;
+      }
+      case 'FIXED':
+        phaseCode = profile.phaseSource.ref ?? UNCLASSIFIED_PHASE;
+        break;
+    }
+
+    // ---- Hàng/cột Signboard theo profile: mặc định từ ô tiêu đề (đã nằm
+    //      trong `parsed`), hoặc ghi đè từ field Jira ----
+    let functionName = parsed.functionName;
+    let functionKey = parsed.functionKey;
+    if (profile.signboard.row.source === 'FIELD') {
+      const name = fieldStringValues(s.fields, profile.signboard.row.ref)[0] ?? null;
+      functionName = name;
+      functionKey = name === null ? null : toFunctionKey(name);
+    }
+
+    let taskType = parsed.taskType;
+    let sbTaskRaw = parsed.sbTaskRaw;
+    if (profile.signboard.column.source === 'FIELD') {
+      const raw = fieldStringValues(s.fields, profile.signboard.column.ref)[0] ?? null;
+      taskType = raw === null ? null : subtaskParser.resolveTaskType(raw);
+      sbTaskRaw = raw;
+    }
+
+    // Trạng thái phân tách tính lại SAU các ghi đè: hàng/cột lấy từ field thì
+    // "tiêu đề đặt sai" không còn là lý do rớt khỏi Signboard nữa.
+    const sbParseStatus =
+      functionKey === null ? 'UNPARSED' : taskType === null ? 'UNKNOWN_TASK_TYPE' : 'OK';
+
     issues.push({
-      ...baseRecord(s, ISSUE_TYPE.SUBTASK, epicKey, fields),
-      // `UNPARSED` KHÔNG có nghĩa là bỏ qua Sub-task này. Nó vẫn được ghi đầy đủ
-      // và vẫn cộng dồn vào Burndown (C-11, PRD E-27) — chỉ là không lên được
-      // bảng Signboard.
-      phaseCode: parsed.phaseCode,
-      rawPhaseLabel: null,
+      ...baseRecord(s, 'LEAF', epicKey, fields),
+      // `UNPARSED` KHÔNG có nghĩa là bỏ qua ticket lá này. Nó vẫn được ghi đầy
+      // đủ và vẫn cộng dồn vào Burndown (C-11, PRD E-27) — chỉ là không lên
+      // được bảng Signboard.
+      phaseCode,
+      rawPhaseLabel,
       // Sáu trường bóc từ tiêu đề được siết cho vừa cột VARCHAR NGAY TẠI ĐÂY.
       // Một tiêu đề dài bất thường mà không siết sẽ làm cả lượt đồng bộ Epic đổ
       // vì "value too long" (xem `fitSubtaskColumns`).
-      ...fitSubtaskColumns(parsed, s.key, warnings),
-      taskType: parsed.taskType,
-      sbParseStatus: parsed.sbParseStatus,
+      ...fitSubtaskColumns(
+        { ...parsed, functionName, functionKey, sbTaskRaw },
+        s.key,
+        warnings,
+      ),
+      taskType,
+      sbParseStatus,
     });
   }
 
@@ -277,9 +404,33 @@ export function hasRetroLog(worklogs: readonly WorklogRecord[]): boolean {
   );
 }
 
+/**
+ * `issue_type` giờ là dữ liệu MÔ TẢ (hiển thị, điều tra) — phân loại thật nằm ở
+ * `resolved_role`. Chuẩn hoá từ tên type thật trên Jira để với dữ liệu 3 tầng
+ * cũ ra đúng EPIC/TASK/SUBTASK như trước (byte-for-byte, C-6), còn dự án 2 tầng
+ * thì root ghi đúng là TASK chứ không bịa thành EPIC.
+ */
+function normalizeIssueTypeName(fields: Record<string, unknown>, role: HierarchyRole): string {
+  const t = fields['issuetype'];
+  const name =
+    t && typeof t === 'object' && typeof (t as { name?: unknown }).name === 'string'
+      ? ((t as { name: string }).name)
+      : '';
+  const n = name.trim().toLowerCase();
+  if (n === '') {
+    // Không có tên type (dữ liệu thiếu) — rơi về ánh xạ theo vai như bản cũ.
+    return role === 'ROOT' ? ISSUE_TYPE.EPIC : role === 'GROUP' ? ISSUE_TYPE.TASK : ISSUE_TYPE.SUBTASK;
+  }
+  if (n === 'epic' || n === 'エピック') return ISSUE_TYPE.EPIC;
+  if (n === 'sub-task' || n === 'subtask' || n === 'サブタスク') return ISSUE_TYPE.SUBTASK;
+  if (n === 'task' || n === 'タスク') return ISSUE_TYPE.TASK;
+  // Type tuỳ chế (Story…): giữ tên thật, cắt vừa cột VARCHAR(16).
+  return fitColumn(name.trim().toUpperCase(), 16);
+}
+
 function baseRecord(
   issue: JiraIssue,
-  issueType: string,
+  role: HierarchyRole,
   epicKey: string,
   fields: ResolvedFieldMapping,
 ): IssueRecord {
@@ -290,7 +441,8 @@ function baseRecord(
   return {
     issueKey: issue.key,
     issueId: BigInt(issue.id),
-    issueType,
+    issueType: normalizeIssueTypeName(f, role),
+    resolvedRole: role,
     parentKey: parentKeyOf(f),
     // Bản thân Epic có `epicKey` trỏ về chính nó — nhờ vậy mọi truy vấn theo
     // Epic chỉ cần một điều kiện, không phải `OR issue_key = ...`.

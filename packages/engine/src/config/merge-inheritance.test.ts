@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ConfigPayload } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE, type ConfigPayload, type HierarchyProfile } from '@app/shared';
 import {
   mergeInheritance,
   validateConfigPayload,
@@ -39,6 +39,7 @@ describe('kế thừa cấu hình theo project', () => {
       phaseDefinitions: true,
       matchRules: true,
       signboardColumns: true,
+      hierarchyProfile: true,
     });
   });
 
@@ -228,5 +229,151 @@ describe('kiểm tra hợp lệ trước khi lưu', () => {
       }),
     );
     expect(issues.some((i) => i.code === 'DUPLICATE_TASK_CODE')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hierarchy Profile — cấu trúc dự án linh hoạt
+// ---------------------------------------------------------------------------
+
+const TWO_TIER: HierarchyProfile = {
+  levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+  phaseSource: { type: 'SELF_TITLE_SLOT', ref: 'phase' },
+  signboard: {
+    row: { source: 'TITLE_SLOT', ref: 'function' },
+    column: { source: 'TITLE_SLOT', ref: 'task' },
+  },
+};
+
+describe('kế thừa Hierarchy Profile', () => {
+  it('không ai khai thì dùng profile mặc định 3 tầng, inherited = true', () => {
+    const eff = mergeInheritance(GLOBAL, null, V);
+    expect(eff.hierarchyProfile).toEqual(DEFAULT_HIERARCHY_PROFILE);
+    expect(eff.inherited.hierarchyProfile).toBe(true);
+  });
+
+  it('bộ Mặc định khai thì project kế thừa profile đó', () => {
+    const eff = mergeInheritance(
+      { ...GLOBAL, hierarchyProfile: TWO_TIER },
+      { projectKey: 'SHOP' },
+      { globalVersion: 3, projectVersion: 1 },
+    );
+    expect(eff.hierarchyProfile).toEqual(TWO_TIER);
+    expect(eff.inherited.hierarchyProfile).toBe(true);
+  });
+
+  it('project khai thì profile của project thắng, inherited = false', () => {
+    const eff = mergeInheritance(
+      GLOBAL,
+      { projectKey: 'SHOP', hierarchyProfile: TWO_TIER },
+      { globalVersion: 3, projectVersion: 1 },
+    );
+    expect(eff.hierarchyProfile).toEqual(TWO_TIER);
+    expect(eff.inherited.hierarchyProfile).toBe(false);
+  });
+});
+
+describe('kiểm tra hợp lệ Hierarchy Profile', () => {
+  const withProfile = (profile: HierarchyProfile): ConfigPayload => ({
+    ...GLOBAL,
+    hierarchyProfile: profile,
+  });
+
+  it('profile 2 tầng + SELF_TITLE_SLOT hợp lệ', () => {
+    const issues = validateConfigPayload(withProfile(TWO_TIER));
+    expect(hasBlockingError(issues)).toBe(false);
+  });
+
+  it('vai lệch vị trí (đầu không phải ROOT) bị chặn', () => {
+    const issues = validateConfigPayload(
+      withProfile({ ...TWO_TIER, levels: [{ role: 'LEAF' }, { role: 'ROOT' }] }),
+    );
+    const err = issues.filter((i) => i.code === 'HIERARCHY_ROLE_MISMATCH');
+    expect(err.length).toBeGreaterThan(0);
+    expect(err[0]?.path).toBe('hierarchyProfile.levels[0].role');
+  });
+
+  it('GROUP_TITLE với cây 2 tầng bị chặn — không có tầng GROUP để đọc', () => {
+    const issues = validateConfigPayload(
+      withProfile({ ...TWO_TIER, phaseSource: { type: 'GROUP_TITLE' } }),
+    );
+    expect(issues.some((i) => i.code === 'PHASE_SOURCE_NEEDS_GROUP')).toBe(true);
+  });
+
+  it('SELF_TITLE_SLOT với tên ô lạ bị chặn', () => {
+    const issues = validateConfigPayload(
+      withProfile({ ...TWO_TIER, phaseSource: { type: 'SELF_TITLE_SLOT', ref: 'sprint' } }),
+    );
+    expect(issues.some((i) => i.code === 'PHASE_SLOT_UNKNOWN')).toBe(true);
+  });
+
+  it('SELF_TITLE_SLOT cảnh báo khi mẫu Sub-task không chứa ô đó', () => {
+    const issues = validateConfigPayload({
+      ...GLOBAL,
+      subtaskPatterns: [{ patternText: '[{function}]_{task}', sortOrder: 1 }],
+      hierarchyProfile: TWO_TIER,
+    });
+    const w = issues.find((i) => i.code === 'PHASE_SLOT_NOT_IN_PATTERN');
+    expect(w?.level).toBe('WARNING');
+    expect(hasBlockingError(issues)).toBe(false);
+  });
+
+  it('FIELD thiếu tên field bị chặn', () => {
+    const issues = validateConfigPayload(
+      withProfile({ ...TWO_TIER, phaseSource: { type: 'FIELD' } }),
+    );
+    expect(issues.some((i) => i.code === 'PHASE_FIELD_REQUIRED')).toBe(true);
+  });
+
+  it('FIXED trỏ tới Phase không có trong danh sách bị chặn', () => {
+    const issues = validateConfigPayload(
+      withProfile({ ...TWO_TIER, phaseSource: { type: 'FIXED', ref: 'MIGRATION' } }),
+    );
+    expect(issues.some((i) => i.code === 'PHASE_FIXED_CODE_UNDEFINED')).toBe(true);
+  });
+
+  it('FIXED trỏ tới Phase có thật thì hợp lệ', () => {
+    const issues = validateConfigPayload(
+      withProfile({ ...TWO_TIER, phaseSource: { type: 'FIXED', ref: 'DESIGN' } }),
+    );
+    expect(hasBlockingError(issues)).toBe(false);
+  });
+
+  it('GROUP_TITLE với groupLevel ra ngoài dải tầng GROUP bị chặn', () => {
+    const issues = validateConfigPayload(
+      withProfile({
+        levels: [{ role: 'ROOT' }, { role: 'GROUP' }, { role: 'LEAF' }],
+        phaseSource: { type: 'GROUP_TITLE', groupLevel: 2 },
+        signboard: TWO_TIER.signboard,
+      }),
+    );
+    expect(issues.some((i) => i.code === 'PHASE_GROUP_LEVEL_OUT_OF_RANGE')).toBe(true);
+  });
+
+  it('hàng Signboard trỏ tới ô tiêu đề lạ bị chặn', () => {
+    const issues = validateConfigPayload(
+      withProfile({
+        ...TWO_TIER,
+        signboard: {
+          row: { source: 'TITLE_SLOT', ref: 'assignee' },
+          column: { source: 'TITLE_SLOT', ref: 'task' },
+        },
+      }),
+    );
+    const err = issues.find((i) => i.code === 'SB_DIMENSION_SLOT_UNKNOWN');
+    expect(err?.path).toBe('hierarchyProfile.signboard.row.ref');
+  });
+
+  it('hàng/cột Signboard lấy từ FIELD thì không cần là ô tiêu đề', () => {
+    const issues = validateConfigPayload(
+      withProfile({
+        ...TWO_TIER,
+        signboard: {
+          row: { source: 'FIELD', ref: 'components' },
+          column: { source: 'FIELD', ref: 'labels' },
+        },
+      }),
+    );
+    expect(hasBlockingError(issues)).toBe(false);
   });
 });

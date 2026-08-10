@@ -59,7 +59,7 @@ export async function loadExplainBundle(
       `SELECT issue_key, summary, phase_code, original_estimate_s AS original_estimate_seconds,
               jira_created_at AS created_at, removed_at, wbs_start_date, wbs_end_date
          FROM jira_issue
-        WHERE epic_key = $1 AND issue_type = 'SUBTASK'`,
+        WHERE epic_key = $1 AND resolved_role = 'LEAF'`,
       epicKey,
     ),
     prisma.$queryRawUnsafe<ChangelogRow[]>(
@@ -67,7 +67,7 @@ export async function loadExplainBundle(
               c.changed_at AS created_at, c.author_id AS author
          FROM issue_changelog_event c
          JOIN jira_issue i ON i.issue_key = c.issue_key
-        WHERE i.epic_key = $1 AND i.issue_type = 'SUBTASK'
+        WHERE i.epic_key = $1 AND i.resolved_role = 'LEAF'
         ORDER BY c.changed_at ASC`,
       epicKey,
     ),
@@ -75,7 +75,7 @@ export async function loadExplainBundle(
       `SELECT w.worklog_id, w.issue_key, w.time_spent_s AS time_spent_seconds, w.started_at, w.is_deleted
          FROM worklog_entry w
          JOIN jira_issue i ON i.issue_key = w.issue_key
-        WHERE i.epic_key = $1 AND i.issue_type = 'SUBTASK'
+        WHERE i.epic_key = $1 AND i.resolved_role = 'LEAF'
         ORDER BY w.started_at ASC`,
       epicKey,
     ),
@@ -169,7 +169,7 @@ export async function loadHealthRatios(
             COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
             COUNT(*) FILTER (WHERE sb_parse_status <> 'OK')::bigint AS unparsed
        FROM jira_issue
-      WHERE epic_key = $1 AND issue_type = 'SUBTASK' AND removed_at IS NULL`,
+      WHERE epic_key = $1 AND resolved_role = 'LEAF' AND removed_at IS NULL`,
     epicKey,
   );
 

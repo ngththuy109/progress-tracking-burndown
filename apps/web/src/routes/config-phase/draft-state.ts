@@ -89,6 +89,7 @@ export const EMPTY_DRAFT: DraftState = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    hierarchyProfile: false,
   },
 };
 
@@ -100,6 +101,9 @@ function payloadOf(config: EffectiveConfigResponse): ConfigPayload {
     phaseDefinitions: config.phaseDefinitions,
     matchRules: config.matchRules,
     signboardColumns: config.signboardColumns,
+    // Đang KẾ THỪA profile thì bản nháp giữ `null` (chưa khai) — lưu lại không
+    // vô tình biến bản kế thừa thành bản khai riêng của project.
+    hierarchyProfile: config.inherited.hierarchyProfile ? null : config.hierarchyProfile,
   };
 }
 

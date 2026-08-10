@@ -1,4 +1,12 @@
-import type { ConfigPayload, EffectiveConfig, ValidationIssue } from '@app/shared';
+import {
+  resolveHierarchyProfile,
+  roleOfLevel,
+  TITLE_SLOTS,
+  type ConfigPayload,
+  type EffectiveConfig,
+  type HierarchyProfile,
+  type ValidationIssue,
+} from '@app/shared';
 // Nguồn DUY NHẤT của giới hạn độ dài regex. Khai lại ở đây sẽ có ngày hai chỗ
 // lệch nhau: kiểm tra lúc lưu cho qua mà lúc chạy lại từ chối.
 import { MAX_REGEX_LENGTH } from '../parser/safe-regex.js';
@@ -34,6 +42,13 @@ export function mergeInheritance(
   const matchRules = pick('matchRules');
   const signboardColumns = pick('signboardColumns');
 
+  // Profile là MỘT object chứ không phải mảng: project khai (khác null) thì
+  // thắng, không khai thì lấy của Mặc định, cả hai cùng bỏ trống thì rơi về
+  // DEFAULT_HIERARCHY_PROFILE — nhờ vậy `EffectiveConfig.hierarchyProfile`
+  // không bao giờ null và đường chạy không phải tự vệ.
+  const ownProfile = project?.hierarchyProfile ?? null;
+  const hierarchyProfile = resolveHierarchyProfile(ownProfile ?? global.hierarchyProfile);
+
   return {
     projectKey: project?.projectKey ?? null,
     globalVersion: versions.globalVersion,
@@ -47,6 +62,7 @@ export function mergeInheritance(
     phaseDefinitions: phaseDefinitions.value,
     matchRules: matchRules.value,
     signboardColumns: signboardColumns.value,
+    hierarchyProfile,
 
     inherited: {
       titlePatterns: titlePatterns.inherited,
@@ -54,6 +70,7 @@ export function mergeInheritance(
       phaseDefinitions: phaseDefinitions.inherited,
       matchRules: matchRules.inherited,
       signboardColumns: signboardColumns.inherited,
+      hierarchyProfile: ownProfile === null,
     },
   };
 }
@@ -158,6 +175,10 @@ export function validateConfigPayload(payload: ConfigPayload): ValidationIssue[]
     seenTask.add(c.taskCode);
   });
 
+  if (payload.hierarchyProfile) {
+    issues.push(...validateHierarchyProfile(payload.hierarchyProfile, payload));
+  }
+
   // --- Cảnh báo, vẫn cho lưu ---
   const byKeyword = new Map<string, Set<string>>();
   for (const r of payload.matchRules) {
@@ -175,6 +196,130 @@ export function validateConfigPayload(payload: ConfigPayload): ValidationIssue[]
       });
     }
   }
+
+  return issues;
+}
+
+/**
+ * Kiểm tra Hierarchy Profile — chỉ chạy khi payload CÓ khai profile (null =
+ * dùng bộ mặc định 3 tầng, khỏi kiểm tra).
+ *
+ * Nguyên tắc như phần còn lại của file: ERROR khi cấu hình chắc chắn không chạy
+ * được, WARNING khi chạy được nhưng dễ là nhầm lẫn.
+ */
+export function validateHierarchyProfile(
+  profile: HierarchyProfile,
+  payload: ConfigPayload,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const err = (code: string, message: string, path: string) =>
+    issues.push({ level: 'ERROR', code, message, path });
+
+  // Vai phải khớp vị trí: đầu ROOT, cuối LEAF, giữa GROUP. Trường `role` chỉ để
+  // người đọc config khỏi nhớ quy ước — lệch nhau là gõ nhầm, phải chặn.
+  profile.levels.forEach((level, i) => {
+    const expected = roleOfLevel(profile, i);
+    if (level.role !== expected) {
+      err(
+        'HIERARCHY_ROLE_MISMATCH',
+        `Level ${i + 1} is declared as ${level.role}, but by its position it must be ${expected} ` +
+          `(first level = ROOT, last = LEAF, in between = GROUP).`,
+        `hierarchyProfile.levels[${i}].role`,
+      );
+    }
+  });
+
+  const { phaseSource } = profile;
+  const hasGroup = profile.levels.length >= 3;
+
+  switch (phaseSource.type) {
+    case 'GROUP_TITLE': {
+      if (!hasGroup) {
+        err(
+          'PHASE_SOURCE_NEEDS_GROUP',
+          'Phase source GROUP_TITLE reads the Phase from a middle (GROUP) level, ' +
+            'but this profile has only 2 levels. Use SELF_TITLE_SLOT, FIELD or FIXED instead.',
+          'hierarchyProfile.phaseSource.type',
+        );
+      }
+      const g = phaseSource.groupLevel;
+      if (g !== undefined && (g < 1 || g > profile.levels.length - 2)) {
+        err(
+          'PHASE_GROUP_LEVEL_OUT_OF_RANGE',
+          `groupLevel ${g} does not point at a GROUP level ` +
+            `(valid range: 1..${profile.levels.length - 2}).`,
+          'hierarchyProfile.phaseSource.groupLevel',
+        );
+      }
+      break;
+    }
+    case 'SELF_TITLE_SLOT': {
+      const slot = phaseSource.ref ?? 'phase';
+      if (!(TITLE_SLOTS as readonly string[]).includes(slot)) {
+        err(
+          'PHASE_SLOT_UNKNOWN',
+          `"${slot}" is not a Sub-task title slot (valid: ${TITLE_SLOTS.join(', ')}).`,
+          'hierarchyProfile.phaseSource.ref',
+        );
+      } else if (
+        payload.subtaskPatterns.length > 0 &&
+        !payload.subtaskPatterns.some((p) => p.patternText.includes(`{${slot}}`))
+      ) {
+        // Cảnh báo chứ không chặn: mẫu có thể đang kế thừa từ bộ Mặc định và
+        // phần khai ở đây trống — lúc đó không nhìn thấy mẫu thật để so.
+        issues.push({
+          level: 'WARNING',
+          code: 'PHASE_SLOT_NOT_IN_PATTERN',
+          message:
+            `Phase is read from the {${slot}} slot, but none of the declared Sub-task ` +
+            `title patterns contain {${slot}} — every leaf would fall into UNCLASSIFIED.`,
+          path: 'hierarchyProfile.phaseSource.ref',
+        });
+      }
+      break;
+    }
+    case 'FIELD': {
+      if (!phaseSource.ref) {
+        err(
+          'PHASE_FIELD_REQUIRED',
+          'Phase source FIELD needs the Jira field to read (e.g. labels, components, customfield_10123).',
+          'hierarchyProfile.phaseSource.ref',
+        );
+      }
+      break;
+    }
+    case 'FIXED': {
+      if (!phaseSource.ref) {
+        err(
+          'PHASE_FIXED_CODE_REQUIRED',
+          'Phase source FIXED needs a Phase code to assign to every leaf.',
+          'hierarchyProfile.phaseSource.ref',
+        );
+      } else if (
+        payload.phaseDefinitions.length > 0 &&
+        !payload.phaseDefinitions.some((p) => p.phaseCode === phaseSource.ref)
+      ) {
+        err(
+          'PHASE_FIXED_CODE_UNDEFINED',
+          `Phase code "${phaseSource.ref}" is not in the Phase list.`,
+          'hierarchyProfile.phaseSource.ref',
+        );
+      }
+      break;
+    }
+  }
+
+  const checkDimension = (dim: { source: string; ref: string }, path: string) => {
+    if (dim.source === 'TITLE_SLOT' && !(TITLE_SLOTS as readonly string[]).includes(dim.ref)) {
+      err(
+        'SB_DIMENSION_SLOT_UNKNOWN',
+        `"${dim.ref}" is not a Sub-task title slot (valid: ${TITLE_SLOTS.join(', ')}).`,
+        `${path}.ref`,
+      );
+    }
+  };
+  checkDimension(profile.signboard.row, 'hierarchyProfile.signboard.row');
+  checkDimension(profile.signboard.column, 'hierarchyProfile.signboard.column');
 
   return issues;
 }

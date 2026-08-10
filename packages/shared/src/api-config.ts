@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { configPayloadSchema, matchRuleSchema } from './phase-config.js';
+import { hierarchyProfileSchema } from './hierarchy.js';
 
 /** So kết quả phân loại của cấu hình nháp với `phase_code` đang lưu. */
 export const PREVIEW_ROW_STATUS = ['UNCHANGED', 'CHANGED', 'STILL_UNCLASSIFIED'] as const;
@@ -137,6 +138,7 @@ export const inheritFlagsSchema = z.object({
   phaseDefinitions: z.boolean(),
   matchRules: z.boolean(),
   signboardColumns: z.boolean(),
+  hierarchyProfile: z.boolean(),
 });
 export type InheritFlags = z.infer<typeof inheritFlagsSchema>;
 
@@ -147,10 +149,14 @@ export const INHERITABLE_PARTS = [
   'phaseDefinitions',
   'matchRules',
   'signboardColumns',
+  'hierarchyProfile',
 ] as const;
 export type InheritablePartKey = (typeof INHERITABLE_PARTS)[number];
 
 export const effectiveConfigSchema = configPayloadSchema.extend({
+  // Sau khi gộp kế thừa thì profile LUÔN có (mặc định = 3 tầng), khác payload
+  // lúc lưu — xem `EffectiveConfig` ở phase-config.ts.
+  hierarchyProfile: hierarchyProfileSchema,
   projectKey: z.string().nullable(),
   globalVersion: z.number().int(),
   projectVersion: z.number().int().nullable(),

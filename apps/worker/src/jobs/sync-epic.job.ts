@@ -1,6 +1,6 @@
 import type { EffectiveConfig, TrackedEpicStatus } from '@app/shared';
 import type { JiraClient, ResolvedFieldMapping } from '@app/jira';
-import { fetchEpicTree, fetchHistory, skewedWatermark } from '../pipeline/fetch-epic-tree.js';
+import { fetchIssueTree, fetchHistory, skewedWatermark } from '../pipeline/fetch-epic-tree.js';
 import {
   buildRecords,
   hasRetroLog,
@@ -140,12 +140,18 @@ export async function syncEpic(
   try {
     const since = rereadAll ? null : skewedWatermark(state.lastSyncedAt);
 
-    // --- GIAI ĐOẠN 1: cây issue, đúng 2 lần gọi search ---
-    const tree = await fetchEpicTree(deps.jira, { epicKey, fields: deps.fields, since });
+    // --- GIAI ĐOẠN 1: cây issue — số lần search theo số tầng của profile
+    // (3 tầng mặc định: đúng 2 lần như trước) ---
+    const tree = await fetchIssueTree(deps.jira, {
+      epicKey,
+      fields: deps.fields,
+      since,
+      profile: deps.config.hierarchyProfile,
+    });
 
     // --- GIAI ĐOẠN 2: worklog + changelog song song ---
-    // Chỉ Task và Sub-task mới có worklog đáng kể; bản thân Epic thì không.
-    const historyTargets = [...tree.tasks, ...tree.subtasks];
+    // Chỉ GROUP và LEAF mới có worklog đáng kể; bản thân root thì không.
+    const historyTargets = [...tree.groupLevels.flat(), ...tree.leaves];
     const idToKey = new Map(historyTargets.map((i) => [i.id, i.key]));
     // Issue có thể đã đồng bộ từ lần trước và lần này không đổi — vẫn cần
     // `issueId` của chúng để nhận diện worklog lấy theo lô.

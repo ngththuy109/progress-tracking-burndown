@@ -47,7 +47,7 @@ export function createPhaseSubtaskReadPort(prisma: PrismaClient): PhaseSubtaskRe
         `SELECT issue_key, summary, parent_key, phase_code, status_category,
                 original_estimate_s, wbs_start_date, wbs_end_date, function_name, task_type
            FROM jira_issue
-          WHERE epic_key = $1 AND issue_type = 'SUBTASK' AND removed_at IS NULL`,
+          WHERE epic_key = $1 AND resolved_role = 'LEAF' AND removed_at IS NULL`,
         epicKey,
       );
 

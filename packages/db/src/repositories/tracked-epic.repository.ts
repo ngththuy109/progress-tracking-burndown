@@ -155,7 +155,7 @@ export async function listWithHealth(
     where: { epicKey: { in: keys }, removedAt: null },
     select: {
       epicKey: true,
-      issueType: true,
+      resolvedRole: true,
       phaseCode: true,
       originalEstimateS: true,
       wbsStartDate: true,
@@ -172,10 +172,12 @@ export async function listWithHealth(
     const h = health.get(i.epicKey ?? '');
     if (!h) continue;
 
-    if (i.issueType === 'TASK') {
+    // Đếm theo VAI (Hierarchy Profile), không theo issue_type: dự án 2 tầng
+    // không có GROUP nào và LEAF của nó là Task — đếm theo type sẽ lệch hết.
+    if (i.resolvedRole === 'GROUP') {
       h.phaseCount += 1;
       if ((i.phaseCode ?? UNCLASSIFIED_PHASE) === UNCLASSIFIED_PHASE) h.unclassifiedTaskCount += 1;
-    } else if (i.issueType === 'SUBTASK') {
+    } else if (i.resolvedRole === 'LEAF') {
       h.subtaskCount += 1;
       h.totalOriginalS += i.originalEstimateS;
       // Thiếu MỘT trong hai ngày đã là không so sánh được sớm/trễ — đếm là
@@ -215,7 +217,7 @@ export async function listMissingDates(
   const rows = await prisma.jiraIssue.findMany({
     where: {
       epicKey,
-      issueType: 'SUBTASK',
+      resolvedRole: 'LEAF',
       removedAt: null,
       OR: [{ wbsStartDate: null }, { wbsEndDate: null }],
     },

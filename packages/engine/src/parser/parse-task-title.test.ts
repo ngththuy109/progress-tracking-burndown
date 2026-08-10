@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ConfigPayload, EffectiveConfig } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE, type ConfigPayload, type EffectiveConfig } from '@app/shared';
 import { normalize } from './normalize.js';
 import { compilePattern, PatternCompileError } from './compile-pattern.js';
 import { SafeRegexRunner, MAX_REGEX_LENGTH } from './safe-regex.js';
@@ -30,6 +30,7 @@ const BASE: ConfigPayload = {
 const cfg = (over: Partial<ConfigPayload> = {}): EffectiveConfig => ({
   ...BASE,
   ...over,
+  hierarchyProfile: over.hierarchyProfile ?? DEFAULT_HIERARCHY_PROFILE,
   projectKey: null,
   globalVersion: 1,
   projectVersion: null,
@@ -39,6 +40,7 @@ const cfg = (over: Partial<ConfigPayload> = {}): EffectiveConfig => ({
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    hierarchyProfile: true,
   },
 });
 

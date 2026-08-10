@@ -11,6 +11,8 @@ export interface IssueUpsertRow {
   issueKey: string;
   issueId: bigint;
   issueType: string;
+  /** Vai theo Hierarchy Profile: ROOT | GROUP | LEAF. */
+  resolvedRole: string;
   parentKey: string | null;
   epicKey: string | null;
   summary: string;
@@ -47,13 +49,20 @@ export async function upsertIssues(
 ): Promise<void> {
   if (rows.length === 0) return;
 
-  const order = { EPIC: 0, TASK: 1, SUBTASK: 2 } as Record<string, number>;
-  const sorted = [...rows].sort((a, b) => (order[a.issueType] ?? 3) - (order[b.issueType] ?? 3));
+  // Sắp theo VAI chứ không theo issue_type — dự án 2 tầng có LEAF là Task.
+  // Sort ổn định của JS giữ nguyên thứ tự tương đối trong cùng vai, nên cây
+  // nhiều tầng GROUP vẫn đúng "cha trước con" miễn caller đưa vào theo tầng
+  // (buildRecords đưa đúng thứ tự đó).
+  const order = { ROOT: 0, GROUP: 1, LEAF: 2 } as Record<string, number>;
+  const sorted = [...rows].sort(
+    (a, b) => (order[a.resolvedRole] ?? 3) - (order[b.resolvedRole] ?? 3),
+  );
 
   for (const r of sorted) {
     const data = {
       issueId: r.issueId,
       issueType: r.issueType,
+      resolvedRole: r.resolvedRole,
       parentKey: r.parentKey,
       epicKey: r.epicKey,
       summary: r.summary,

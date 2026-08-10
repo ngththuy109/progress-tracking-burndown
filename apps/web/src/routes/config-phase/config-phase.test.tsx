@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useReducer, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { EffectiveConfigResponse } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE, type EffectiveConfigResponse } from '@app/shared';
 import { ConfigPhaseScreen } from './index.js';
 import { draftReducer, loadDraft, type DraftState } from './draft-state.js';
 import { indexIssues, NO_ISSUES } from './field-errors.js';
@@ -20,6 +20,7 @@ const CONFIG: EffectiveConfigResponse = {
   ],
   matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 }],
   signboardColumns: [],
+  hierarchyProfile: DEFAULT_HIERARCHY_PROFILE,
   projectKey: null,
   globalVersion: 4,
   projectVersion: null,
@@ -29,6 +30,7 @@ const CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    hierarchyProfile: true,
   },
 };
 
@@ -41,6 +43,7 @@ const PROJECT_CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    hierarchyProfile: true,
   },
 };
 
@@ -210,6 +213,7 @@ describe('ConfigPhaseScreen', () => {
       phaseDefinitions: [],
       matchRules: [],
       signboardColumns: [],
+      hierarchyProfile: DEFAULT_HIERARCHY_PROFILE,
       projectKey: null,
       globalVersion: 0,
       projectVersion: null,
@@ -219,6 +223,7 @@ describe('ConfigPhaseScreen', () => {
         phaseDefinitions: false,
         matchRules: false,
         signboardColumns: false,
+    hierarchyProfile: true,
       },
     };
     vi.stubGlobal(

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { EffectiveConfig } from '@app/shared';
+import { DEFAULT_HIERARCHY_PROFILE, type EffectiveConfig } from '@app/shared';
 import type { JiraIssue, ResolvedFieldMapping } from '@app/jira';
 import { buildRecords, type IssueRecord } from './persist-issues.js';
-import type { EpicTree } from './fetch-epic-tree.js';
+import type { IssueTree } from './fetch-epic-tree.js';
 
 /**
  * Tập trung vào MỘT tính chất: trường bóc từ tiêu đề Sub-task PHẢI được cắt cho
@@ -30,6 +30,7 @@ const CONFIG: EffectiveConfig = {
     { keyword: 'Development', matchMode: 'CONTAINS', phaseCode: 'DEVELOPMENT', matchPriority: 40 },
   ],
   signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  hierarchyProfile: DEFAULT_HIERARCHY_PROFILE,
   projectKey: null,
   globalVersion: 1,
   projectVersion: null,
@@ -39,6 +40,7 @@ const CONFIG: EffectiveConfig = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    hierarchyProfile: true,
   },
 };
 
@@ -61,10 +63,10 @@ function mkIssue(id: string, key: string, summary: string, parent?: string): Jir
 
 /** Dựng cây 1 Epic + 1 Task (Development) + các Sub-task truyền vào. */
 function build(subtasks: JiraIssue[]) {
-  const tree: EpicTree = {
-    epic: mkIssue('1000', 'PAY-100', 'Cổng thanh toán'),
-    tasks: [mkIssue('1001', 'PAY-101', '[Phase] Development', 'PAY-100')],
-    subtasks,
+  const tree: IssueTree = {
+    root: mkIssue('1000', 'PAY-100', 'Cổng thanh toán'),
+    groupLevels: [[mkIssue('1001', 'PAY-101', '[Phase] Development', 'PAY-100')]],
+    leaves: subtasks,
     liveKeys: new Set(['PAY-100', 'PAY-101', ...subtasks.map((s) => s.key)]),
   };
   return buildRecords({
@@ -156,5 +158,156 @@ describe('buildRecords — siết trường Sub-task cho vừa cột VARCHAR', (
     const stable = (r: unknown) =>
       JSON.stringify(r, (_k, v) => (typeof v === 'bigint' ? `${v}n` : v));
     expect(stable(a.issues)).toBe(stable(b.issues));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chiến lược Phase FIELD / FIXED và hàng/cột Signboard lấy từ field Jira —
+// dành cho dự án không đặt tên ticket theo mẫu.
+// ---------------------------------------------------------------------------
+
+function buildWithProfile(
+  profile: NonNullable<EffectiveConfig['hierarchyProfile']>,
+  leaves: JiraIssue[],
+) {
+  const tree: IssueTree = {
+    root: mkIssue('1000', 'OPS-1', 'Vận hành quý 2'),
+    groupLevels: [],
+    leaves,
+    liveKeys: new Set(['OPS-1', ...leaves.map((s) => s.key)]),
+  };
+  return buildRecords({
+    epicKey: 'OPS-1',
+    tree,
+    worklogsByIssue: new Map(),
+    changelogByIssue: new Map(),
+    config: { ...CONFIG, hierarchyProfile: profile },
+    fields: FIELDS,
+  });
+}
+
+const SB_TITLE = {
+  row: { source: 'TITLE_SLOT', ref: 'function' },
+  column: { source: 'TITLE_SLOT', ref: 'task' },
+} as const;
+
+describe('buildRecords — chiến lược Phase theo Hierarchy Profile', () => {
+  it('FIELD: đọc components, giá trị đầu tiên khớp luật thắng', () => {
+    const leaf = mkIssue('2001', 'OPS-10', 'Sửa dashboard', 'OPS-1');
+    leaf.fields['components'] = [{ name: 'Nội bộ' }, { name: 'Development' }];
+
+    const built = buildWithProfile(
+      {
+        levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+        phaseSource: { type: 'FIELD', ref: 'components' },
+        signboard: SB_TITLE,
+      },
+      [leaf],
+    );
+
+    const rec = bySub(built, 'OPS-10');
+    expect(rec.phaseCode).toBe('DEVELOPMENT');
+    expect(rec.rawPhaseLabel).toBe('Development');
+    expect(rec.resolvedRole).toBe('LEAF');
+  });
+
+  it('FIELD: không giá trị nào khớp thì UNCLASSIFIED, giữ giá trị thô để gợi ý luật', () => {
+    const leaf = mkIssue('2002', 'OPS-11', 'Việc lặt vặt', 'OPS-1');
+    leaf.fields['components'] = [{ name: 'Backlog chung' }];
+
+    const built = buildWithProfile(
+      {
+        levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+        phaseSource: { type: 'FIELD', ref: 'components' },
+        signboard: SB_TITLE,
+      },
+      [leaf],
+    );
+
+    const rec = bySub(built, 'OPS-11');
+    expect(rec.phaseCode).toBe('UNCLASSIFIED');
+    expect(rec.rawPhaseLabel).toBe('Backlog chung');
+  });
+
+  it('FIXED: mọi lá về cùng một Phase, tiêu đề không cần nói gì về Phase', () => {
+    const built = buildWithProfile(
+      {
+        levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+        phaseSource: { type: 'FIXED', ref: 'DEVELOPMENT' },
+        signboard: SB_TITLE,
+      },
+      [mkIssue('2003', 'OPS-12', 'Bất kỳ tiêu đề nào', 'OPS-1')],
+    );
+
+    expect(bySub(built, 'OPS-12').phaseCode).toBe('DEVELOPMENT');
+  });
+});
+
+describe('buildRecords — hàng/cột Signboard lấy từ field Jira', () => {
+  it('row FIELD (components) + column FIELD (labels): không cần tiêu đề theo mẫu', () => {
+    const leaf = mkIssue('2004', 'OPS-13', 'Tiêu đề tự do không theo mẫu', 'OPS-1');
+    leaf.fields['components'] = [{ name: 'Login Form' }];
+    leaf.fields['labels'] = ['Create'];
+
+    const built = buildWithProfile(
+      {
+        levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+        phaseSource: { type: 'FIXED', ref: 'DEVELOPMENT' },
+        signboard: {
+          row: { source: 'FIELD', ref: 'components' },
+          column: { source: 'FIELD', ref: 'labels' },
+        },
+      },
+      [leaf],
+    );
+
+    const rec = bySub(built, 'OPS-13');
+    expect(rec.functionName).toBe('Login Form');
+    expect(rec.functionKey).toBe('login form');
+    expect(rec.taskType).toBe('Create'); // khớp CHÍNH XÁC cột đã khai
+    expect(rec.sbParseStatus).toBe('OK');
+  });
+
+  it('label không khớp cột nào thì UNKNOWN_TASK_TYPE, giữ giá trị thô', () => {
+    const leaf = mkIssue('2005', 'OPS-14', 'Tự do', 'OPS-1');
+    leaf.fields['components'] = [{ name: 'Login' }];
+    leaf.fields['labels'] = ['ReviewNoiBo'];
+
+    const built = buildWithProfile(
+      {
+        levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+        phaseSource: { type: 'FIXED', ref: 'DEVELOPMENT' },
+        signboard: {
+          row: { source: 'FIELD', ref: 'components' },
+          column: { source: 'FIELD', ref: 'labels' },
+        },
+      },
+      [leaf],
+    );
+
+    const rec = bySub(built, 'OPS-14');
+    expect(rec.taskType).toBeNull();
+    expect(rec.sbTaskRaw).toBe('ReviewNoiBo');
+    expect(rec.sbParseStatus).toBe('UNKNOWN_TASK_TYPE');
+  });
+
+  it('thiếu field làm hàng thì UNPARSED — vẫn được ghi và cộng vào Burndown', () => {
+    const leaf = mkIssue('2006', 'OPS-15', 'Không có component', 'OPS-1');
+
+    const built = buildWithProfile(
+      {
+        levels: [{ role: 'ROOT' }, { role: 'LEAF' }],
+        phaseSource: { type: 'FIXED', ref: 'DEVELOPMENT' },
+        signboard: {
+          row: { source: 'FIELD', ref: 'components' },
+          column: { source: 'FIELD', ref: 'labels' },
+        },
+      },
+      [leaf],
+    );
+
+    const rec = bySub(built, 'OPS-15');
+    expect(rec.sbParseStatus).toBe('UNPARSED');
+    expect(rec.phaseCode).toBe('DEVELOPMENT'); // Burndown vẫn có nó
   });
 });

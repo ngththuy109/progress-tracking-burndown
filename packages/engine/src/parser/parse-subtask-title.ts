@@ -124,9 +124,36 @@ export class SubtaskTitleParser {
   }
 
   /**
-   * @param parentPhaseCode Phase của Task cha — NGUỒN SỰ THẬT DUY NHẤT về Phase.
+   * Suy mã Phase từ một CHUỖI THÔ (giá trị ô `{phase}`, label, component…) qua
+   * luật khớp từ khoá. Dùng cho các Hierarchy Profile lấy Phase từ chính LEAF
+   * (SELF_TITLE_SLOT / FIELD) — cùng bộ luật với đường đối chiếu PHASE_MISMATCH
+   * nên hai chỗ không bao giờ lệch nhau.
    */
-  parse(title: string, parentPhaseCode: string): SubtaskParseResult {
+  resolvePhaseText(raw: string): string {
+    return this.phaseResolver.parse(raw).phaseCode;
+  }
+
+  /**
+   * Tra một chuỗi thô thành mã cột Signboard — KHỚP CHÍNH XÁC sau chuẩn hoá,
+   * đúng luật của cột (PRD §2.9.3). Dùng khi cột lấy từ field Jira thay vì ô
+   * `{task}` của tiêu đề.
+   */
+  resolveTaskType(raw: string): string | null {
+    return this.columnByKey.get(normalize(raw)) ?? null;
+  }
+
+  /**
+   * @param parentPhaseCode Phase gán cho Sub-task — với profile mặc định là
+   *   Phase của Task cha, NGUỒN SỰ THẬT DUY NHẤT về Phase (PRD §2.9.2).
+   * @param opts.comparePhaseWithParent Tắt khi Phase KHÔNG đến từ Task cha
+   *   (profile 2 tầng): lúc đó `[phase]` trong tiêu đề chính là nguồn, đem so
+   *   với chính nó chỉ sinh cảnh báo PHASE_MISMATCH rác.
+   */
+  parse(
+    title: string,
+    parentPhaseCode: string,
+    opts?: { comparePhaseWithParent?: boolean },
+  ): SubtaskParseResult {
     const warnings: SubtaskParseWarning[] = [...this.setupWarnings];
     const haystack = tightenDelimiters(normalizePreservingCase(title));
 
@@ -143,7 +170,7 @@ export class SubtaskTitleParser {
       if (!functionName || !rawTask) continue;
 
       const sbPhaseRaw = groups['phase']?.trim() || null;
-      if (sbPhaseRaw !== null) {
+      if (sbPhaseRaw !== null && (opts?.comparePhaseWithParent ?? true)) {
         this.comparePhase(sbPhaseRaw, parentPhaseCode, title, warnings);
       }
 
