@@ -35,7 +35,8 @@ PM báo số liệu sai — đây là thứ tự kiểm tra:
 | 3 | Nếu có: đó là **nguyên nhân phổ biến nhất** | Ai đó sửa tay ô *Remaining Estimate* trên Jira; bảng hiện rõ **ai** và **lúc nào** |
 | 4 | Xem khối **Stored number differs from the recomputed one** | Có nghĩa snapshot đã cũ — bấm **Resync** ở màn hình Epic |
 | 5 | Ngày sai **cũ hơn 7 ngày** | Mức *Nhanh* chỉ dựng lại 7 ngày gần nhất. Bấm **Resync** rồi chọn mức *A specific date range* (xem quy trình 1) |
-| 6 | Vẫn không ra | Gọi Tech Lead, kèm mã Epic và ngày |
+| 6 | **Vừa đổi Phase settings** mà Signboard / biểu đồ theo Phase chưa đổi | Bấm **Resync** ở màn hình Epic, chọn mức *Toàn bộ* — mức *Nhanh* không phân loại lại Sub-task cũ (xem quy trình 6) |
+| 7 | Vẫn không ra | Gọi Tech Lead, kèm mã Epic và ngày |
 
 Đây cũng là cách trả lời rủi ro **R-07** (PM không tin số liệu): không tranh luận, mở bảng giải thích ra.
 
@@ -247,7 +248,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Ảnh hưởng.** Biểu đồ theo Phase thiếu dữ liệu. Biểu đồ tổng Epic **vẫn đúng**.
 
-**Xử lý.** Việc của PM, không phải người trực: mở màn hình **Phase settings**, xem khu *Unrecognised*, thêm luật khớp. Không cần dev.
+**Xử lý.** Việc của PM, không phải người trực: mở màn hình **Phase settings**, xem khu *Unrecognised*, thêm luật khớp. Không cần dev. Lưu xong, bấm **Resync** ở màn hình Epic, chọn mức *Toàn bộ* để Sub-task cũ được phân loại lại (xem quy trình 6).
 
 ---
 
@@ -281,7 +282,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 ---
 
-## Năm quy trình vận hành thường dùng
+## Sáu quy trình vận hành thường dùng
 
 ### 1. Dựng lại lịch sử một Epic
 
@@ -365,6 +366,16 @@ pnpm auth:grant --user ai@cty.com --role VIEWER
 - Admin **đầu tiên** cấp qua biến môi trường `AUTH_BOOTSTRAP_ADMINS` (không cần DB) — xem `.env.example`.
 - PM chỉ nhận project **đã đăng ký**; chưa có thì đăng ký trước (màn hình Projects hoặc `INSERT INTO "project"`).
 - Gỡ quyền: hạ về VIEWER bằng `pnpm auth:grant … --role VIEWER`, hoặc xoá dòng trong `app_user`.
+
+### 6. Đổi cấu hình nhận diện Phase (và làm nó có hiệu lực)
+
+Sửa luật làm trên giao diện: **Phase settings** → sửa mẫu tiêu đề / danh sách Phase / luật từ khoá → **Preview** (xem Task nào đổi phân loại và luật nào thắng) → **Confirm save**.
+
+Lưu xong, cấu hình mới **chỉ áp dụng cho các lần đồng bộ về sau** — dữ liệu ĐÃ LƯU chưa được phân loại lại. Để các màn hình phản ánh ngay: bấm **Resync** ở màn hình Epic cho từng Epic liên quan, chọn mức **Toàn bộ**.
+
+> ⚠️ **Phải là mức *Toàn bộ*, không phải *Nhanh*.** Lượt tăng dần (mức *Nhanh*, và cả job đêm) chỉ đọc lại ticket vừa đổi trên Jira: tầng Task luôn được phân loại lại, nhưng **Sub-task không đổi thì giữ nguyên `phase_code` cũ** — Signboard và biểu đồ theo Phase (xếp nhóm theo `phase_code` lưu trên từng Sub-task) trông như "config không ăn". **Chờ qua đêm không giải quyết được.** Vì sao như vậy: xem [PHASE-MAPPING.md](./PHASE-MAPPING.md).
+
+Mất ~40 giây mỗi Epic, theo dõi ở `/ops`. Thông báo *"X Epics will be recomputed"* lúc lưu là **ước tính số Epic bị ảnh hưởng**, không phải xác nhận đã tính lại — cơ chế tự động qua `dirty:epics` hiện chưa có job tiêu thụ (xem PHASE-MAPPING.md mục 7), nên Resync thủ công là đường tin cậy.
 
 ---
 
