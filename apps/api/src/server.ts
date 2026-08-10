@@ -7,10 +7,12 @@ import { registerEpicRoutes } from './routes/epics.routes.js';
 import { registerBurndownRoutes } from './routes/burndown.routes.js';
 import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
 import { registerSignboardRoutes } from './routes/signboard.routes.js';
+import { registerPhaseSubtaskRoutes } from './routes/phase-subtasks.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
 import { registerUsersRoutes } from './routes/users.routes.js';
 import { registerProjectsRoutes } from './routes/projects.routes.js';
 import { createSignboardReadPort } from './adapters/signboard.adapters.js';
+import { createPhaseSubtaskReadPort } from './adapters/phase-subtasks.adapters.js';
 import { createEpicOpsReadPort, createEpicOpsWritePort } from './adapters/epic-ops.adapters.js';
 import { createBurndownReadPort } from './adapters/burndown.adapters.js';
 import { createChartCache, type CacheRedis } from './adapters/chart-cache.js';
@@ -151,6 +153,11 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   registerEpicOpsRoutes(app, {
     reads: createEpicOpsReadPort(deps.prisma, deps.statusIdMap),
     writes: createEpicOpsWritePort(deps.prisma, deps.backfillQueue),
+    resolvePrincipal: getPrincipal,
+  });
+
+  registerPhaseSubtaskRoutes(app, {
+    reads: createPhaseSubtaskReadPort(deps.prisma),
     resolvePrincipal: getPrincipal,
   });
 

@@ -140,6 +140,9 @@ export function EpicListScreen() {
           <Link className="button" to={`/signboard?epic=${e.epicKey}`}>
             Signboard
           </Link>
+          <Link className="button" to={`/phase-subtasks?epic=${e.epicKey}`}>
+            Sub-tasks
+          </Link>
           {/* Nhãn phải đúng chữ "Resync": cả runbook lẫn màn hình Biểu đồ đều
               chỉ người dùng sang đây bằng đúng cụm từ này. */}
           <button

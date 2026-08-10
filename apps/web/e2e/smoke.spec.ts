@@ -16,6 +16,7 @@ const NAV_LABELS = [
   'Epics',
   'Burndown chart',
   'Signboard',
+  'Phase sub-tasks',
   'Signboard columns',
   'Phase settings',
   'Monitoring',
