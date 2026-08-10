@@ -182,6 +182,7 @@ export const addEpicsResponseSchema = z.object({
   skipped: z.array(z.string()),
   estimatedSeconds: z.number().int(),
 });
+export type AddEpicsResponse = z.infer<typeof addEpicsResponseSchema>;
 
 export const missingDatesResponseSchema = z.object({
   epicKey: z.string(),
