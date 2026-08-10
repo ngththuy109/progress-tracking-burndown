@@ -226,6 +226,9 @@ test('ô được tô NỀN theo trạng thái (Done đen, trễ đỏ); NO_PLAN
   // Thanh tóm tắt là chú giải: chip số đếm dùng CHUNG màu nền theo trạng thái.
   await expect(page.locator('.signboard__count[data-status="COMPLETED"]')).toBeVisible();
   await expect(page.locator('.signboard__count[data-status="DELAY_END"]')).toBeVisible();
+
+  // Ô "không có task" (ô trống, xám) cũng được ghi vào chú giải kèm số đếm.
+  await expect(page.locator('.signboard__count--empty')).toHaveText('3');
 });
 
 test('ô "chưa bắt đầu" (NYS) KHÔNG được tô nền', async ({ page }) => {

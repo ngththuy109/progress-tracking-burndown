@@ -2450,9 +2450,11 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 
 > Đây là **lớp màu để nhìn nhanh**. **Thanh tóm tắt / chú giải dùng CHUNG đúng bộ
 > màu này** (chip số đếm cùng nền với ô) — một nguồn màu duy nhất nên chú giải
-> không lệch được với bảng. Chữ trạng thái vẫn nằm trong mỗi ô và mỗi chip, nên
-> **màu không phải thứ duy nhất mang nghĩa** — người mù màu và bản in đen trắng
-> vẫn đọc được (§6.3).
+> không lệch được với bảng. Thanh tóm tắt liệt kê **cả ô "không có task" (xám)**
+> dù nó không tính vào thống kê; còn chip `NYS` để **trắng có viền** (khớp ô
+> không tô), tránh lẫn với xám của ô trống. Chữ trạng thái vẫn nằm trong mỗi ô
+> và mỗi chip, nên **màu không phải thứ duy nhất mang nghĩa** — người mù màu và
+> bản in đen trắng vẫn đọc được (§6.3).
 
 ### 6.2. Giao diện
 

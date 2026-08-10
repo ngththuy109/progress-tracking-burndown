@@ -721,18 +721,33 @@ td[data-status] .badge {
   min-width: 1.4em;
   padding: 2px 9px;
   border-radius: 999px;
+  /* Viền trong suốt sẵn để chip NYS thêm màu viền mà KHÔNG đổi kích thước. */
+  border: 1px solid transparent;
   font-size: 12px;
   font-weight: 600;
   text-align: center;
   color: #fff;
 }
+/* NYS = ô "không tô màu" (nền trắng) → chip cũng TRẮNG + viền, KHÔNG phải xám —
+   để khỏi lẫn với chip "no task" (xám) của ô trống ngay bên cạnh. */
 .signboard__count[data-status='NYS'] {
-  background: var(--tone-neutral-bg);
-  color: var(--tone-neutral);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-color: var(--border);
 }
 .signboard__count[data-status='NO_PLAN'] {
   background: var(--tone-muted-bg);
   color: var(--tone-muted);
+}
+/* Ô "không có task" (ô trống) — chip XÁM đúng bằng nền ô trống (.signboard__empty). */
+.signboard__count--empty {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral);
+}
+.signboard__legend-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* `NO_PLAN` có KẺ SỌC + biểu tượng ⚠, không chỉ đổi màu — người mù màu và bản

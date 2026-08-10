@@ -236,7 +236,12 @@ function SummaryBar({
           </button>
         );
       })}
-      <span className="muted">{summary.emptyCells} empty cells (not counted)</span>
+      {/* Ô "không có task" đã tô XÁM trên bảng → ghi vào chú giải luôn, cùng đúng
+          màu xám đó, để thanh tóm tắt phản ánh đầy đủ những gì thấy trên bảng. */}
+      <span className="signboard__legend-empty">
+        <span className="signboard__count signboard__count--empty">{summary.emptyCells}</span> No
+        task <span className="muted">(empty · not counted)</span>
+      </span>
       {filter !== null && (
         <span className="notice notice--ok" role="status">
           Filtering by <strong>{STATUS_LABEL[filter]}</strong> — other cells are dimmed, not removed.
