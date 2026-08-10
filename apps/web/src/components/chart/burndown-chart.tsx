@@ -21,6 +21,28 @@ import type { ChartMarker, ChartSeries } from '@app/shared';
 /** Màu mặc định theo thứ tự, dùng cho Phase chưa đặt màu trong cấu hình. */
 export const FALLBACK_COLORS = ['#2563eb', '#16a34a', '#b45309', '#7c3aed'] as const;
 
+/** Màu dùng khi màu cấu hình không đọc được — xám trung tính, vẫn nhìn thấy trên nền trắng. */
+const PLANNED_FALLBACK = '#9ca3af';
+
+/**
+ * Màu của đường Kế hoạch, suy ra từ màu đường Thực tế cùng Phase.
+ *
+ * Pha 55% về phía trắng: hai đường RÕ RÀNG khác màu (PM từng nhầm vì trước đây
+ * chỉ khác mỗi nét đứt), nhưng vẫn cùng tông để mắt gom được cặp Kế hoạch /
+ * Thực tế của cùng một Phase khi có nhiều Phase trên biểu đồ.
+ */
+export function plannedColorOf(actualHex: string): string {
+  const hex = /^#([0-9a-fA-F]{6})$/.exec(actualHex.trim())?.[1];
+  if (hex === undefined) return PLANNED_FALLBACK;
+
+  const rgb = parseInt(hex, 16);
+  const toward = (channel: number): number => Math.round(channel + (255 - channel) * 0.55);
+  const r = toward((rgb >> 16) & 0xff);
+  const g = toward((rgb >> 8) & 0xff);
+  const b = toward(rgb & 0xff);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 export interface BurndownChartProps {
   readonly series: readonly ChartSeries[];
   readonly markers: readonly ChartMarker[];
@@ -116,7 +138,9 @@ export function BurndownChart({
             type="monotone"
             dataKey={`${s.key}__planned`}
             name={`${s.label} · Planned`}
-            stroke={s.colorHex ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]}
+            // Màu khác đường Thực tế — chỉ khác nét đứt thôi thì hai đường dính
+            // nhau vẫn không phân biệt nổi.
+            stroke={plannedColorOf(s.colorHex ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length] ?? FALLBACK_COLORS[0])}
             strokeDasharray="6 4"
             connectNulls={false}
             dot={false}

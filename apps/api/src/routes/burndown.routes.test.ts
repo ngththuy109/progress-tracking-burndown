@@ -24,7 +24,7 @@ const CALENDAR: WorkCalendar = {
 
 const ADMIN: Principal = { userId: 'admin', role: 'ADMIN', projects: [] };
 
-function rollup(phaseCode: string, planStart: string | null, planEnd: string | null, planWorkdays: number | null): PhaseRollup {
+function rollup(phaseCode: string, planStart: string | null, planEnd: string | null, planWorkdays: number | null, totalOriginalS = 0): PhaseRollup {
   return {
     phaseCode,
     planStart,
@@ -33,7 +33,7 @@ function rollup(phaseCode: string, planStart: string | null, planEnd: string | n
     actualStart: null,
     actualEnd: null,
     actualEndIsProvisional: true,
-    totalOriginalS: 0,
+    totalOriginalS,
     subtaskCount: 0,
     missingDateCount: 0,
     warnings: [],
@@ -300,6 +300,64 @@ describe('ngày thiếu snapshot', () => {
     // Bỏ hẳn ngày sẽ làm trục thời gian co lại và biểu đồ nhìn như liền mạch.
     const { body } = await get('/api/burndown/epic/PAY-1');
     expect(body.series[0]?.points).toHaveLength(10);
+  });
+});
+
+describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () => {
+  beforeEach(() => {
+    // "Hôm nay" là 2026-03-06: snapshot mới chỉ có tới đó, kế hoạch còn chạy
+    // tới 2026-03-13. Rollup mang ước lượng thật để công thức T-16 có gì mà đốt.
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-06', 5, 144_000),
+      rollup('DEV', '2026-03-09', '2026-03-13', 5, 144_000),
+    ];
+    reads.snapshots = reads.snapshots.filter((s) => s.snapshotDate <= '2026-03-06');
+  });
+
+  it('sau snapshot cuối, đường Kế hoạch vẫn vẽ tiếp và chạm 0 đúng ngày plan_end', async () => {
+    // Đây là điều PM cần nhìn thấy: kế hoạch dự kiến kết thúc KHI NÀO. Trước
+    // đây đường Kế hoạch đứt ở hôm nay cùng chỗ với đường Thực tế.
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    const points = body.series[0]?.points ?? [];
+
+    // 2026-03-09: DESIGN đã cháy trọn 40h, DEV cháy 1/5 của 40h → còn 32h.
+    expect(points.find((p) => p.date === '2026-03-09')?.plannedRemainingHours).toBe(32);
+    expect(points.find((p) => p.date === '2026-03-13')?.plannedRemainingHours).toBe(0);
+  });
+
+  it('đường Thực tế thì KHÔNG chiếu tiếp — tương lai chưa xảy ra', async () => {
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    const future = body.series[0]?.points.find((p) => p.date === '2026-03-13');
+
+    expect(future?.actualRemainingHours).toBeNull();
+    expect(future?.varianceHours).toBeNull();
+  });
+
+  it('chế độ một Phase chưa có snapshot nào vẫn vẽ trọn đường Kế hoạch của Phase đó', async () => {
+    // DEV bắt đầu 2026-03-09, hoàn toàn trong tương lai: không một snapshot nào
+    // trong khoảng. Cả trục chỉ có đường Kế hoạch, chiếu từ rollup của Phase.
+    const { body } = await get('/api/burndown/epic/PAY-1/phase/DEV');
+    const points = body.series[0]?.points ?? [];
+
+    expect(points).toHaveLength(5);
+    expect(points[0]?.plannedRemainingHours).toBe(32); // 40h − 8h của ngày đầu
+    expect(points[4]?.plannedRemainingHours).toBe(0);
+    expect(points.every((p) => p.actualRemainingHours === null)).toBe(true);
+  });
+
+  it('Phase thiếu dữ liệu kế hoạch thì phần chiếu tiếp vẫn là null, không đoán bừa', async () => {
+    // C-10: `planWorkdays` null (khoảng kế hoạch không có ngày làm việc nào)
+    // thì công thức T-16 bỏ qua Phase đó — không vẽ, không bịa.
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-06', 5, 144_000),
+      rollup('DEV', '2026-03-09', '2026-03-13', null, 144_000),
+    ];
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    const dev = body.series.find((s) => s.key === 'DEV');
+    const future = dev?.points.find((p) => p.date === '2026-03-13');
+
+    expect(future).toBeDefined();
+    expect(future?.plannedRemainingHours).toBeNull();
   });
 });
 

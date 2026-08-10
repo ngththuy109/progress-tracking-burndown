@@ -12,7 +12,9 @@ import {
   type PlanShiftRecord,
   type PlanShiftSummary,
   type SnapshotRow,
+  type WorkCalendar,
 } from '@app/shared';
+import { computePlannedRemaining } from '@app/engine';
 import { ApiError } from './phase-config.service.js';
 
 /**
@@ -24,6 +26,12 @@ import { ApiError } from './phase-config.service.js';
  * NGUYÊN TẮC SỐNG CÒN: API này KHÔNG BAO GIỜ tính lịch sử tại chỗ (PRD §9.1).
  * Đó chính là lý do đạt được mốc p95 ≤ 800ms. Thấy mình đang gọi tới engine
  * dựng lịch sử là đã đi sai hướng.
+ *
+ * NGOẠI LỆ DUY NHẤT: phần đường Kế hoạch SAU ngày snapshot cuối cùng. Tương lai
+ * chưa có snapshot nào để đọc, nhưng đường Kế hoạch phải vẽ tới hết `plan_end`
+ * để PM nhìn thấy kế hoạch dự kiến kết thúc khi nào. `computePlannedRemaining`
+ * là hàm thuần trên rollup đã nạp sẵn — không phải engine dựng lịch sử, không
+ * đụng tới changelog hay database.
  */
 
 const SECONDS_PER_HOUR = 3600;
@@ -46,6 +54,8 @@ export interface BuildChartArgs {
   readonly snapshots: readonly SnapshotRow[];
   readonly rollups: readonly PhaseRollup[];
   readonly planShifts: readonly PlanShiftRecord[];
+  /** Lịch làm việc của Epic — cần cho phần đường Kế hoạch sau snapshot cuối. */
+  readonly calendar: WorkCalendar;
   /** Chỉ có nghĩa với chế độ `PHASE` và `COMPARE`. */
   readonly phaseCodes?: readonly string[];
   readonly labels?: Readonly<Record<string, { label: string; colorHex: string | null }>>;
@@ -56,20 +66,31 @@ export interface BuildChartArgs {
 export function buildChart(args: BuildChartArgs): BurndownResponse {
   const byDate = new Map(args.snapshots.map((s) => [s.snapshotDate, s]));
 
+  // Bối cảnh cho phần đường Kế hoạch SAU snapshot cuối cùng: từ đó tới
+  // `plan_end` chưa có snapshot nào, đường Kế hoạch được chiếu tiếp từ rollup
+  // hiện tại — nhờ vậy PM nhìn được kế hoạch dự kiến kết thúc khi nào.
+  const projection: PlanProjection = {
+    calendar: args.calendar,
+    rollups: args.rollups,
+    lastSnapshot: latestSnapshot(args.snapshots),
+  };
+
   const series =
     args.mode === 'EPIC'
       ? [
-          epicSeries(args.workdays, byDate),
+          epicSeries(args.workdays, byDate, projection),
           // KÈM luôn chuỗi số của TỪNG Phase vào cùng một phản hồi Tổng Epic.
           // Màn hình Burndown dựng ô chọn Phase TỪ CHÍNH `series` này và đổi
           // Phase KHÔNG gọi lại API (xem `use-burndown.ts`: "một lần gọi cho cả
           // Epic"). Thiếu phần này thì ở chế độ Single Phase / Compare ô chọn
           // trống trơn — PM không có Phase nào để bấm.
           ...distinctPhaseCodes(args.rollups).map((code) =>
-            phaseSeries(code, args.workdays, byDate, args.labels),
+            phaseSeries(code, args.workdays, byDate, args.labels, projection),
           ),
         ]
-      : (args.phaseCodes ?? []).map((code) => phaseSeries(code, args.workdays, byDate, args.labels));
+      : (args.phaseCodes ?? []).map((code) =>
+          phaseSeries(code, args.workdays, byDate, args.labels, projection),
+        );
 
   return {
     epicKey: args.epicKey,
@@ -116,9 +137,37 @@ function point(date: DateOnly, planned: number | null, actual: number | null): C
   };
 }
 
+/**
+ * Bối cảnh chiếu tiếp đường Kế hoạch cho những ngày SAU snapshot cuối cùng.
+ *
+ * Đường Thực tế dừng ở hôm nay là đúng — tương lai chưa xảy ra. Nhưng đường Kế
+ * hoạch mà cũng dừng theo thì PM không nhìn thấy kế hoạch dự kiến kết thúc khi
+ * nào. Phần sau snapshot cuối được tính từ rollup hiện tại bằng đúng công thức
+ * T-16 mà worker dùng khi dựng snapshot, nên nối liền mạch với điểm cuối.
+ */
+interface PlanProjection {
+  readonly calendar: WorkCalendar;
+  readonly rollups: readonly PhaseRollup[];
+  readonly lastSnapshot: SnapshotRow | null;
+}
+
+function latestSnapshot(snapshots: readonly SnapshotRow[]): SnapshotRow | null {
+  let latest: SnapshotRow | null = null;
+  for (const s of snapshots) {
+    if (latest === null || s.snapshotDate > latest.snapshotDate) latest = s;
+  }
+  return latest;
+}
+
+/** Ngày này đã có snapshot chưa? Chưa có mà vẫn nằm TRƯỚC snapshot cuối là lỗ thủng thật. */
+function isAfterLastSnapshot(date: DateOnly, projection: PlanProjection): boolean {
+  return projection.lastSnapshot === null || date > projection.lastSnapshot.snapshotDate;
+}
+
 function epicSeries(
   workdays: readonly DateOnly[],
   byDate: ReadonlyMap<string, SnapshotRow>,
+  projection: PlanProjection,
 ): ChartSeries {
   return {
     key: 'EPIC',
@@ -126,11 +175,21 @@ function epicSeries(
     colorHex: null,
     points: workdays.map((date) => {
       const snap = byDate.get(date);
-      // Ngày thiếu snapshot trả `null` — LỖ THỦNG NHÌN THẤY ĐƯỢC. Nối tắt hai
-      // điểm bên cạnh trông đẹp hơn nhưng là bịa ra một tiến độ không có thật.
-      return snap === undefined
-        ? point(date, null, null)
-        : point(date, snap.plannedRemainingS, snap.actualRemainingS);
+      if (snap !== undefined) return point(date, snap.plannedRemainingS, snap.actualRemainingS);
+
+      // Ngày thiếu snapshot GIỮA lịch sử trả `null` — LỖ THỦNG NHÌN THẤY ĐƯỢC.
+      // Nối tắt hai điểm bên cạnh trông đẹp hơn nhưng là bịa ra một tiến độ
+      // không có thật.
+      if (!isAfterLastSnapshot(date, projection)) return point(date, null, null);
+
+      // Sau snapshot cuối: chiếu tiếp đường Kế hoạch, đường Thực tế vẫn `null`.
+      // Phạm vi lấy theo snapshot cuối để nối liền mạch với điểm đã vẽ; Epic
+      // chưa có snapshot nào thì lấy tổng ước lượng từ rollup.
+      const scopeS =
+        projection.lastSnapshot?.totalScopeS ??
+        projection.rollups.reduce((sum, r) => sum + r.totalOriginalS, 0);
+      const planned = computePlannedRemaining(projection.rollups, scopeS, date, projection.calendar);
+      return point(date, planned.seconds, null);
     }),
   };
 }
@@ -140,21 +199,35 @@ function phaseSeries(
   workdays: readonly DateOnly[],
   byDate: ReadonlyMap<string, SnapshotRow>,
   labels: BuildChartArgs['labels'],
+  projection: PlanProjection,
 ): ChartSeries {
+  const rollup = projection.rollups.find((r) => r.phaseCode === phaseCode) ?? null;
+
   return {
     key: phaseCode,
     label: labels?.[phaseCode]?.label ?? phaseCode,
     colorHex: labels?.[phaseCode]?.colorHex ?? null,
     points: workdays.map((date) => {
       const snap = byDate.get(date);
-      if (snap === undefined) return point(date, null, null);
+      if (snap !== undefined) {
+        // Số của Phase lấy TỪ `per_phase`, không lấy số mức Epic. Phase vắng mặt
+        // trong ngày đó nghĩa là chưa có Sub-task nào — cũng là một lỗ thủng thật.
+        const p = snap.perPhase.find((x) => x.phaseCode === phaseCode);
+        return p === undefined ? point(date, null, null) : point(date, p.plannedRemainingS, p.remainingS);
+      }
 
-      // Số của Phase lấy TỪ `per_phase`, không lấy số mức Epic. Phase vắng mặt
-      // trong ngày đó nghĩa là chưa có Sub-task nào — cũng là một lỗ thủng thật.
-      const p = snap.perPhase.find((x) => x.phaseCode === phaseCode);
-      if (p === undefined) return point(date, null, null);
+      if (!isAfterLastSnapshot(date, projection) || rollup === null) return point(date, null, null);
 
-      return point(date, p.plannedRemainingS, p.remainingS);
+      // Sau snapshot cuối: mỗi Phase tự chiếu tiếp trên phạm vi của chính nó,
+      // đúng cách worker tính `per_phase.plannedRemainingS` (T-17).
+      const scopeS =
+        projection.lastSnapshot?.perPhase.find((x) => x.phaseCode === phaseCode)?.originalS ??
+        rollup.totalOriginalS;
+      const planned = computePlannedRemaining([rollup], scopeS, date, projection.calendar);
+      // Phase thiếu ngày kế hoạch → không đoán bừa (C-10), giữ nguyên `null`.
+      return planned.skippedPhases.length > 0
+        ? point(date, null, null)
+        : point(date, planned.seconds, null);
     }),
   };
 }
