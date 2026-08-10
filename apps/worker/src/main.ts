@@ -27,6 +27,17 @@ export const NIGHTLY_CRON = '1 0 * * *';
 export const WEEKLY_RECONCILE_CRON = '0 3 * * 0';
 
 /**
+ * Lịch quét set `dirty:epics` (T-18): mỗi giờ ở phút 15.
+ *
+ * Mỗi giờ chứ không phải mỗi phút — gom nhiều lần Lưu cấu hình trong giờ thành
+ * MỘT lượt backfill (R-10: tránh tính lại liên tục). Phút 15 để lượt đầu trong
+ * ngày chạy sau job đêm 00:01 chừng 15 phút, đúng cam kết E-03 ("job tính lại
+ * chạy sau job đêm 15 phút") — worklog lùi ngày mà job đêm phát hiện được nhặt
+ * ngay ở lượt này.
+ */
+export const DIRTY_SWEEP_CRON = '15 * * * *';
+
+/**
  * Hạn chót cho bước KHỞI ĐỘNG, để một phụ thuộc "treo" không giữ tiến trình ở
  * trạng thái "sống mà không làm gì" (xem `withTimeout`).
  *
@@ -237,6 +248,7 @@ async function bootstrap(): Promise<void> {
     log,
     nightlyCron: NIGHTLY_CRON,
     weeklyReconcileCron: WEEKLY_RECONCILE_CRON,
+    dirtySweepCron: DIRTY_SWEEP_CRON,
   });
 
   // Tắt sạch (PRD §9.5): đóng worker TRƯỚC (chờ job đang chạy), rồi hàng đợi,
