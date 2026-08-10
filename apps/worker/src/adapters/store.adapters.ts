@@ -44,6 +44,7 @@ import type { ReconcileReadPort } from '../jobs/reconcile-epic.job.js';
 /** Phần `ioredis` mà các cổng cần. Hẹp lại để không kéo cả ioredis vào chữ ký. */
 export interface AdapterRedis {
   sadd(key: string, ...members: string[]): Promise<number>;
+  spop(key: string, count: number): Promise<string[]>;
   scan(
     cursor: string,
     matchToken: 'MATCH',
@@ -120,6 +121,39 @@ export function createEpicStatePort(prisma: PrismaClient): EpicStatePort {
 export function createDirtyEpicQueuePort(redis: Pick<AdapterRedis, 'sadd'>): DirtyEpicQueuePort {
   return {
     add: async (epicKeys) => {
+      if (epicKeys.length === 0) return;
+      await redis.sadd(DIRTY_EPICS_KEY, ...epicKeys);
+    },
+  };
+}
+
+/** Số phần tử mỗi lệnh SPOP khi quét `dirty:epics`. */
+const SPOP_BATCH = 100;
+
+/**
+ * Cổng đọc/trả `dirty:epics` cho job quét (dirty-epics-sweep).
+ *
+ * `takeAll` dùng SPOP theo lô — lấy VÀ xoá trong một lệnh, nên key SADD thêm
+ * giữa chừng bởi tiến trình khác không bao giờ bị xoá oan (khác với
+ * SMEMBERS + DEL). Key đã pop ra thuộc trách nhiệm của job quét: đẩy hàng đợi
+ * thất bại thì phải `restore` lại.
+ */
+export function createDirtySweepStorePort(redis: Pick<AdapterRedis, 'sadd' | 'spop'>): {
+  takeAll(): Promise<readonly string[]>;
+  restore(epicKeys: readonly string[]): Promise<void>;
+} {
+  return {
+    takeAll: async () => {
+      const all: string[] = [];
+      // Vòng lặp dừng khi SPOP trả ít hơn cỡ lô — set đã cạn. Set này cỡ vài
+      // chục Epic nên thường chỉ một vòng.
+      for (;;) {
+        const batch = await redis.spop(DIRTY_EPICS_KEY, SPOP_BATCH);
+        all.push(...batch);
+        if (batch.length < SPOP_BATCH) return all;
+      }
+    },
+    restore: async (epicKeys) => {
       if (epicKeys.length === 0) return;
       await redis.sadd(DIRTY_EPICS_KEY, ...epicKeys);
     },

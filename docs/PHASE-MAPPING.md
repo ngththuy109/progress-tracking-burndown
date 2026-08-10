@@ -151,14 +151,16 @@ trên từng Sub-task** (`apps/api/src/adapters/signboard.adapters.ts`). Ghép h
 | Đường cập nhật | Thời điểm | Task re-map? | Sub-task re-map? | Signboard đúng chưa? |
 |---|---|---|---|---|
 | Ngay khi Lưu | 0 giây | ✗ | ✗ | ✗ — chưa có gì đổi |
+| **Job quét `dirty:epics`** (tự động sau khi Lưu) | **tối đa ~1 giờ** (phút 15 mỗi giờ) | ✓ | ✓ toàn bộ | **✓ hoàn chỉnh** |
 | Job đêm 00:01 (tăng dần) | tối đa ~24h | ✓ | ✗ nếu sub-task không đổi trên Jira | ✗ phần lớn vẫn cũ |
 | Resync mức *Nhanh* / *Một dải ngày* | ~4–10 giây | ✓ | ✗ (như job đêm) | ✗ |
 | **Resync mức *Toàn bộ*** `{"full":true}` | **~40 giây/Epic** | ✓ | ✓ toàn bộ | **✓ hoàn chỉnh** |
 
 > **Quy tắc vàng:**
-> - Đổi **cấu hình nhận diện Phase** ⇒ Resync mức **Toàn bộ** cho các Epic liên
->   quan (RUNBOOK quy trình 6). Chờ job đêm **không** giải quyết được — nó cũng
->   là lượt tăng dần.
+> - Đổi **cấu hình nhận diện Phase** ⇒ không cần làm gì: job quét `dirty:epics`
+>   tự backfill toàn bộ các Epic bị ảnh hưởng trong vòng một giờ (mục 7). Muốn
+>   thấy **ngay** thì Resync mức **Toàn bộ** cho các Epic liên quan (RUNBOOK quy
+>   trình 6). Riêng chờ job đêm **không** giải quyết được — nó là lượt tăng dần.
 > - Đổi **ticket** hằng ngày trên Jira ⇒ không cần làm gì (job đêm tự xử lý);
 >   muốn thấy ngay thì Resync mức *Nhanh* là đủ, vì ticket vừa đổi luôn được đọc lại.
 
@@ -173,17 +175,27 @@ chứng luật trước khi Lưu.
   cache sau khi ghi (`invalidateChartCache` trong
   `apps/worker/src/jobs/reconstruct-epic.job.ts`) → cũng thấy ngay sau khi job xong.
 
-## 7. Cơ chế tự động `dirty:epics` — hiện trạng
+## 7. Cơ chế tự động `dirty:epics` — cách hoạt động
 
 Khi Lưu cấu hình, API đẩy key các Epic bị ảnh hưởng vào Redis set `dirty:epics`
 (`apps/api/src/services/phase-config.service.ts`) và màn hình hiện *"X Epics
-will be recomputed"* — con số này là **ước tính Epic bị ảnh hưởng**, không phải
-cam kết đã chạy.
+will be recomputed"*. Pipeline đồng bộ (worklog lùi ngày — E-03) và job dựng lại
+(mất khoá — E-19) cũng ghi vào cùng set này.
 
-Theo mã hiện tại, **chưa có job nào tiêu thụ** set này (chỉ có chỗ ghi vào; job
-nhặt định kỳ được mô tả ở task card T-18/T-23 nhưng chưa được nối dây). Vì vậy
-**đừng chờ hệ thống tự tính lại** — Resync mức *Toàn bộ* thủ công là đường tin
-cậy duy nhất hiện nay.
+Job quét `dirty-epics-sweep` (`apps/worker/src/jobs/dirty-epics-sweep.job.ts`,
+nối dây ở `apps/worker/src/wire.ts`) chạy **mỗi giờ ở phút 15** (`DIRTY_SWEEP_CRON`
+trong `apps/worker/src/main.ts`): nhặt toàn bộ Epic khỏi set (SPOP), bỏ Epic đã
+gỡ khỏi sổ theo dõi, rồi đẩy mỗi Epic một job **backfill toàn bộ** (`{"full":true}`)
+lên hàng đợi `backfill`. Phải là backfill chứ không phải chỉ dựng lại snapshot:
+`phase_code` nằm trên dữ liệu thô và chỉ được gán lúc đọc Jira về (mục 5). Đẩy
+job thất bại thì Epic được trả về set để lượt sau thử lại — yêu cầu tính lại
+không bao giờ bị mất im lặng.
+
+Kết quả: sau khi Lưu Phase settings, mọi màn hình phản ánh cấu hình mới **trong
+vòng tối đa một giờ** mà không cần thao tác tay. Resync mức *Toàn bộ* thủ công
+(RUNBOOK quy trình 6) vẫn là đường đi khi cần thấy ngay lập tức. Theo dõi qua
+log: `dirty-sweep.done` (số Epic nhặt/đẩy), `dirty-sweep.enqueue-failed` (đẩy
+thất bại, đã trả về set).
 
 ## Tệp mã nguồn tham chiếu
 
@@ -199,4 +211,5 @@ cậy duy nhất hiện nay.
 | Dựng lại rollup + snapshot (giai đoạn 4–5) | `apps/worker/src/jobs/reconstruct-epic.job.ts` |
 | Signboard truy vấn theo `phase_code` của Sub-task | `apps/api/src/adapters/signboard.adapters.ts` |
 | Lưu config + đánh dấu `dirty:epics` | `apps/api/src/services/phase-config.service.ts` |
+| Quét `dirty:epics` → đẩy backfill toàn bộ | `apps/worker/src/jobs/dirty-epics-sweep.job.ts` + `apps/worker/src/wire.ts` |
 | Schema các bảng cấu hình & `jira_issue` | `packages/db/prisma/schema.prisma` |

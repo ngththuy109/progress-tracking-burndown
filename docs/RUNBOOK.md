@@ -371,11 +371,11 @@ pnpm auth:grant --user ai@cty.com --role VIEWER
 
 Sửa luật làm trên giao diện: **Phase settings** → sửa mẫu tiêu đề / danh sách Phase / luật từ khoá → **Preview** (xem Task nào đổi phân loại và luật nào thắng) → **Confirm save**.
 
-Lưu xong, cấu hình mới **chỉ áp dụng cho các lần đồng bộ về sau** — dữ liệu ĐÃ LƯU chưa được phân loại lại. Để các màn hình phản ánh ngay: bấm **Resync** ở màn hình Epic cho từng Epic liên quan, chọn mức **Toàn bộ**.
+Lưu xong, các Epic bị ảnh hưởng được đánh dấu vào `dirty:epics`; **job quét mỗi giờ (phút 15) tự đẩy backfill toàn bộ** cho từng Epic đó — `phase_code` được phân loại lại theo cấu hình mới mà không cần thao tác gì thêm. Muốn thấy kết quả **ngay** (không đợi tới lượt quét): bấm **Resync** ở màn hình Epic cho từng Epic liên quan, chọn mức **Toàn bộ**.
 
-> ⚠️ **Phải là mức *Toàn bộ*, không phải *Nhanh*.** Lượt tăng dần (mức *Nhanh*, và cả job đêm) chỉ đọc lại ticket vừa đổi trên Jira: tầng Task luôn được phân loại lại, nhưng **Sub-task không đổi thì giữ nguyên `phase_code` cũ** — Signboard và biểu đồ theo Phase (xếp nhóm theo `phase_code` lưu trên từng Sub-task) trông như "config không ăn". **Chờ qua đêm không giải quyết được.** Vì sao như vậy: xem [PHASE-MAPPING.md](./PHASE-MAPPING.md).
+> ⚠️ **Resync tay thì phải là mức *Toàn bộ*, không phải *Nhanh*.** Lượt tăng dần (mức *Nhanh*, và cả job đêm) chỉ đọc lại ticket vừa đổi trên Jira: tầng Task luôn được phân loại lại, nhưng **Sub-task không đổi thì giữ nguyên `phase_code` cũ** — Signboard và biểu đồ theo Phase (xếp nhóm theo `phase_code` lưu trên từng Sub-task) trông như "config không ăn". Vì sao như vậy: xem [PHASE-MAPPING.md](./PHASE-MAPPING.md).
 
-Mất ~40 giây mỗi Epic, theo dõi ở `/ops`. Thông báo *"X Epics will be recomputed"* lúc lưu là **ước tính số Epic bị ảnh hưởng**, không phải xác nhận đã tính lại — cơ chế tự động qua `dirty:epics` hiện chưa có job tiêu thụ (xem PHASE-MAPPING.md mục 7), nên Resync thủ công là đường tin cậy.
+Mất ~40 giây mỗi Epic, theo dõi ở `/ops`. Thông báo *"X Epics will be recomputed"* lúc lưu là số Epic đã được đánh dấu chờ quét; log của lượt quét (`dirty-sweep.done`) là chỗ xác nhận job backfill đã thật sự được đẩy (xem PHASE-MAPPING.md mục 7).
 
 ---
 

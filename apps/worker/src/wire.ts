@@ -9,6 +9,7 @@ import {
   DEFAULT_PHASE_CONFIG,
   findActiveConfigSet,
   findByKey,
+  findManyByKeys,
   getCalendar,
   listActiveEpics,
   toDateString,
@@ -40,11 +41,13 @@ import { fetchEpicTree } from './pipeline/fetch-epic-tree.js';
 import { syncEpic, type SyncEpicDeps } from './jobs/sync-epic.job.js';
 import { reconstructEpic, type ReconstructDeps } from './jobs/reconstruct-epic.job.js';
 import { reconcileEpic, type ReconcileDeps } from './jobs/reconcile-epic.job.js';
+import { sweepDirtyEpics } from './jobs/dirty-epics-sweep.job.js';
 import { handleSyncJob, type SyncJobDeps } from './jobs/handle-sync-job.js';
 import { resolveRebuildRange } from './jobs/rebuild-range.js';
 import {
   createChangelogWritePort,
   createDirtyEpicQueuePort,
+  createDirtySweepStorePort,
   createEpicStatePort,
   createIssueWritePort,
   createReconcileReadPort,
@@ -66,6 +69,9 @@ import {
 // con cho từng Epic. Chạy trên hàng đợi tương ứng, cùng bảng điều phối.
 const NIGHTLY_SWEEP = 'nightly-sweep';
 const WEEKLY_RECONCILE_SWEEP = 'weekly-reconcile-sweep';
+// Quét `dirty:epics` (PRD §2.2.7, §4.7): nhặt Epic bị đánh dấu cần tính lại
+// (đổi Phase settings, worklog lùi ngày, mất khoá) và đẩy backfill toàn bộ.
+const DIRTY_EPICS_SWEEP = 'dirty-epics-sweep';
 
 export interface WireDeps {
   readonly prisma: PrismaClient;
@@ -79,6 +85,7 @@ export interface WireDeps {
   readonly log: (event: Record<string, unknown>) => void;
   readonly nightlyCron: string;
   readonly weeklyReconcileCron: string;
+  readonly dirtySweepCron: string;
 }
 
 export interface WiredWorker {
@@ -132,6 +139,7 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
     [JOB_NAME.reconcileEpic]: (payload) => runReconcileJob(ctx, payload),
     [NIGHTLY_SWEEP]: () => runNightlySweep(ctx),
     [WEEKLY_RECONCILE_SWEEP]: () => runWeeklyReconcileSweep(ctx),
+    [DIRTY_EPICS_SWEEP]: () => runDirtyEpicsSweep(ctx),
   };
 
   // Một Worker cho mỗi hàng đợi. BullMQ tự nhân bản kết nối cho client chờ, nên
@@ -153,6 +161,11 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
     WEEKLY_RECONCILE_SWEEP,
     { pattern: deps.weeklyReconcileCron },
     { name: WEEKLY_RECONCILE_SWEEP, data: {} },
+  );
+  await queues.sync.upsertJobScheduler(
+    DIRTY_EPICS_SWEEP,
+    { pattern: deps.dirtySweepCron },
+    { name: DIRTY_EPICS_SWEEP, data: {} },
   );
 
   log({ event: 'worker.wired', queues: ['sync', 'backfill', 'reconcile'] });
@@ -319,16 +332,48 @@ async function runWeeklyReconcileSweep(ctx: JobContext): Promise<void> {
   ctx.log({ event: 'weekly-reconcile.swept', epics: epics.length });
 }
 
+/**
+ * Quét `dirty:epics` → backfill toàn bộ từng Epic bị đánh dấu.
+ *
+ * Đây là job nhặt mà PHASE-MAPPING.md mục 7 từng ghi "chưa được nối dây". Nhờ nó,
+ * Lưu Phase settings không còn cần Resync thủ công: `phase_code` được gán lại
+ * theo cấu hình mới ở lượt quét kế tiếp (tối đa một chu kỳ `dirtySweepCron`).
+ */
+async function runDirtyEpicsSweep(ctx: JobContext): Promise<void> {
+  const store = createDirtySweepStorePort(ctx.generalConn);
+  await sweepDirtyEpics({
+    ports: {
+      takeAll: () => store.takeAll(),
+      restore: (epicKeys) => store.restore(epicKeys),
+      // Sổ theo dõi đủ điều kiện là "CÓ MẶT", không phải "ACTIVE": Epic đang
+      // ERROR/PENDING vẫn đáng được backfill — chính lượt chạy bù có thể là thứ
+      // gỡ nó khỏi trạng thái lỗi.
+      trackedOf: async (epicKeys) =>
+        new Set((await findManyByKeys(ctx.prisma, epicKeys)).map((e) => e.epicKey)),
+      enqueueFullBackfill: (epicKey) => enqueueBackfill(ctx.queues, epicKey),
+    },
+    log: (e) => ctx.log(e),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Trợ giúp chung
 // ---------------------------------------------------------------------------
 
 async function enqueueBackfill(queues: QueueSet, epicKey: string): Promise<void> {
-  await queues.backfill.add(
-    JOB_NAME.backfillEpic,
-    { epicKey, full: true },
-    { jobId: jobIdFor(JOB_NAME.backfillEpic, epicKey) },
-  );
+  const jobId = jobIdFor(JOB_NAME.backfillEpic, epicKey);
+
+  // BullMQ lặng lẽ BỎ QUA `add` khi còn job trùng `jobId` — kể cả job ĐÃ XONG
+  // (removeOnComplete giữ 24 giờ) hay ĐÃ HỎNG (removeOnFail: false → giữ vĩnh
+  // viễn). Không dọn trước thì một lượt backfill tuần trước sẽ nuốt im lặng yêu
+  // cầu tính lại hôm nay. Job đang chờ/đang chạy thì giữ nguyên — trùng thật.
+  const existing = await queues.backfill.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'completed' || state === 'failed') await existing.remove();
+  }
+
+  await queues.backfill.add(JOB_NAME.backfillEpic, { epicKey, full: true }, { jobId });
 }
 
 /** Nạp cấu hình hiệu lực + lịch làm việc của một Epic. */
