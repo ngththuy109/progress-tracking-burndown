@@ -11,7 +11,14 @@ import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
+import { jiraBaseUrl } from '../../api/jira.js';
 import type { PlanConflict } from '@app/shared';
+
+/**
+ * Base URL Jira cho các link "mở ticket" trong ô. Đọc MỘT lần (biến Vite tĩnh);
+ * `''` = chưa cấu hình → ô chỉ cho copy mã, không mở thẳng sang Jira.
+ */
+const JIRA_BASE = jiraBaseUrl();
 
 /**
  * Bảng Signboard — PRD §6.
@@ -462,10 +469,17 @@ function BoardTable({
                           className={`table__td${empty ? ' signboard__empty' : ''}`}
                           data-status={tdStatus(cell, filter)}
                         >
-                          {/* ⚠ chỉ gắn ở ô LÁ. Ô Σ và Overall gộp nhiều loại
-                              task — lặp lại cảnh báo ở đó chỉ thêm nhiễu. */}
+                          {/* ⚠ và hovercard "mở/copy ticket" chỉ gắn ở ô LÁ. Ô Σ
+                              và Overall gộp nhiều loại task — lặp lại ở đó chỉ
+                              thêm nhiễu. */}
                           {cell !== undefined && (
-                            <SignboardCellView cell={cell} filter={filter} conflicts={conflicts} />
+                            <SignboardCellView
+                              cell={cell}
+                              filter={filter}
+                              conflicts={conflicts}
+                              interactive
+                              jiraBaseUrl={JIRA_BASE}
+                            />
                           )}
                         </td>
                       );

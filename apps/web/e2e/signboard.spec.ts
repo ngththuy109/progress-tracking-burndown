@@ -175,11 +175,16 @@ test('rê chuột lên ô gộp thấy danh sách từng ticket kèm trạng th�
   await installApi(page);
   await page.goto(PAGE);
 
+  // Rê vào ô task mở thẻ "mở/copy ticket": mỗi ticket một dòng, kèm trạng thái
+  // riêng để PM nhảy thẳng sang đúng cái đang trễ.
   const merged = page.locator('.cell', { hasText: '≡2' });
-  const tooltip = await merged.getAttribute('title');
+  await merged.hover();
 
-  expect(tooltip).toContain('S-2: Late start');
-  expect(tooltip).toContain('S-3: Late finish');
+  const card = page.getByRole('dialog');
+  await expect(card).toContainText('S-2');
+  await expect(card).toContainText('Late start');
+  await expect(card).toContainText('S-3');
+  await expect(card).toContainText('Late finish');
 });
 
 test('bấm thanh tóm tắt thì lọc, bấm lần nữa thì bỏ lọc', async ({ page }) => {
