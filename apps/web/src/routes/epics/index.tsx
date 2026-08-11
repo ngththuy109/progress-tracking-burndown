@@ -13,6 +13,7 @@ import {
   type BadgeTone,
   type Column,
 } from '../../components/ui/index.js';
+import { projectPath, useProjectKey } from '../../project/project-context.js';
 import { AddEpicsPanel } from './add-epics-panel.js';
 import {
   buildMissingDatesCsv,
@@ -77,6 +78,9 @@ export function lastSyncedLabel(epic: Epic): string {
 }
 
 export function EpicListScreen() {
+  // Key của dự án đang mở — mọi link nội bộ (Chart/Signboard/Sub-tasks) phải
+  // mang tiền tố `/p/<key>/` để ở lại đúng dự án.
+  const projectKey = useProjectKey();
   const query = useEpicList();
   // Số Sub-task có plan rơi vào ngày nghỉ (T-37) — một lần gọi cho cả danh
   // sách. Lỗi ở đây KHÔNG chặn màn hình: cột chỉ để trống.
@@ -209,7 +213,7 @@ export function EpicListScreen() {
         ) : (
           <Link
             className="button"
-            to={`/phase-subtasks?epic=${e.epicKey}`}
+            to={`${projectPath(projectKey, 'phase-subtasks')}?epic=${e.epicKey}`}
             title="Planned start/end dates falling on a day off. Click to see which sub-tasks."
           >
             ⚠ {count}
@@ -224,13 +228,13 @@ export function EpicListScreen() {
       align: 'right',
       render: (e) => (
         <span className="row">
-          <Link className="button" to={`/burndown?epic=${e.epicKey}`}>
+          <Link className="button" to={`${projectPath(projectKey, 'burndown')}?epic=${e.epicKey}`}>
             Chart
           </Link>
-          <Link className="button" to={`/signboard?epic=${e.epicKey}`}>
+          <Link className="button" to={`${projectPath(projectKey, 'signboard')}?epic=${e.epicKey}`}>
             Signboard
           </Link>
-          <Link className="button" to={`/phase-subtasks?epic=${e.epicKey}`}>
+          <Link className="button" to={`${projectPath(projectKey, 'phase-subtasks')}?epic=${e.epicKey}`}>
             Sub-tasks
           </Link>
           {/* Nhãn phải đúng chữ "Resync": cả runbook lẫn màn hình Biểu đồ đều

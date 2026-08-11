@@ -12,26 +12,28 @@ import {
   type UpsertUserRequest,
 } from '@app/shared';
 import { apiClient, noContent, type ApiClient } from './client.js';
-import { projectKeys } from './use-projects.js';
+import { adminProjectKeys } from './use-projects.js';
 
 /**
- * Hook cho màn hình quản lý người dùng (chỉ ADMIN dùng tới).
+ * Hook cho màn hình quản lý người dùng — `/api/admin/users`, chỉ ADMIN.
  *
- * Mọi schema lấy từ `@app/shared`; kiểm dữ liệu ngay tại biên như mọi hook khác.
+ * Mô hình mới: user chỉ còn role TOÀN CỤC (ADMIN/MEMBER) kèm `membershipCount`.
+ * Gán user vào từng dự án (PM/VIEWER) nằm ở màn Projects — mục Thành viên,
+ * KHÔNG còn ở đây.
  */
-export const userKeys = { all: ['users'] as const };
+export const userKeys = { all: ['admin', 'users'] as const };
 
-/** Đổi PM/gán project cũng làm `pmCount` của danh mục Project đổi theo. */
+/** Xoá user cũng gỡ membership → `memberCount` của danh mục Project đổi theo. */
 function invalidateUsersAndProjects(queryClient: ReturnType<typeof useQueryClient>): void {
   void queryClient.invalidateQueries({ queryKey: userKeys.all });
-  void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+  void queryClient.invalidateQueries({ queryKey: adminProjectKeys.all });
 }
 
 export function useUsers(client: ApiClient = apiClient): UseQueryResult<readonly AppUserView[], Error> {
   return useQuery({
     queryKey: userKeys.all,
     queryFn: ({ signal }) =>
-      client.get('/users', listUsersResponseSchema, { signal }).then((r) => r.users),
+      client.get('/admin/users', listUsersResponseSchema, { signal }).then((r) => r.users),
   });
 }
 
@@ -40,7 +42,7 @@ export function useUpsertUser(
 ): UseMutationResult<AppUserView, Error, UpsertUserRequest> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: UpsertUserRequest) => client.post('/users', body, appUserSchema),
+    mutationFn: (body: UpsertUserRequest) => client.post('/admin/users', body, appUserSchema),
     onSuccess: () => invalidateUsersAndProjects(queryClient),
   });
 }
@@ -51,7 +53,7 @@ export function useDeleteUser(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) =>
-      client.delete(`/users/${encodeURIComponent(userId)}`, noContent),
+      client.delete(`/admin/users/${encodeURIComponent(userId)}`, noContent),
     onSuccess: () => invalidateUsersAndProjects(queryClient),
   });
 }

@@ -153,6 +153,17 @@ async function installApi(
         body: JSON.stringify(body),
       });
 
+      // Multi-tenant: /api/me nuôi ProjectProvider — thiếu nó là bị đá về `/`.
+      if (path === '/api/me') {
+        await route.fulfill(
+          json({
+            userId: 'pm@example.com',
+            isAdmin: false,
+            projects: [{ projectKey: 'PAY', displayName: 'Payments', role: 'PM' }],
+          }),
+        );
+        return;
+      }
       if (path.endsWith('/unparsed')) {
         await route.fulfill(json(unparsedBody(over.unparsed)));
         return;
@@ -163,7 +174,8 @@ async function installApi(
         await route.fulfill(json(phasesBody(over.phases)));
         return;
       }
-      if (path.includes('/signboard/epic/')) {
+      // `/api/projects/PAY/epics/PAY-1/signboard/phase/DESIGN`
+      if (path.includes('/signboard/phase/')) {
         await route.fulfill(json(boardBody(over.board)));
         return;
       }
@@ -177,7 +189,7 @@ async function installApi(
   );
 }
 
-const PAGE = '/signboard?epic=PAY-1&phase=DESIGN';
+const PAGE = '/p/PAY/signboard?epic=PAY-1&phase=DESIGN';
 
 // ---------------------------------------------------------------------------
 
@@ -421,7 +433,7 @@ test('màn hình luôn hiện NGÀY đang dùng để tính trạng thái', asyn
 
 test('chưa chọn Epic thì hiện bộ chọn Epic active để bấm thẳng', async ({ page }) => {
   await installApi(page);
-  await page.goto('/signboard');
+  await page.goto('/p/PAY/signboard');
 
   await expect(page.getByRole('heading', { name: 'Pick an Epic for the Signboard' })).toBeVisible();
   const choice = page.getByRole('button', { name: /PAY-1/ });
@@ -437,7 +449,7 @@ test('chưa chọn Epic thì hiện bộ chọn Epic active để bấm thẳng'
 
 test('bấm Change Epic thì quay lại bộ chọn Epic', async ({ page }) => {
   await installApi(page);
-  await page.goto('/signboard?epic=PAY-1&phase=DESIGN');
+  await page.goto('/p/PAY/signboard?epic=PAY-1&phase=DESIGN');
   await expect(page.getByRole('rowheader', { name: 'Login' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Change Epic' }).click();

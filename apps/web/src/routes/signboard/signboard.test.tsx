@@ -9,6 +9,7 @@ import type {
   SignboardResponse,
   UnparsedResponse,
 } from '@app/shared';
+import { ProjectScopeProvider } from '../../project/project-context.js';
 import { SignboardScreen } from './index.js';
 
 /**
@@ -122,8 +123,11 @@ function renderScreen(): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/signboard?epic=PAY-1&phase=DESIGN']}>
-        <SignboardScreen />
+      <MemoryRouter initialEntries={['/p/PAY/signboard?epic=PAY-1&phase=DESIGN']}>
+        {/* Scope dự án cố định — thay cho route /p/:projectKey của app thật. */}
+        <ProjectScopeProvider value={{ projectKey: 'PAY', role: 'PM', isAdmin: false }}>
+          <SignboardScreen />
+        </ProjectScopeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );

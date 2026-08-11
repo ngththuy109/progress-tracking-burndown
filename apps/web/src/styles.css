@@ -103,6 +103,14 @@ code {
   font-size: 20px;
 }
 
+/* Bộ chuyển dự án (multi-tenant) — nằm giữa brand và thanh điều hướng. */
+.sidebar__project {
+  padding: 0 8px 16px;
+}
+.sidebar__project select {
+  width: 100%;
+}
+
 .nav {
   list-style: none;
   margin: 0;
@@ -348,6 +356,10 @@ code {
 }
 .epic-picker__item {
   font: inherit;
+  /* Dùng được cho cả <button> (chọn Epic) lẫn <a> (chọn dự án ở trang chủ). */
+  color: inherit;
+  text-decoration: none;
+  box-sizing: border-box;
   width: 100%;
   display: flex;
   align-items: center;

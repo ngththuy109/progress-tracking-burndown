@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { useReducer, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EffectiveConfigResponse } from '@app/shared';
+import { ProjectScopeProvider } from '../../project/project-context.js';
 import { ConfigPhaseScreen } from './index.js';
 import { draftReducer, loadDraft, type DraftState } from './draft-state.js';
 import { indexIssues, NO_ISSUES } from './field-errors.js';
@@ -163,7 +164,12 @@ function renderScreen(): void {
   // (xem `query-client.test.ts`), đó là hành vi được kiểm ở chỗ khác.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { readonly children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      {/* Scope dự án cố định — thay cho route /p/:projectKey của app thật. */}
+      <ProjectScopeProvider value={{ projectKey: 'PAY', role: 'PM', isAdmin: false }}>
+        {children}
+      </ProjectScopeProvider>
+    </QueryClientProvider>
   );
   render(<ConfigPhaseScreen />, { wrapper: Wrapper });
 }

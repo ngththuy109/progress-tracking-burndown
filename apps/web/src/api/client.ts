@@ -152,6 +152,17 @@ export function buildUrl(baseUrl: string, path: string, query?: QueryParams | un
   return `${baseUrl}${path}${qs === '' ? '' : `?${qs}`}`;
 }
 
+/**
+ * Ghép đường dẫn API THEO PHẠM VI DỰ ÁN (multi-tenant).
+ *
+ * Mọi endpoint nghiệp vụ nằm dưới `/api/projects/:projectKey/...`; helper này
+ * là NƠI DUY NHẤT ghép tiền tố đó. `projectKey` được encode phòng ký tự lạ —
+ * key hợp lệ vốn chỉ có A-Z0-9_, nhưng giá trị đến từ URL nên không tin sẵn.
+ */
+export function projectApiPath(projectKey: string, suffix: string): string {
+  return `/projects/${encodeURIComponent(projectKey)}${suffix}`;
+}
+
 // ---------------------------------------------------------------------------
 // Đọc thân lỗi do API trả về
 // ---------------------------------------------------------------------------

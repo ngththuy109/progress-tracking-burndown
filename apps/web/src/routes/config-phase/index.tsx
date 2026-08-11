@@ -1,6 +1,7 @@
 import { useMemo, useReducer, useState } from 'react';
 import type { EffectiveConfigResponse } from '@app/shared';
 import { usePreview, useSaveConfig, useEffectiveConfig } from '../../api/use-phase-config.js';
+import { useProject } from '../../project/project-context.js';
 import { Badge, ErrorState, LoadingState } from '../../components/ui/index.js';
 import {
   draftReducer,
@@ -29,7 +30,10 @@ import { VersionsPanel } from './versions-panel.js';
  * Chỉ hai nút gọi API: **Xem thử** và **Lưu**.
  */
 export function ConfigPhaseScreen() {
-  const [projectKey, setProjectKey] = useState<string | null>(null);
+  // Mặc định sửa cấu hình CỦA DỰ ÁN ĐANG MỞ; ADMIN có thể chuyển sang bộ Mặc
+  // định (GLOBAL, `projectKey = null`) bằng ScopePicker.
+  const scope = useProject();
+  const [projectKey, setProjectKey] = useState<string | null>(scope.projectKey);
   const [tab, setTab] = useState<'config' | 'history'>('config');
 
   const query = useEffectiveConfig(projectKey);

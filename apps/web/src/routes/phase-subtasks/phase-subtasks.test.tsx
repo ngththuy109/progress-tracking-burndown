@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhaseSubtaskResponse, TrackedEpicSummary } from '@app/shared';
+import { ProjectScopeProvider } from '../../project/project-context.js';
 import { PhaseSubtasksScreen } from './index.js';
 
 /** Epic tối thiểu cho bộ chọn — chỉ cần các trường bộ chọn thật sự đọc. */
@@ -120,7 +121,10 @@ function renderScreen(initialEntry: string): void {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[initialEntry]}>
-        <PhaseSubtasksScreen />
+        {/* Scope dự án cố định — thay cho route /p/:projectKey của app thật. */}
+        <ProjectScopeProvider value={{ projectKey: 'PAY', role: 'PM', isAdmin: false }}>
+          <PhaseSubtasksScreen />
+        </ProjectScopeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );

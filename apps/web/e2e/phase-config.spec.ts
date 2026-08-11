@@ -152,6 +152,18 @@ async function installApi(page: Page, options: { projectConfig?: boolean } = {})
     const path = url.pathname;
     const method = route.request().method();
 
+    // Multi-tenant: /api/me nuôi ProjectProvider — thiếu nó là bị đá về `/`.
+    if (path === '/api/me') {
+      await route.fulfill(
+        json({
+          userId: 'pm@example.com',
+          isAdmin: false,
+          projects: [{ projectKey: 'SHOP', displayName: 'Shop', role: 'PM' }],
+        }),
+      );
+      return;
+    }
+
     if (path.endsWith('/config/phase/preview')) {
       const body = route.request().postDataJSON() as { draft: Parameters<typeof buildPreview>[0] };
       calls.previews.push(body);
@@ -231,7 +243,7 @@ async function addRule(page: Page, keyword: string, phaseCode: string, priority:
 
 test('thêm luật từ khoá mới và bấm Xem thử thì thấy bảng kết quả, cấu hình CHƯA được lưu', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/SHOP/config/phase');
   await expect(page.getByText('③ Keyword matching rules')).toBeVisible();
 
   await addRule(page, 'Design Review', 'TEST', '10');
@@ -247,7 +259,7 @@ test('thêm luật từ khoá mới và bấm Xem thử thì thấy bảng kết
 
 test('bảng Xem thử hiện rõ luật nào đã thắng cho từng Task', async ({ page }) => {
   await installApi(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/SHOP/config/phase');
   await expect(page.getByText('③ Keyword matching rules')).toBeVisible();
 
   await addRule(page, 'Design Review', 'TEST', '10');
@@ -266,7 +278,7 @@ test('bảng Xem thử hiện rõ luật nào đã thắng cho từng Task', asy
 
 test('dòng tổng kết đếm đúng số Task đổi phân loại', async ({ page }) => {
   await installApi(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/SHOP/config/phase');
   await expect(page.getByText('③ Keyword matching rules')).toBeVisible();
 
   await addRule(page, 'Design Review', 'TEST', '10');
@@ -281,7 +293,7 @@ test('dòng tổng kết đếm đúng số Task đổi phân loại', async ({ 
 
 test('bấm Xác nhận lưu thì tạo version mới và hiện số Epic sẽ tính lại', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/SHOP/config/phase');
   await expect(page.getByText('③ Keyword matching rules')).toBeVisible();
 
   await addRule(page, 'Design Review', 'TEST', '10');
@@ -297,7 +309,7 @@ test('luật trỏ tới Phase không tồn tại thì lỗi hiện ngay tại d
   page,
 }) => {
   await installApi(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/SHOP/config/phase');
   await expect(page.getByText('② Phase list')).toBeVisible();
 
   // Xoá Phase TEST trong khi vẫn còn luật trỏ vào nó.
@@ -315,15 +327,13 @@ test('luật trỏ tới Phase không tồn tại thì lỗi hiện ngay tại d
   await expect(ruleRow.getByLabel(/^Keyword, row/)).toHaveValue('Design Review');
 });
 
-test('chọn project SHOP và bấm Ghi đè mẫu tiêu đề thì khu Phase vẫn hiện nhãn kế thừa từ Mặc định', async ({
+test('mở dự án SHOP và bấm Ghi đè mẫu tiêu đề thì khu Phase vẫn hiện nhãn kế thừa từ Mặc định', async ({
   page,
 }) => {
-  // PRD §2.2.6: ba phần kế thừa ĐỘC LẬP nhau.
+  // PRD §2.2.6: ba phần kế thừa ĐỘC LẬP nhau. Multi-tenant: phạm vi dự án lấy
+  // thẳng từ URL /p/SHOP — không còn ô gõ tay mã project.
   await installApi(page, { projectConfig: true });
-  await page.goto('/config/phase');
-
-  await page.getByLabel('Project key').fill('SHOP');
-  await page.getByRole('button', { name: 'Open project' }).click();
+  await page.goto('/p/SHOP/config/phase');
 
   const patternSection = page.locator('section', { has: page.getByText('① Task title patterns') });
   await patternSection.getByRole('button', { name: 'Override for project SHOP' }).click();
@@ -339,7 +349,7 @@ test('mở tab Lịch sử và bấm Quay lại version cũ thì tạo version m
   page,
 }) => {
   const calls = await installApi(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/SHOP/config/phase');
 
   await page.getByRole('tab', { name: 'History' }).click();
   await expect(page.getByRole('cell', { name: 'thêm Phase Kiểm thử' })).toBeVisible();

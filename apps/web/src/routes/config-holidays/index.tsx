@@ -1,6 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
 import { describeWorkdaysMask, workdaysMaskWarning, type CalendarSummary, type HolidayImportMode } from '@app/shared';
 import {
+  isBuiltinCalendar,
   useCalendars,
   useDeleteHoliday,
   useDeleteMakeupWorkday,
@@ -9,7 +10,7 @@ import {
   useImportMakeupWorkdays,
   useMakeupWorkdays,
 } from '../../api/use-calendars.js';
-import { useMe } from '../../api/use-me.js';
+import { useProject } from '../../project/project-context.js';
 import { Badge, DataTable, EmptyState, ErrorState, LoadingState, type Column } from '../../components/ui/index.js';
 import { parseHolidayLines } from './parse-holiday-lines.js';
 
@@ -21,8 +22,16 @@ import { parseHolidayLines } from './parse-holiday-lines.js';
  * ngày lễ cho cả hai — thiếu dữ liệu ở đây thì đường Kế hoạch cháy đều qua
  * ngày nghỉ (E-14) và báo cáo plan-conflicts không bắt được gì.
  *
- * Chỉ ADMIN sửa được (API tự chặn); các vai trò khác xem để đối chiếu.
+ * Phân quyền multi-tenant: lịch BUILT-IN (VN_STANDARD/JP_STANDARD) dùng chung
+ * mọi dự án nên chỉ ADMIN sửa được (qua `/api/admin/calendars/...`); lịch riêng
+ * của dự án thì PM của dự án sửa được (qua `/api/projects/:key/calendars/...`).
+ * API tự chặn — ẩn nút ở đây chỉ là trải nghiệm.
  */
+
+// TODO(multi-tenant): "Nhân bản lịch built-in thành lịch riêng của dự án" —
+// chưa làm được vì `@app/shared` chưa có schema/endpoint clone lịch. Khi API
+// bổ sung (ví dụ POST /api/projects/:key/calendars/clone), thêm nút ở đây để
+// PM tự tách lịch riêng thay vì nhờ ADMIN sửa lịch chung.
 
 /**
  * Tên thân thiện của hai lịch chuẩn; lịch khác (nếu có) hiện mã trần.
@@ -92,8 +101,11 @@ export function HolidaysScreen() {
 }
 
 function CalendarPanel({ calendar }: { readonly calendar: CalendarSummary }) {
-  const me = useMe();
-  const canEdit = me.data?.role === 'ADMIN';
+  const scope = useProject();
+  // Lịch built-in: chỉ ADMIN. Lịch riêng của dự án: PM của dự án cũng sửa được.
+  const canEdit = isBuiltinCalendar(calendar.calendarId)
+    ? scope.isAdmin
+    : scope.isAdmin || scope.role === 'PM';
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
 
@@ -218,8 +230,9 @@ function CalendarPanel({ calendar }: { readonly calendar: CalendarSummary }) {
         <ImportPanel calendarId={calendar.calendarId} year={year} />
       ) : (
         <p className="muted">
-          Only Admins can edit holidays — they affect the Planned line of every Epic using this
-          calendar.
+          {isBuiltinCalendar(calendar.calendarId)
+            ? 'Lịch dùng chung này chỉ quản trị viên sửa được — nó ảnh hưởng đường Kế hoạch của mọi dự án.'
+            : 'Chỉ PM của dự án (hoặc quản trị viên) sửa được ngày nghỉ — chúng ảnh hưởng đường Kế hoạch của mọi Epic dùng lịch này.'}
         </p>
       )}
 

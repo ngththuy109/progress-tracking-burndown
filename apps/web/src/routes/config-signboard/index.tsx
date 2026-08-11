@@ -2,6 +2,7 @@ import { useReducer, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { SignboardColumn } from '@app/shared';
 import { useEffectiveConfig, useSaveConfig } from '../../api/use-phase-config.js';
+import { useProject } from '../../project/project-context.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import {
   draftReducer,
@@ -25,8 +26,11 @@ import { DeleteButton, IssueList, MoveButtons } from '../config-phase/row-contro
  * chỗ để sai.
  */
 export function SignboardColumnScreen() {
-  const [params, setParams] = useSearchParams();
-  const projectKey = params.get('project');
+  const scope = useProject();
+  const [params] = useSearchParams();
+  // Cột Signboard sửa theo DỰ ÁN ĐANG MỞ; ADMIN chuyển được sang bộ Mặc định
+  // (GLOBAL — endpoint quản trị) ngay tại đây.
+  const [projectKey, setProjectKey] = useState<string | null>(scope.projectKey);
   const query = useEffectiveConfig(projectKey);
 
   if (query.isPending) return <LoadingState label="Loading column settings…" rows={3} />;
@@ -42,12 +46,21 @@ export function SignboardColumnScreen() {
         <span className="scope__label">Scope:</span>
         <button
           type="button"
-          className={`button${projectKey === null ? ' button--primary' : ''}`}
-          onClick={() => setParams({})}
+          className={`button${projectKey !== null ? ' button--primary' : ''}`}
+          onClick={() => setProjectKey(scope.projectKey)}
         >
-          Default
+          Dự án <code>{scope.projectKey}</code>
         </button>
-        {projectKey !== null && <code>{projectKey}</code>}
+        {scope.isAdmin && (
+          <button
+            type="button"
+            className={`button${projectKey === null ? ' button--primary' : ''}`}
+            title="Bộ cột dùng chung cho mọi dự án chưa ghi đè — chỉ ADMIN sửa được."
+            onClick={() => setProjectKey(null)}
+          >
+            Mặc định (mọi dự án)
+          </button>
+        )}
       </div>
 
       <ColumnEditor

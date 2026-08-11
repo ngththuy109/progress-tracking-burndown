@@ -1,35 +1,35 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { USER_ROLE, type AppUserView, type UpsertUserRequest, type UserRole } from '@app/shared';
+import { GLOBAL_ROLE, type AppUserView, type GlobalRole, type UpsertUserRequest } from '@app/shared';
 import { useMe } from '../../api/use-me.js';
-import { useProjects } from '../../api/use-projects.js';
 import { useDeleteUser, useUpsertUser, useUsers } from '../../api/use-users.js';
 import { Badge, EmptyState, ErrorState, LoadingState, type BadgeTone } from '../../components/ui/index.js';
 
 /**
  * Màn hình quản lý người dùng — chỉ ADMIN.
  *
- * Cho Admin cấp Admin/PM/Viewer ngay trên giao diện thay vì chạy `pnpm
- * auth:grant`. API mới là hàng rào thật (403 với người không phải Admin); chặn ở
- * đây chỉ để đỡ hiển thị một màn hình chắc chắn bị từ chối.
+ * Mô hình multi-tenant: user chỉ còn role TOÀN CỤC — ADMIN (quản trị, thấy mọi
+ * dự án) hoặc MEMBER (chỉ thấy dự án mình là thành viên). Việc gán PM/VIEWER
+ * cho TỪNG dự án nằm ở màn Projects → mục Thành viên, KHÔNG còn ở đây.
+ * API mới là hàng rào thật (403 với người không phải Admin); chặn ở đây chỉ để
+ * đỡ hiển thị một màn hình chắc chắn bị từ chối.
  */
 
 const ROLE_TONE: Record<string, BadgeTone> = {
   ADMIN: 'info',
-  PM: 'success',
-  VIEWER: 'neutral',
+  MEMBER: 'neutral',
 };
 
 export function AdminUsersScreen() {
   const me = useMe();
 
-  if (me.isPending) return <LoadingState label="Loading…" rows={2} />;
-  if (me.data && me.data.role !== 'ADMIN') {
+  if (me.isPending) return <LoadingState label="Đang tải…" rows={2} />;
+  if (me.data && !me.data.isAdmin) {
     return (
       <EmptyState
         icon="🔒"
-        title="Admins only"
-        description="Only Admins can manage users. Ask an admin if you need access."
+        title="Chỉ dành cho quản trị viên"
+        description="Chỉ ADMIN quản lý được người dùng. Liên hệ quản trị viên nếu bạn cần quyền."
       />
     );
   }
@@ -38,49 +38,44 @@ export function AdminUsersScreen() {
 
 function UsersManager({ currentUserId }: { readonly currentUserId: string | null }) {
   const query = useUsers();
-  const projectsQuery = useProjects();
   const upsert = useUpsertUser();
   const remove = useDeleteUser();
 
   const [userId, setUserId] = useState('');
-  const [role, setRole] = useState<UserRole>('VIEWER');
-  const [selectedProjects, setSelectedProjects] = useState<readonly string[]>([]);
+  const [role, setRole] = useState<GlobalRole>('MEMBER');
   const [displayName, setDisplayName] = useState('');
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const resetForm = (): void => {
     setUserId('');
-    setRole('VIEWER');
-    setSelectedProjects([]);
+    setRole('MEMBER');
     setDisplayName('');
   };
 
   const editUser = (u: AppUserView): void => {
     setUserId(u.userId);
     setRole(u.role);
-    setSelectedProjects(u.projects);
     setDisplayName(u.displayName ?? '');
-  };
-
-  const toggleProject = (key: string): void => {
-    setSelectedProjects((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
-    );
   };
 
   const submit = (): void => {
     const body: UpsertUserRequest = {
       userId: userId.trim(),
       role,
-      projects: role === 'PM' ? [...selectedProjects] : [],
       displayName: displayName.trim() === '' ? null : displayName.trim(),
     };
     upsert.mutate(body, { onSuccess: resetForm });
   };
 
-  if (query.isPending) return <LoadingState label="Loading users…" rows={4} />;
+  if (query.isPending) return <LoadingState label="Đang tải danh sách người dùng…" rows={4} />;
   if (query.isError) {
-    return <ErrorState error={query.error} title="Could not load users" onRetry={() => void query.refetch()} />;
+    return (
+      <ErrorState
+        error={query.error}
+        title="Không tải được danh sách người dùng"
+        onRetry={() => void query.refetch()}
+      />
+    );
   }
 
   const users = query.data;
@@ -89,34 +84,35 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
     <div className="stack">
       <section className="panel" aria-labelledby="add-user-title">
         <h2 className="panel__title" id="add-user-title">
-          Add or update a user
+          Thêm hoặc cập nhật người dùng
         </h2>
         <p className="panel__hint">
-          Enter the person&rsquo;s work email exactly as it comes from SSO. Saving an email that
-          already exists updates their role. PMs must list the projects they own; Admins and Viewers
-          see everything.
+          Nhập đúng email công việc như SSO trả về. Lưu một email đã tồn tại sẽ cập nhật role của
+          người đó. <strong>ADMIN</strong> thấy và quản mọi dự án; <strong>MEMBER</strong> chỉ thấy
+          dự án mình là thành viên — gán vào từng dự án ở màn{' '}
+          <Link to="/admin/projects">Projects</Link>, mục Thành viên.
         </p>
 
         <label className="field">
-          <span>Work email</span>
+          <span>Email công việc</span>
           <input
             className="input input--wide"
             value={userId}
             placeholder="pm@your-company.com"
-            aria-label="Work email"
+            aria-label="Email công việc"
             onChange={(e) => setUserId(e.target.value)}
           />
         </label>
 
         <label className="field">
-          <span>Role</span>
+          <span>Role toàn cục</span>
           <select
             className="input"
             value={role}
-            aria-label="Role"
-            onChange={(e) => setRole(e.target.value as UserRole)}
+            aria-label="Role toàn cục"
+            onChange={(e) => setRole(e.target.value as GlobalRole)}
           >
-            {USER_ROLE.map((r) => (
+            {GLOBAL_ROLE.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
@@ -124,50 +120,20 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
           </select>
         </label>
 
-        {role === 'PM' && (
-          <fieldset className="field">
-            <legend>Projects owned</legend>
-            {projectsQuery.isPending ? (
-              <span className="muted">Loading projects…</span>
-            ) : projectsQuery.isError ? (
-              <ErrorState error={projectsQuery.error} title="Could not load projects" />
-            ) : projectsQuery.data.length === 0 ? (
-              <p className="panel__hint">
-                No projects registered yet. Add them on the <Link to="/admin/projects">Projects</Link>{' '}
-                screen first, then assign them here.
-              </p>
-            ) : (
-              <div className="checks">
-                {projectsQuery.data.map((p) => (
-                  <label className="check" key={p.projectKey}>
-                    <input
-                      type="checkbox"
-                      checked={selectedProjects.includes(p.projectKey)}
-                      onChange={() => toggleProject(p.projectKey)}
-                    />
-                    <code>{p.projectKey}</code>
-                    {p.displayName !== null && <span className="muted">{p.displayName}</span>}
-                  </label>
-                ))}
-              </div>
-            )}
-          </fieldset>
-        )}
-
         <label className="field">
-          <span>Display name (optional)</span>
+          <span>Tên hiển thị (không bắt buộc)</span>
           <input
             className="input"
             value={displayName}
-            aria-label="Display name"
+            aria-label="Tên hiển thị"
             onChange={(e) => setDisplayName(e.target.value)}
           />
         </label>
 
-        {upsert.isError && <ErrorState error={upsert.error} title="Could not save this user" />}
+        {upsert.isError && <ErrorState error={upsert.error} title="Không lưu được người dùng này" />}
         {upsert.isSuccess && (
           <p className="notice notice--ok" role="status">
-            Saved <strong>{upsert.data.userId}</strong> as {upsert.data.role}.
+            Đã lưu <strong>{upsert.data.userId}</strong> với role {upsert.data.role}.
           </p>
         )}
 
@@ -178,25 +144,28 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
             disabled={userId.trim() === '' || upsert.isPending}
             onClick={submit}
           >
-            {upsert.isPending ? 'Saving…' : 'Save user'}
+            {upsert.isPending ? 'Đang lưu…' : 'Lưu người dùng'}
           </button>
           <button type="button" className="button" onClick={resetForm} disabled={upsert.isPending}>
-            Clear
+            Xoá form
           </button>
         </div>
       </section>
 
       <section className="panel" aria-labelledby="users-title">
         <h2 className="panel__title" id="users-title">
-          Users
+          Người dùng
         </h2>
 
-        {remove.isError && <ErrorState error={remove.error} title="Could not remove this user" />}
+        {remove.isError && <ErrorState error={remove.error} title="Không gỡ được người dùng này" />}
 
         {users.length === 0 ? (
-          <EmptyState title="No users granted yet" description="Add a user above to give them access." />
+          <EmptyState
+            title="Chưa cấp quyền cho ai"
+            description="Thêm một người dùng ở khung trên để cấp quyền truy cập."
+          />
         ) : (
-          <ul className="rows" aria-label="Users">
+          <ul className="rows" aria-label="Người dùng">
             {users.map((u) => {
               const isSelf = u.userId === currentUserId;
               const readOnly = u.source === 'ENV';
@@ -205,20 +174,27 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
                 <li className="row" key={u.userId}>
                   <code>{u.userId}</code>
                   <Badge tone={ROLE_TONE[u.role] ?? 'neutral'}>{u.role}</Badge>
-                  {u.role === 'PM' && (
-                    <span className="muted">{u.projects.length > 0 ? u.projects.join(', ') : 'no projects yet'}</span>
-                  )}
+                  {/* Số dự án đang là thành viên — chỉnh ở màn Projects. */}
+                  <span className="muted">
+                    {u.membershipCount === 0
+                      ? 'chưa thuộc dự án nào'
+                      : `thành viên ${u.membershipCount} dự án`}
+                  </span>
                   {u.displayName !== null && <span>{u.displayName}</span>}
-                  {readOnly && <Badge tone="muted">env · read-only</Badge>}
-                  {isSelf && !readOnly && <Badge tone="muted">you</Badge>}
+                  {readOnly && <Badge tone="muted">env · chỉ đọc</Badge>}
+                  {isSelf && !readOnly && <Badge tone="muted">bạn</Badge>}
 
                   <span className="row__spacer" />
 
                   {confirming === u.userId ? (
-                    <span className="confirm confirm--inline" role="alertdialog" aria-label="Confirm removing this user">
-                      Remove <strong>{u.userId}</strong>? They lose access on their next request.
+                    <span
+                      className="confirm confirm--inline"
+                      role="alertdialog"
+                      aria-label="Xác nhận gỡ người dùng này"
+                    >
+                      Gỡ <strong>{u.userId}</strong>? Họ mất quyền truy cập ngay từ request kế tiếp.
                       <button type="button" className="button" onClick={() => setConfirming(null)}>
-                        Cancel
+                        Huỷ
                       </button>
                       <button
                         type="button"
@@ -226,7 +202,7 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
                         disabled={remove.isPending}
                         onClick={() => remove.mutate(u.userId, { onSuccess: () => setConfirming(null) })}
                       >
-                        Remove anyway
+                        Gỡ luôn
                       </button>
                     </span>
                   ) : (
@@ -237,14 +213,14 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
                         disabled={locked}
                         title={
                           readOnly
-                            ? 'Granted via AUTH_BOOTSTRAP_ADMINS — change it in the environment.'
+                            ? 'Cấp qua AUTH_BOOTSTRAP_ADMINS — đổi ở biến môi trường, không đổi ở đây.'
                             : isSelf
-                              ? 'You cannot change your own role. Ask another Admin.'
+                              ? 'Không tự đổi role của chính mình được. Nhờ một Admin khác.'
                               : undefined
                         }
                         onClick={() => editUser(u)}
                       >
-                        Edit
+                        Sửa
                       </button>
                       <button
                         type="button"
@@ -252,14 +228,14 @@ function UsersManager({ currentUserId }: { readonly currentUserId: string | null
                         disabled={locked}
                         title={
                           readOnly
-                            ? 'Granted via AUTH_BOOTSTRAP_ADMINS — change it in the environment.'
+                            ? 'Cấp qua AUTH_BOOTSTRAP_ADMINS — đổi ở biến môi trường, không đổi ở đây.'
                             : isSelf
-                              ? 'You cannot remove yourself. Ask another Admin.'
+                              ? 'Không tự gỡ chính mình được. Nhờ một Admin khác.'
                               : undefined
                         }
                         onClick={() => setConfirming(u.userId)}
                       >
-                        Remove
+                        Gỡ
                       </button>
                     </>
                   )}
