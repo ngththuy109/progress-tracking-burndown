@@ -75,6 +75,22 @@ export function devIdentity(
   return { header, user };
 }
 
+/**
+ * Base URL Jira cho link "mở ticket" ở ô Signboard — trình duyệt đọc qua
+ * `import.meta.env.VITE_JIRA_BASE_URL` (xem `apps/web/src/api/jira.ts`).
+ *
+ * Ưu tiên `VITE_JIRA_BASE_URL` để, khi hiếm hoi cần, trỏ trình duyệt sang site
+ * KHÁC với server. Bỏ trống thì LÙI VỀ `JIRA_BASE_URL` — biến server BẮT BUỘC
+ * vốn đã có. Nhờ vậy không phải khai HAI lần cùng một URL: chỉ đặt `JIRA_BASE_URL`
+ * như `.env.example` là ô task đã bấm-thẳng-sang-Jira được, không còn kẹt ở nút
+ * "Copy key". Đặt `VITE_JIRA_BASE_URL=""` (rỗng tường minh) để TẮT link — chuỗi
+ * rỗng KHÔNG nullish nên không rơi xuống `JIRA_BASE_URL`. Chỉ lộ đúng base URL
+ * công khai (KHÔNG phải token) — URL này vốn nằm trong mọi link `/browse/…` rồi.
+ */
+export function resolveJiraBaseUrl(env: Record<string, string | undefined>): string {
+  return (env['VITE_JIRA_BASE_URL'] ?? env['JIRA_BASE_URL'] ?? '').trim();
+}
+
 /** Cấu hình proxy `/api`, kèm chèn danh tính dev nếu có. */
 function apiProxy(
   target: string,
@@ -108,6 +124,16 @@ export default defineConfig(({ command, mode }) => {
   };
 
   const apiTarget = env['VITE_API_TARGET'] ?? 'http://localhost:3000';
+
+  // Đẩy base URL Jira vào env CLIENT để trình duyệt dựng được link "mở ticket"
+  // trên ô Signboard. Ghi vào `process.env` TRƯỚC khi Vite phân giải env client:
+  // Vite gom các biến tiền tố `VITE_` từ `process.env`, nên đây là đường chắc
+  // chắn để giá trị lọt vào `import.meta.env` — KỂ CẢ khi `.env` nằm ở GỐC repo
+  // (không cùng thư mục với config, nên `envDir` mặc định không đọc tới). Mặc
+  // định mượn `JIRA_BASE_URL`; không có URL nào thì KHÔNG đặt gì — ô lùi về chỉ
+  // copy được mã ticket như cũ.
+  const jiraBaseUrl = resolveJiraBaseUrl(env);
+  if (jiraBaseUrl !== '') process.env['VITE_JIRA_BASE_URL'] = jiraBaseUrl;
 
   // Shim danh tính CHỈ cho DEV SERVER (`vite` / `pnpm dev`) — KHÔNG cho
   // `vite preview` (máy chủ web đã build) và KHÔNG cho `vite build`.
