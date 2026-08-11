@@ -3,8 +3,11 @@ import { describeWorkdaysMask, workdaysMaskWarning, type CalendarSummary, type H
 import {
   useCalendars,
   useDeleteHoliday,
+  useDeleteMakeupWorkday,
   useHolidays,
   useImportHolidays,
+  useImportMakeupWorkdays,
+  useMakeupWorkdays,
 } from '../../api/use-calendars.js';
 import { useMe } from '../../api/use-me.js';
 import { Badge, DataTable, EmptyState, ErrorState, LoadingState, type Column } from '../../components/ui/index.js';
@@ -21,10 +24,16 @@ import { parseHolidayLines } from './parse-holiday-lines.js';
  * Chỉ ADMIN sửa được (API tự chặn); các vai trò khác xem để đối chiếu.
  */
 
-/** Tên thân thiện của hai lịch chuẩn; lịch khác (nếu có) hiện mã trần. */
+/**
+ * Tên thân thiện của hai lịch chuẩn; lịch khác (nếu có) hiện mã trần.
+ *
+ * Chỉ ghi TÊN NƯỚC — hai tab đã đủ phân biệt lịch VN với lịch Nhật. Không chú
+ * thích vai trò (ai làm / ai review) vì đặt cạnh "Days off" dễ đọc nhầm là ngày
+ * nghỉ lại "đi làm".
+ */
 const CALENDAR_LABEL: Record<string, string> = {
-  VN_STANDARD: 'Vietnam side (does the work)',
-  JP_STANDARD: 'Customer side — JP (reviews)',
+  VN_STANDARD: 'Vietnam',
+  JP_STANDARD: 'Japan',
 };
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -95,9 +104,15 @@ function CalendarPanel({ calendar }: { readonly calendar: CalendarSummary }) {
   const yearIsEmpty = !calendar.years.includes(year);
 
   const yearOptions = useMemo(() => {
-    const base = new Set<number>([currentYear - 1, currentYear, currentYear + 1, ...calendar.years]);
+    const base = new Set<number>([
+      currentYear - 1,
+      currentYear,
+      currentYear + 1,
+      ...calendar.years,
+      ...calendar.makeupYears,
+    ]);
     return [...base].sort((a, b) => a - b);
-  }, [calendar.years, currentYear]);
+  }, [calendar.years, calendar.makeupYears, currentYear]);
 
   const columns: readonly Column<{ date: string; label: string | null }>[] = [
     { key: 'date', header: 'Date', render: (h) => <code>{h.date}</code>, sortKey: (h) => h.date },
@@ -207,7 +222,213 @@ function CalendarPanel({ calendar }: { readonly calendar: CalendarSummary }) {
           calendar.
         </p>
       )}
+
+      <MakeupWorkdaysSection calendarId={calendar.calendarId} year={year} canEdit={canEdit} />
     </>
+  );
+}
+
+/**
+ * Ngày LÀM BÙ — mục song song với ngày lễ nhưng NGƯỢC nghĩa: những ngày cuối
+ * tuần được xếp làm việc. Đường Kế hoạch tính như ngày thường và biểu đồ KHÔNG
+ * bôi xám. Dùng chung năm đang chọn với mục ngày lễ ở trên.
+ */
+function MakeupWorkdaysSection({
+  calendarId,
+  year,
+  canEdit,
+}: {
+  readonly calendarId: string;
+  readonly year: number;
+  readonly canEdit: boolean;
+}) {
+  const makeup = useMakeupWorkdays(calendarId, year);
+  const del = useDeleteMakeupWorkday();
+
+  const columns: readonly Column<{ date: string; label: string | null }>[] = [
+    { key: 'date', header: 'Date', render: (m) => <code>{m.date}</code>, sortKey: (m) => m.date },
+    { key: 'weekday', header: 'Weekday', render: (m) => weekdayOf(m.date) },
+    {
+      key: 'label',
+      header: 'Reason',
+      render: (m) => (m.label === null ? <span className="muted">—</span> : m.label),
+    },
+    ...(canEdit
+      ? ([
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            render: (m: { date: string; label: string | null }) => (
+              <button
+                type="button"
+                className="button button--danger"
+                disabled={del.isPending}
+                onClick={() => del.mutate({ calendarId, date: m.date })}
+              >
+                Delete
+              </button>
+            ),
+          },
+        ] as const)
+      : []),
+  ];
+
+  return (
+    <>
+      <section className="panel" aria-labelledby="makeup-title">
+        <h2 className="panel__title" id="makeup-title">
+          🛠️ Make-up workdays (làm bù) — {year}
+        </h2>
+        <p className="panel__hint">
+          Weekend days the team works to make up for another day off (common around Tết). The Planned
+          line burns down on these days like a normal working day, and the Burndown chart does{' '}
+          <strong>not</strong> grey them out.
+        </p>
+
+        {makeup.isPending ? (
+          <LoadingState label="Loading make-up workdays…" rows={2} />
+        ) : makeup.isError ? (
+          <ErrorState
+            error={makeup.error}
+            title="Could not load the make-up workdays"
+            onRetry={() => void makeup.refetch()}
+          />
+        ) : (
+          <DataTable
+            caption={`Make-up workdays in ${year}`}
+            columns={columns}
+            rows={[...makeup.data.makeupWorkdays]}
+            rowKey={(m) => m.date}
+            empty={
+              <EmptyState
+                title={`No make-up workdays in ${year}`}
+                description="If a weekend is worked to compensate for a holiday, add it in the box below."
+              />
+            }
+          />
+        )}
+        {del.isError && <ErrorState error={del.error} title="Could not delete the make-up workday" />}
+      </section>
+
+      {canEdit && <MakeupImportPanel calendarId={calendarId} year={year} />}
+    </>
+  );
+}
+
+function MakeupImportPanel({ calendarId, year }: { readonly calendarId: string; readonly year: number }) {
+  const [raw, setRaw] = useState('');
+  const [mode, setMode] = useState<HolidayImportMode>('MERGE');
+  const importMutation = useImportMakeupWorkdays();
+
+  const parsed = parseHolidayLines(raw);
+  const outOfYear =
+    mode === 'REPLACE_YEAR' ? parsed.holidays.filter((h) => !h.date.startsWith(`${year}-`)) : [];
+  const canImport = parsed.holidays.length > 0 && parsed.errors.length === 0 && outOfYear.length === 0;
+
+  return (
+    <section className="panel" aria-labelledby="makeup-import-title">
+      <h2 className="panel__title" id="makeup-import-title">
+        Import make-up workdays
+      </h2>
+      <p className="panel__hint">
+        Same format as holidays — one day per line: <code>2026-04-25</code> or{' '}
+        <code>2026-04-25, làm bù 30/4</code>.
+      </p>
+
+      <label className="field">
+        <span>Make-up workdays, one per line</span>
+        <textarea
+          className="input input--wide"
+          rows={5}
+          value={raw}
+          placeholder={`${year}-04-25, làm bù 30/4`}
+          aria-label="Make-up workdays, one per line"
+          onChange={(e) => setRaw(e.target.value)}
+        />
+      </label>
+
+      <div className="scope">
+        <span className="scope__label">Mode:</span>
+        <button
+          type="button"
+          className={`button${mode === 'MERGE' ? ' button--primary' : ''}`}
+          onClick={() => setMode('MERGE')}
+          title="Add the listed days; days already registered but not listed stay untouched."
+        >
+          Merge into the calendar
+        </button>
+        <button
+          type="button"
+          className={`button${mode === 'REPLACE_YEAR' ? ' button--primary' : ''}`}
+          onClick={() => setMode('REPLACE_YEAR')}
+          title={`Delete every make-up workday of ${year} first, then insert the listed days.`}
+        >
+          Replace all of {year}
+        </button>
+      </div>
+
+      {raw.trim() !== '' && (
+        <p className="muted" role="status">
+          {parsed.holidays.length} valid day{parsed.holidays.length === 1 ? '' : 's'}
+          {parsed.errors.length > 0 && `, ${parsed.errors.length} line(s) need fixing`}.
+        </p>
+      )}
+
+      {parsed.errors.length > 0 && (
+        <ul className="rows">
+          {parsed.errors.map((err) => (
+            <li className="row" key={err.line}>
+              <Badge tone="danger">line {err.line}</Badge> <code>{err.text}</code>{' '}
+              <span className="muted">{err.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {outOfYear.length > 0 && (
+        <p className="notice notice--error" role="alert">
+          Replace mode only touches {year}, but these days are outside it:{' '}
+          {outOfYear.map((h) => h.date).join(', ')}. Switch to Merge mode or remove them.
+        </p>
+      )}
+
+      {importMutation.isSuccess && (
+        <p className="notice notice--ok" role="status">
+          Imported: {importMutation.data.inserted} new, {importMutation.data.updated} updated,{' '}
+          {importMutation.data.deleted} removed. {importMutation.data.epicsMarkedForRecompute} Epic
+          {importMutation.data.epicsMarkedForRecompute === 1 ? '' : 's'} will be recomputed — charts
+          update after the next sync run.
+        </p>
+      )}
+      {importMutation.isError && (
+        <ErrorState error={importMutation.error} title="Nothing was imported" />
+      )}
+
+      <div className="actions">
+        <button
+          type="button"
+          className="button button--primary"
+          disabled={!canImport || importMutation.isPending}
+          onClick={() =>
+            importMutation.mutate(
+              {
+                calendarId,
+                body: {
+                  mode,
+                  year: mode === 'REPLACE_YEAR' ? year : null,
+                  makeupWorkdays: [...parsed.holidays],
+                },
+              },
+              { onSuccess: () => setRaw('') },
+            )
+          }
+        >
+          {importMutation.isPending
+            ? 'Importing…'
+            : `📥 Import ${parsed.holidays.length} day${parsed.holidays.length === 1 ? '' : 's'}`}
+        </button>
+      </div>
+    </section>
   );
 }
 

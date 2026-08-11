@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { ChartMode, ChartSeries, ExplainRow } from '@app/shared';
+import type { ChartSeries, ExplainRow } from '@app/shared';
 import { useBurndown, useExplainDay } from '../../api/use-burndown.js';
 import { BurndownChart } from '../../components/chart/burndown-chart.js';
+import { EpicPicker } from '../../components/epic-picker/index.js';
 import {
   Badge,
   DataTable,
@@ -15,25 +16,28 @@ import {
 /**
  * Màn hình biểu đồ Burndown — PRD §5.1.
  *
- * BA CHẾ ĐỘ XEM DÙNG CHUNG MỘT TẬP DỮ LIỆU. Đổi chế độ hay đổi Phase KHÔNG gọi
+ * HAI CHẾ ĐỘ XEM DÙNG CHUNG MỘT TẬP DỮ LIỆU. Đổi chế độ hay đổi Phase KHÔNG gọi
  * lại API: T-17 đã tính sẵn đường Kế hoạch của từng Phase vào `per_phase` chính
  * vì lý do đó.
  */
 
-const MODE_LABEL: Record<ChartMode, string> = {
+/**
+ * Chế độ xem của MÀN HÌNH này — chỉ còn tổng Epic và một Phase. Chế độ so sánh
+ * nhiều Phase đã gỡ khỏi giao diện; `ChartMode` trong hợp đồng API vẫn còn
+ * `COMPARE` nên phần backend không đổi.
+ */
+type ScreenMode = 'EPIC' | 'PHASE';
+
+const MODE_LABEL: Record<ScreenMode, string> = {
   EPIC: 'Whole Epic',
   PHASE: 'Single Phase',
-  COMPARE: 'Compare Phases',
 };
-
-/** Tối đa 4 Phase khi so sánh — hơn nữa thì biểu đồ không đọc được. */
-const MAX_COMPARE = 4;
 
 export function BurndownScreen() {
   const [params, setParams] = useSearchParams();
   const epicKey = params.get('epic');
 
-  const [mode, setMode] = useState<ChartMode>('EPIC');
+  const [mode, setMode] = useState<ScreenMode>('EPIC');
   const [selected, setSelected] = useState<string[]>([]);
   const [explainDate, setExplainDate] = useState<string | null>(null);
 
@@ -41,10 +45,11 @@ export function BurndownScreen() {
 
   if (epicKey === null || epicKey === '') {
     return (
-      <EmptyState
+      <EpicPicker
         icon="📉"
-        title="No Epic selected"
-        description="Open the Epics screen and click Chart on the Epic you want to see."
+        title="Pick an Epic to chart"
+        description="Choose an active Epic below to load its burndown chart."
+        onSelect={(key) => setParams({ epic: key })}
       />
     );
   }
@@ -70,7 +75,7 @@ export function BurndownScreen() {
       </div>
 
       <div className="tabs" role="tablist" aria-label="Chart view mode">
-        {(Object.keys(MODE_LABEL) as ChartMode[]).map((m) => (
+        {(Object.keys(MODE_LABEL) as ScreenMode[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -85,12 +90,7 @@ export function BurndownScreen() {
       </div>
 
       {mode !== 'EPIC' && (
-        <PhasePicker
-          phases={phaseKeys}
-          selected={selected}
-          multiple={mode === 'COMPARE'}
-          onChange={setSelected}
-        />
+        <PhasePicker phases={phaseKeys} selected={selected} onChange={setSelected} />
       )}
 
       <section className="panel">
@@ -152,7 +152,7 @@ function ChartArea({
   markers,
   onPointClick,
 }: {
-  readonly mode: ChartMode;
+  readonly mode: ScreenMode;
   readonly selected: readonly string[];
   readonly series: readonly ChartSeries[];
   readonly markers: BurndownScreenMarkers;
@@ -174,14 +174,7 @@ function ChartArea({
   }
 
   return (
-    <BurndownChart
-      series={shown}
-      markers={markers}
-      // Chế độ so sánh chỉ vẽ đường Thực tế: bốn Phase × hai đường là tám đường
-      // chồng nhau, không ai đọc được.
-      showPlanned={mode !== 'COMPARE'}
-      onPointClick={onPointClick}
-    />
+    <BurndownChart series={shown} markers={markers} showPlanned onPointClick={onPointClick} />
   );
 }
 
@@ -190,23 +183,14 @@ type BurndownScreenMarkers = Parameters<typeof BurndownChart>[0]['markers'];
 function PhasePicker({
   phases,
   selected,
-  multiple,
   onChange,
 }: {
   readonly phases: readonly string[];
   readonly selected: readonly string[];
-  readonly multiple: boolean;
   readonly onChange: (next: string[]) => void;
 }) {
-  const toggle = (code: string): void => {
-    if (!multiple) {
-      onChange([code]);
-      return;
-    }
-    if (selected.includes(code)) onChange(selected.filter((c) => c !== code));
-    else if (selected.length < MAX_COMPARE) onChange([...selected, code]);
-  };
-
+  // Chỉ chọn MỘT Phase: bấm Phase nào thì xem đúng Phase đó (chế độ so sánh
+  // nhiều Phase đã gỡ).
   return (
     <div className="scope" role="group" aria-label="Select Phases">
       {phases.map((code) => (
@@ -215,16 +199,11 @@ function PhasePicker({
           type="button"
           className={`button${selected.includes(code) ? ' button--primary' : ''}`}
           aria-pressed={selected.includes(code)}
-          onClick={() => toggle(code)}
+          onClick={() => onChange([code])}
         >
           {code}
         </button>
       ))}
-      {multiple && (
-        <span className="muted">
-          Up to {MAX_COMPARE} Phases ({selected.length} selected)
-        </span>
-      )}
     </div>
   );
 }

@@ -87,6 +87,15 @@ export interface WorkCalendar {
   /** Ngày lễ dạng `'YYYY-MM-DD'`. Bỏ qua khi đếm ngày làm việc (E-14). */
   readonly holidays: ReadonlySet<string>;
   /**
+   * Ngày LÀM BÙ dạng `'YYYY-MM-DD'` — ngày vốn NGHỈ theo mask (thường T7/CN)
+   * nhưng được xếp làm việc để bù cho một ngày nghỉ khác (rất phổ biến quanh Tết
+   * ở VN). Ngược nghĩa với `holidays`: được tính như NGÀY LÀM VIỆC bình thường
+   * (đường Kế hoạch vẫn giảm), và biểu đồ KHÔNG bôi xám ngày này.
+   *
+   * Optional: phần lớn nơi dựng lịch (test/fake) không khai — coi như tập rỗng.
+   */
+  readonly makeupWorkdays?: ReadonlySet<string>;
+  /**
    * Cảnh báo phát sinh lúc dựng lịch — ví dụ không tìm thấy lịch nên phải dùng
    * mặc định. Đi kèm dữ liệu chứ không chỉ nằm trong log, để tầng trên hiện được
    * cho người dùng (C-10).

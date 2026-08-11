@@ -41,7 +41,7 @@
 |---|---|---|---|---|
 | 15 | **US-03** Xem tổng Epic | Mở biểu đồ của một Epic | Hai đường Kế hoạch và Thực tế; trục ngang hiện **đủ ngày lịch**, thứ Bảy/Chủ nhật/ngày lễ nằm trong **dải xám**; team có log giờ ngày nghỉ thì đường Thực tế giảm đúng ngày đó (có chấm dữ liệu), nghỉ thật thì đường đi ngang qua dải xám | ☐ |
 | 16 | **US-04** Xem một Phase | Bấm tab *Single Phase*, chọn một Phase | Biểu đồ đổi ngay, **không có màn hình chờ tải** | ☐ |
-| 17 | **US-05** So sánh các Phase | Bấm tab *Compare Phases*, chọn 2–3 Phase | Mỗi Phase một đường màu riêng | ☐ |
+| 17 | **US-05** So sánh các Phase *(đã gỡ)* | Mở biểu đồ, xem hàng tab chế độ | **Không còn** tab *Compare Phases* — chỉ còn *Whole Epic* và *Single Phase* (chức năng so sánh đã gỡ khỏi giao diện) | ☐ |
 | 18 | **US-11** Giải thích số liệu | Bấm vào một điểm trên biểu đồ | Bảng hiện từng Sub-task, **quy tắc nào** (cột *Rule*) đã áp dụng, và câu giải thích đọc được | ☐ |
 | 19 | **US-11** Tìm ra nguyên nhân sai số | Trong bảng đó, tìm dòng ghi *Rule 2* | Hiện rõ ai sửa tay ước lượng, sửa thành bao nhiêu, lúc nào | ☐ |
 | 20 | **US-06** Dấu mốc phát sinh việc | Xem khu *Chart markers* | Ngày có phát sinh việc ghi rõ thêm bao nhiêu giờ và Sub-task nào gây ra | ☐ |
@@ -69,7 +69,7 @@
 | 32 | Xoá một cột đang dùng | Cảnh báo nói rõ Sub-task sẽ **rơi khỏi bảng** nhưng **vẫn được tính vào Burndown** | ☐ |
 | 32a | Đổi **Side** của một cột (VD: JMReview → *JP does*) rồi lưu | Màn Phase sub-tasks kiểm tra lại các Sub-task loại đó bằng **lịch JP** (xem mục Ngày nghỉ bên dưới) | ☐ |
 
-## Ngày nghỉ & kiểm tra plan (T-36 → T-38)
+## Ngày nghỉ, kiểm tra plan & ngày làm bù (T-36 → T-39)
 
 | # | Thao tác | Đạt khi thấy | ☐ |
 |---|---|---|---|
@@ -84,6 +84,8 @@
 | 43 | Đặt `wbs_start_date` một Sub-task Create (Side = VN) vào thứ Bảy, sync | Badge ⚠ ghi *weekend* phía VN; màn Epics cột **On days off** đếm được và bấm sang được màn Sub-tasks | ☐ |
 | 44 | Sub-task có khoảng plan **vắt qua** cuối tuần (hai mốc đều ngày làm việc) | **Không** bị báo vi phạm | ☐ |
 | 45 | Thêm Epic mới ở màn Epics | Có ô chọn lịch (mặc định VN_STANDARD); lịch chưa có ngày lễ hiện ⚠ ngay trong ô chọn | ☐ |
+| 46 | ADMIN mở **Days off** → mục *Make-up workdays (làm bù)*, tab lịch VN, dán `2026-04-25, làm bù 30/4` rồi Import | Bảng hiện ngày kèm thứ (**Sat**) và lý do; thông báo mấy ngày thêm và mấy Epic sẽ tính lại | ☐ |
+| 47 | Sau khi import ngày làm bù + Resync, mở biểu đồ một Epic có tuần chứa ngày làm bù | Thứ 7 làm bù **KHÔNG bị bôi xám** và đường Kế hoạch/Thực tế **vẫn giảm** trên ngày đó; chỉ Chủ nhật còn dải xám | ☐ |
 
 ## Giám sát vận hành
 

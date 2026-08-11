@@ -8,6 +8,7 @@ import {
 } from '@app/shared';
 import { usePhaseSubtasks } from '../../api/use-phase-subtasks.js';
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
+import { EpicPicker } from '../../components/epic-picker/index.js';
 import { conflictText } from './conflict-text.js';
 import {
   Badge,
@@ -143,10 +144,11 @@ export function PhaseSubtasksScreen() {
 
   if (epicKey === null || epicKey === '') {
     return (
-      <EmptyState
+      <EpicPicker
         icon="🧾"
-        title="No Epic selected"
-        description="Open the Epics screen and click Sub-tasks on the Epic you want to see."
+        title="Pick an Epic"
+        description="Choose an active Epic below to list its sub-tasks by Phase."
+        onSelect={(key) => setParams({ epic: key })}
       />
     );
   }

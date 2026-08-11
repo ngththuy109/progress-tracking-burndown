@@ -157,6 +157,40 @@ describe('bitmask ngày làm việc', () => {
   });
 });
 
+describe('ngày làm bù — cuối tuần được xếp làm việc', () => {
+  // 2026-03-14 là Thứ 7, 2026-03-15 là Chủ nhật.
+  it('Thứ 7 làm bù là ngày làm việc; CN liền sau vẫn nghỉ', () => {
+    const makeup = cal({ makeupWorkdays: new Set(['2026-03-14']) });
+    expect(isWorkday('2026-03-14', makeup)).toBe(true);
+    expect(isWorkday('2026-03-15', makeup)).toBe(false);
+  });
+
+  it('đếm ngày làm việc CÓ tính ngày làm bù', () => {
+    const makeup = cal({ makeupWorkdays: new Set(['2026-03-14']) });
+    // T2 09/03 → T7 14/03: thường 5 (T2–T6); thêm Thứ 7 làm bù thành 6.
+    expect(countWorkdays('2026-03-09', '2026-03-14', cal())).toBe(5);
+    expect(countWorkdays('2026-03-09', '2026-03-14', makeup)).toBe(6);
+  });
+
+  it('ngày lễ THẮNG ngày làm bù nếu lỡ khai trùng — vẫn nghỉ', () => {
+    const both = cal({
+      holidays: new Set(['2026-03-14']),
+      makeupWorkdays: new Set(['2026-03-14']),
+    });
+    expect(isWorkday('2026-03-14', both)).toBe(false);
+  });
+
+  it('listWorkdays chèn ngày làm bù đúng vị trí, bỏ qua CN vẫn nghỉ', () => {
+    const makeup = cal({ makeupWorkdays: new Set(['2026-03-14']) });
+    expect(listWorkdays('2026-03-12', '2026-03-16', makeup)).toEqual([
+      '2026-03-12', // T5
+      '2026-03-13', // T6
+      '2026-03-14', // T7 làm bù
+      '2026-03-16', // T2 (CN 15 vẫn nghỉ)
+    ]);
+  });
+});
+
 describe('chống hồi quy múi giờ', () => {
   it('khoảng vắt qua ngày DST của một múi giờ có DST vẫn đếm đúng', () => {
     // Mỹ đổi giờ 08/03/2026. Cộng offset bằng tay sẽ lệch một ngày ở đây.

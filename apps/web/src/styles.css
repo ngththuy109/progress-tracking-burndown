@@ -334,6 +334,53 @@ code {
   color: var(--text-muted);
 }
 
+/* --- Bộ chọn Epic (Burndown / Signboard / Phase sub-tasks) -------------- */
+
+/* Ba màn hình đọc Epic từ URL. Khi vào từ thanh bên mà chưa có Epic, bộ chọn này
+   liệt kê các Epic đang active để bấm thẳng — mỗi dòng là MỘT nút trải hết bề
+   ngang, kèm mã ticket + tiêu đề để dễ nhận ra. */
+.epic-picker {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.epic-picker__item {
+  font: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.epic-picker__item:hover {
+  border-color: var(--accent);
+  background: var(--tone-info-bg);
+}
+/* Mã ticket không co lại khi tiêu đề dài — nó là thứ để đối chiếu với Jira. */
+.epic-picker__key {
+  flex-shrink: 0;
+}
+.epic-picker__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  /* Tiêu đề dài không đẩy phần meta rơi xuống dòng — cắt gọn bằng dấu ba chấm. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.epic-picker__meta {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
 .scope,
 .statusbar,
 .actions,

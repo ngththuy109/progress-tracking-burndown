@@ -2,8 +2,29 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PhaseSubtaskResponse } from '@app/shared';
+import type { PhaseSubtaskResponse, TrackedEpicSummary } from '@app/shared';
 import { PhaseSubtasksScreen } from './index.js';
+
+/** Epic tối thiểu cho bộ chọn — chỉ cần các trường bộ chọn thật sự đọc. */
+const epic = (over: Partial<TrackedEpicSummary> = {}): TrackedEpicSummary => ({
+  epicKey: 'PAY-1',
+  displayName: 'Thanh toán',
+  projectKey: 'PAY',
+  status: 'ACTIVE',
+  timezone: 'Asia/Tokyo',
+  calendarId: 'default',
+  lastSyncedAt: null,
+  lastError: null,
+  note: null,
+  dataHealth: {
+    phaseCount: 3,
+    subtaskCount: 12,
+    totalEstimateHours: 96,
+    missingWbsDateCount: 0,
+    unclassifiedTaskCount: 0,
+  },
+  ...over,
+});
 
 const RESPONSE: PhaseSubtaskResponse = {
   epicKey: 'PAY-1',
@@ -110,9 +131,17 @@ afterEach(() => {
 });
 
 describe('PhaseSubtasksScreen', () => {
-  it('chưa chọn Epic thì nhắc mở từ màn hình Epics', () => {
+  it('chưa chọn Epic thì hiện bộ chọn Epic đang active kèm mã ticket và tiêu đề', async () => {
+    // Epic ACTIVE hiện ra để chọn; Epic đang tạm dừng bị loại khỏi danh sách.
+    stubFetch({ epics: [epic(), epic({ epicKey: 'PAY-9', displayName: 'Đã dừng', status: 'PAUSED' })] });
     renderScreen('/phase-subtasks');
-    expect(screen.getByText('No Epic selected')).toBeTruthy();
+
+    const choice = await screen.findByRole('button', { name: /PAY-1/ });
+    // Cùng một nút mang cả MÃ ticket lẫn TIÊU ĐỀ để dễ nhận biết.
+    expect(choice.textContent).toContain('PAY-1');
+    expect(choice.textContent).toContain('Thanh toán');
+    // Epic không active KHÔNG được liệt kê.
+    expect(screen.queryByText('PAY-9')).toBeNull();
   });
 
   it('vẽ từng Phase kèm ticket bên trong', async () => {

@@ -445,6 +445,13 @@ xoá; Epic ACTIVE được đánh dấu `dirty:epics` — job quét mỗi giờ 
 hoặc bấm **Resync** nếu muốn thấy ngay. Worker đọc lại lịch ở đầu mỗi job nên
 **không cần restart** gì cả.
 
+**Ngày làm bù (T-39):** cùng màn **Days off**, mục *Make-up workdays (làm bù)* —
+khai những ngày Thứ 7/CN mà team **làm bù** cho một ngày nghỉ khác (hay gặp quanh
+Tết). Import/xoá y hệt ngày lễ, cùng phân quyền và cùng lan truyền. Engine tính
+ngày làm bù như **ngày làm việc bình thường** (đường Kế hoạch vẫn giảm) và biểu
+đồ **KHÔNG bôi xám** ngày đó. Lỡ khai một ngày vừa là lễ vừa là làm bù thì **ngày
+lễ thắng** (vẫn nghỉ).
+
 **Nếu đường Kế hoạch vẫn sai sau khi import:** kiểm tra Epic đang trỏ lịch
 nào (cột **Calendar** ở màn Epics — thấy `(unknown!)` là lịch rác, chọn lại
 `VN_STANDARD`). Dữ liệu cũ từ trước T-38 sửa hàng loạt bằng:

@@ -32,6 +32,12 @@ Màn hình chính của sản phẩm. PM nhìn một lần là biết Epic đang
 | Một Phase | 2 đường của riêng Phase đó | Phase này đang thế nào? |
 | So sánh | Nhiều đường Thực tế chồng nhau | Phase nào đang kéo tụt cả Epic? |
 
+> **Cập nhật 2026-08:** chế độ **So sánh** đã được GỠ khỏi giao diện — màn hình chỉ
+> còn *Tổng Epic* và *Một Phase*. `ChartMode` trong hợp đồng API vẫn giữ `COMPARE`
+> (backend không đổi). Cùng đợt này: vạch lưới mỗi ngày, đường Kế hoạch đậm hơn,
+> ngày nghỉ lẻ giữa tuần hiện rõ dải xám, và ngày làm bù (T-39) không bị bôi xám.
+> Chi tiết ở PRD Phụ lục C.6.
+
 **Đổi Phase KHÔNG được tải lại trang.** T-17 đã tính sẵn đường Kế hoạch của từng Phase vào `per_phase` chính vì lý do này.
 
 **Dấu mốc trên biểu đồ** — thứ biến biểu đồ từ "một đường cong" thành "một câu chuyện":

@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * E2E biểu đồ Burndown — US-03, US-04, US-05, US-11.
+ * E2E biểu đồ Burndown — US-03, US-04, US-11.
  *
  * Máy chủ giả ĐẾM số lần gọi để chứng minh điều quan trọng nhất của màn hình
- * này: **đổi chế độ xem không gọi lại API**.
+ * này: **đổi chế độ xem không gọi lại API**. (Chế độ so sánh nhiều Phase đã gỡ.)
  */
 
 const DAYS = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];
@@ -57,6 +57,34 @@ function burndownBody(over: Record<string, unknown> = {}) {
   };
 }
 
+/** Epic cho bộ chọn khi vào màn hình mà chưa có `?epic=` trên URL. */
+const epicSummary = (over: Record<string, unknown> = {}) => ({
+  epicKey: 'PAY-1',
+  displayName: 'Thanh toán',
+  projectKey: 'PAY',
+  status: 'ACTIVE',
+  timezone: 'Asia/Tokyo',
+  calendarId: 'default',
+  lastSyncedAt: '2026-03-06T17:00:00Z',
+  lastError: null,
+  note: null,
+  dataHealth: {
+    phaseCount: 3,
+    subtaskCount: 12,
+    totalEstimateHours: 96,
+    missingWbsDateCount: 0,
+    unclassifiedTaskCount: 0,
+  },
+  ...over,
+});
+
+const EPICS = [
+  epicSummary(),
+  epicSummary({ epicKey: 'PAY-2', displayName: 'Báo cáo' }),
+  // Không active → bộ chọn phải bỏ qua.
+  epicSummary({ epicKey: 'PAY-9', displayName: 'Đã dừng', status: 'PAUSED' }),
+];
+
 const EXPLAIN = {
   epicKey: 'PAY-1',
   date: '2026-03-03',
@@ -108,6 +136,11 @@ async function installApi(page: Page, over: Record<string, unknown> = {}): Promi
         await route.fulfill(json(burndownBody(over)));
         return;
       }
+      // Bộ chọn Epic (khi vào màn hình không kèm `?epic=`) gọi danh sách Epic.
+      if (path.endsWith('/epics')) {
+        await route.fulfill(json({ epics: EPICS }));
+        return;
+      }
       await route.fulfill(json({}));
     },
   );
@@ -145,18 +178,15 @@ test('đổi sang chế độ một Phase KHÔNG gọi lại API', async ({ page
   expect(counts.burndown).toBe(before);
 });
 
-test('chế độ so sánh vẽ mỗi Phase một đường và KHÔNG vẽ đường Kế hoạch', async ({ page }) => {
-  // Bốn Phase × hai đường là tám đường chồng nhau, không ai đọc được.
+test('chế độ so sánh nhiều Phase đã gỡ — không còn tab Compare Phases', async ({ page }) => {
+  // Yêu cầu 2026-08: bỏ chức năng so sánh Phase khỏi màn hình biểu đồ.
   await installApi(page);
   await page.goto(PAGE);
+  await expect(page.getByText('Whole Epic · Actual')).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Compare Phases' }).click();
-  await page.getByRole('button', { name: 'DESIGN' }).click();
-  await page.getByRole('button', { name: 'DEV' }).click();
-
-  await expect(page.getByText('Thiết kế · Actual')).toBeVisible();
-  await expect(page.getByText('Lập trình · Actual')).toBeVisible();
-  await expect(page.getByText('Thiết kế · Planned')).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Compare Phases' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Whole Epic' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Single Phase' })).toBeVisible();
 });
 
 test('chú thích về việc vẽ lại đường Kế hoạch LUÔN hiện, không phải bấm mới thấy', async ({ page }) => {
@@ -236,10 +266,19 @@ test('bấm vào biểu đồ mở bảng giải thích có ghi quy tắc đã �
   await expect(ruleCell).toContainText('by thuy');
 });
 
-test('chưa chọn Epic thì hướng dẫn bước tiếp theo, không để trang trắng', async ({ page }) => {
+test('chưa chọn Epic thì hiện bộ chọn Epic active để bấm thẳng, không để ngõ cụt', async ({ page }) => {
   await installApi(page);
   await page.goto('/burndown');
 
-  await expect(page.getByRole('heading', { name: 'No Epic selected' })).toBeVisible();
-  await expect(page.getByText(/Open the Epics screen/)).toBeVisible();
+  // Thay cho ô trống "sang màn Epics": danh sách Epic active kèm mã + tiêu đề.
+  await expect(page.getByRole('heading', { name: 'Pick an Epic to chart' })).toBeVisible();
+  const choice = page.getByRole('button', { name: /PAY-1/ });
+  await expect(choice).toContainText('Thanh toán');
+  // Epic đang tạm dừng KHÔNG lọt vào danh sách.
+  await expect(page.getByRole('button', { name: /PAY-9/ })).toHaveCount(0);
+
+  // Bấm một Epic là nạp chart ngay tại chỗ, không phải rời màn hình.
+  await choice.click();
+  await expect(page).toHaveURL(/epic=PAY-1/);
+  await expect(page.getByText('Whole Epic · Actual')).toBeVisible();
 });

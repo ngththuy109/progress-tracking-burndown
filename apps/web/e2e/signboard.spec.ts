@@ -107,6 +107,34 @@ function unparsedBody(over: Record<string, unknown> = {}) {
   };
 }
 
+/** Epic cho bộ chọn khi vào màn hình mà chưa có `?epic=` trên URL. */
+const epicSummary = (over: Record<string, unknown> = {}) => ({
+  epicKey: 'PAY-1',
+  displayName: 'Thanh toán',
+  projectKey: 'PAY',
+  status: 'ACTIVE',
+  timezone: 'Asia/Tokyo',
+  calendarId: 'default',
+  lastSyncedAt: '2026-03-06T17:00:00Z',
+  lastError: null,
+  note: null,
+  dataHealth: {
+    phaseCount: 3,
+    subtaskCount: 12,
+    totalEstimateHours: 96,
+    missingWbsDateCount: 0,
+    unclassifiedTaskCount: 0,
+  },
+  ...over,
+});
+
+const EPICS = [
+  epicSummary(),
+  epicSummary({ epicKey: 'PAY-2', displayName: 'Báo cáo' }),
+  // Không active → bộ chọn phải bỏ qua.
+  epicSummary({ epicKey: 'PAY-9', displayName: 'Đã dừng', status: 'PAUSED' }),
+];
+
 async function installApi(
   page: Page,
   over: {
@@ -137,6 +165,11 @@ async function installApi(
       }
       if (path.includes('/signboard/epic/')) {
         await route.fulfill(json(boardBody(over.board)));
+        return;
+      }
+      // Bộ chọn Epic (khi vào màn hình không kèm `?epic=`) gọi danh sách Epic.
+      if (path.endsWith('/epics')) {
+        await route.fulfill(json({ epics: EPICS }));
         return;
       }
       await route.fulfill(json({}));
@@ -386,9 +419,27 @@ test('màn hình luôn hiện NGÀY đang dùng để tính trạng thái', asyn
   await expect(page.getByText('Status as of 2026-03-10')).toBeVisible();
 });
 
-test('chưa chọn Epic thì hướng dẫn bước tiếp theo', async ({ page }) => {
+test('chưa chọn Epic thì hiện bộ chọn Epic active để bấm thẳng', async ({ page }) => {
   await installApi(page);
   await page.goto('/signboard');
 
-  await expect(page.getByRole('heading', { name: 'No Epic selected' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pick an Epic for the Signboard' })).toBeVisible();
+  const choice = page.getByRole('button', { name: /PAY-1/ });
+  await expect(choice).toContainText('Thanh toán');
+  // Epic đang tạm dừng KHÔNG lọt vào danh sách.
+  await expect(page.getByRole('button', { name: /PAY-9/ })).toHaveCount(0);
+
+  // Bấm một Epic → Epic vào URL và hiện thanh chọn Phase ngay tại chỗ.
+  await choice.click();
+  await expect(page).toHaveURL(/epic=PAY-1/);
+  await expect(page.getByRole('button', { name: /Design/ })).toBeVisible();
+});
+
+test('bấm Change Epic thì quay lại bộ chọn Epic', async ({ page }) => {
+  await installApi(page);
+  await page.goto('/signboard?epic=PAY-1&phase=DESIGN');
+  await expect(page.getByRole('rowheader', { name: 'Login' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Change Epic' }).click();
+  await expect(page.getByRole('heading', { name: 'Pick an Epic for the Signboard' })).toBeVisible();
 });

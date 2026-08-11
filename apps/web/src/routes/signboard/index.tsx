@@ -9,6 +9,7 @@ import {
 } from '@app/shared';
 import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
+import { EpicPicker } from '../../components/epic-picker/index.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
 import { jiraBaseUrl } from '../../api/jira.js';
@@ -33,10 +34,11 @@ export function SignboardScreen() {
 
   if (epicKey === null || epicKey === '') {
     return (
-      <EmptyState
+      <EpicPicker
         icon="🗂️"
-        title="No Epic selected"
-        description="Open the Epics screen and click Signboard on the Epic you want to see."
+        title="Pick an Epic for the Signboard"
+        description="Choose an active Epic below to build its Signboard."
+        onSelect={(key) => setParams({ epic: key })}
       />
     );
   }
@@ -50,6 +52,11 @@ export function SignboardScreen() {
       <div className="scope">
         <span className="scope__label">Epic:</span>
         <code>{epicKey}</code>
+        {/* Về lại bộ chọn Epic — xoá cả Epic lẫn Phase khỏi URL. Không có nút này
+            thì đổi Epic phải sửa URL tay. */}
+        <button type="button" className="button" onClick={() => setParams({})}>
+          Change Epic
+        </button>
       </div>
 
       {/* Thanh chọn Phase LUÔN hiện khi đã có Epic — kể cả lúc đang xem một

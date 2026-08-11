@@ -3,7 +3,7 @@
 34 card phủ **toàn bộ 12 tuần** (GĐ 1: 3 tuần, GĐ 2: 4.5 tuần, GĐ 3: 2 tuần, GĐ 4: 2.5 tuần).
 **Cả 34 card đã làm xong** (`status: review`). Sau bàn giao có thêm các card
 bổ sung T-35 (Signboard theo Sub-phase) và GĐ 5 — Lịch ngày nghỉ & kiểm tra
-plan (T-36 → T-38, đã xong).
+plan (T-36 → T-39, đã xong).
 
 | Tài liệu | Vai trò |
 |---|---|
@@ -85,6 +85,7 @@ người VN làm, người JP (khách hàng) review, hai phía nghỉ khác ngà
 | **T-36** | [Import ngày nghỉ cho hai lịch VN / JP](./T-36-holiday-import.md) | medium | opus | T-02, T-12, T-23, T-24 | `apps/api`, `db/repositories`, `apps/web/routes/config-holidays` |
 | **T-37** | [Kiểm tra plan rơi vào ngày nghỉ theo phía làm](./T-37-plan-conflict-check.md) | medium | opus | T-08, T-32, T-36 | `apps/api`, `apps/web`, migration `signboard_column.side` |
 | **T-38** | [Sửa gán lịch cho Epic + cảnh báo lịch trên Burndown](./T-38-epic-calendar-fix.md) | low | opus | T-10, T-29, T-30, T-36 | `apps/web/routes/epics`, `apps/api`, `tools/db` |
+| **T-39** | [Ngày làm bù (make-up workday)](./T-39-makeup-workday.md) | medium | opus | T-12, T-36 | `engine/calendar`, `db`, `apps/api`, `apps/web/routes/config-holidays` |
 
 Ba card này không có trong sơ đồ phụ thuộc bên dưới.
 

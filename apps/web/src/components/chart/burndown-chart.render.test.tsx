@@ -87,3 +87,36 @@ describe('BurndownChart — cầu nối đường Thực tế qua ngày thiếu 
     expect(bridge[0]!.getAttribute('d')).toBe(main[0]!.getAttribute('d'));
   });
 });
+
+/**
+ * Ngày lễ LẺ giữa tuần phải NHÌN THẤY dải xám.
+ *
+ * `<ReferenceArea>` cũ tô từ điểm đầu tới điểm cuối của dải nên dải một ngày rộng
+ * 0px và biến mất; nay tô theo pixel (một ô mỗi ngày) qua `<Customized>`.
+ */
+describe('BurndownChart — dải xám ngày nghỉ thấy được kể cả ngày lễ lẻ', () => {
+  /** Thứ 4 (2026-08-12) là ngày lễ LẺ: hai bên đều là ngày làm việc. */
+  const LONE_HOLIDAY: ChartSeries = {
+    key: 'EPIC',
+    label: 'Whole Epic',
+    colorHex: null,
+    points: [
+      { date: '2026-08-10', plannedRemainingHours: 70, actualRemainingHours: 70, varianceHours: 0, isOffDay: false },
+      { date: '2026-08-11', plannedRemainingHours: 68, actualRemainingHours: 68, varianceHours: 0, isOffDay: false },
+      { date: '2026-08-12', plannedRemainingHours: 66, actualRemainingHours: null, varianceHours: null, isOffDay: true },
+      { date: '2026-08-13', plannedRemainingHours: 64, actualRemainingHours: 64, varianceHours: 0, isOffDay: false },
+      { date: '2026-08-14', plannedRemainingHours: 62, actualRemainingHours: 62, varianceHours: 0, isOffDay: false },
+    ],
+  };
+
+  it('ngày lễ lẻ được đúng MỘT ô xám, bề rộng > 0', () => {
+    const { container } = render(
+      <BurndownChart series={[LONE_HOLIDAY]} markers={[]} showPlanned={false} />,
+    );
+
+    const bands = [...container.querySelectorAll('rect.offday-band')];
+    expect(bands).toHaveLength(1);
+    // Điểm mấu chốt: KHÔNG còn 0px như `<ReferenceArea>` — dải thật sự nhìn thấy.
+    expect(Number(bands[0]!.getAttribute('width'))).toBeGreaterThan(0);
+  });
+});
