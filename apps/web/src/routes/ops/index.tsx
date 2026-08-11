@@ -7,9 +7,12 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  type BadgeTone,
   type Column,
 } from '../../components/ui/index.js';
+import { DataQualitySection } from './data-quality.js';
+import { formatLocalDateTime } from './format.js';
+import { LEVEL_TONE, MetricChips } from './metric-chips.js';
+import { RunDetailDialog } from './run-detail-dialog.js';
 
 /**
  * Dashboard giám sát vận hành — dành cho DevOps và Tech Lead, không phải cho PM.
@@ -19,15 +22,10 @@ import {
  * Không phải lúc để đẹp.
  */
 
-const LEVEL_TONE: Record<string, BadgeTone> = {
-  OK: 'success',
-  WARN: 'warning',
-  CRITICAL: 'danger',
-  UNKNOWN: 'muted',
-};
-
 export function OpsScreen() {
   const [autoRefresh, setAutoRefresh] = useState(true);
+  // Dòng FAILED nào đang được mở xem chi tiết lỗi. `null` = không mở hộp nào.
+  const [errorRunId, setErrorRunId] = useState<string | null>(null);
   const query = useOpsHealth(autoRefresh);
   const resync = useResyncEpic();
 
@@ -44,8 +42,12 @@ export function OpsScreen() {
     <div className="stack">
       <div className="statusbar">
         {/* Thiếu dòng này thì có người ra quyết định trên số liệu của 20 phút
-            trước mà không biết. */}
-        <span className="muted">Data collected at {data.collectedAt}</span>
+            trước mà không biết. Hiện theo GIỜ MÁY NGƯỜI XEM — chuỗi UTC bắt
+            người trực tự trừ múi giờ lúc 2 giờ sáng; ISO gốc giữ trong tooltip
+            để đối chiếu với log máy chủ. */}
+        <span className="muted" title={data.collectedAt}>
+          Data collected at {formatLocalDateTime(data.collectedAt)}
+        </span>
         <span className="row">
           <label className="check">
             <input
@@ -63,7 +65,7 @@ export function OpsScreen() {
 
       <MetricGroup title="Nightly jobs" metrics={data.jobs.metrics} />
       <MetricGroup title="Jira calls" metrics={data.jira.metrics} />
-      <MetricGroup title="Data quality" metrics={data.data.metrics} />
+      <DataQualitySection data={data.data} />
 
       <ErroredEpics
         epics={data.jobs.erroredEpics}
@@ -75,7 +77,9 @@ export function OpsScreen() {
         queuedKey={resync.isSuccess ? resync.variables.epicKey : null}
       />
 
-      <RecentRuns runs={data.jobs.recentRuns} />
+      {errorRunId !== null && <RunDetailDialog runId={errorRunId} onClose={() => setErrorRunId(null)} />}
+
+      <RecentRuns runs={data.jobs.recentRuns} onShowError={setErrorRunId} />
 
       <PlanDrift rows={data.planDrift.rows} />
     </div>
@@ -86,16 +90,7 @@ function MetricGroup({ title, metrics }: { readonly title: string; readonly metr
   return (
     <section className="panel">
       <h2 className="panel__title">{title}</h2>
-      <ul className="chips">
-        {metrics.map((m) => (
-          <li key={m.name}>
-            <Badge tone={LEVEL_TONE[m.level] ?? 'muted'} title={`Threshold: ${m.threshold} ${m.unit}`}>
-              {/* Luôn hiện `giá trị / ngưỡng`: số đo không kèm ngưỡng thì vô nghĩa. */}
-              {m.label}: {m.value === null ? 'not measured yet' : `${m.value} / ${m.threshold} ${m.unit}`}
-            </Badge>
-          </li>
-        ))}
-      </ul>
+      <MetricChips metrics={metrics} />
     </section>
   );
 }
@@ -143,9 +138,21 @@ function ErroredEpics({
   );
 }
 
-function RecentRuns({ runs }: { readonly runs: readonly JobRun[] }) {
+function RecentRuns({
+  runs,
+  onShowError,
+}: {
+  readonly runs: readonly JobRun[];
+  readonly onShowError: (runId: string) => void;
+}) {
   const columns: readonly Column<JobRun>[] = [
-    { key: 'startedAt', header: 'Started', render: (r) => r.startedAt, sortKey: (r) => r.startedAt },
+    {
+      key: 'startedAt',
+      header: 'Started',
+      // Giờ MÁY NGƯỜI XEM; ISO gốc trong tooltip để đối chiếu log máy chủ (UTC).
+      render: (r) => <span title={r.startedAt}>{formatLocalDateTime(r.startedAt)}</span>,
+      sortKey: (r) => r.startedAt,
+    },
     { key: 'epic', header: 'Epic', render: (r) => <code>{r.epicKey}</code>, sortKey: (r) => r.epicKey },
     { key: 'type', header: 'Type', render: (r) => r.runType, sortKey: (r) => r.runType },
     {
@@ -162,7 +169,16 @@ function RecentRuns({ runs }: { readonly runs: readonly JobRun[] }) {
       render: (r) => (
         <span>
           <Badge tone={r.status === 'SUCCESS' ? 'success' : 'danger'}>{r.status}</Badge>
-          {r.errorMessage !== null && <div className="muted">{r.errorMessage}</div>}
+          {r.errorMessage !== null && (
+            <div className="muted">
+              {r.errorMessage}{' '}
+              {/* Dẫn tới chi tiết: một dòng thông báo không nói được lỗi Ở ĐÂU
+                  trong pipeline và nguyên nhân đầy đủ (stack). */}
+              <button type="button" className="button" onClick={() => onShowError(r.runId)}>
+                Error details
+              </button>
+            </div>
+          )}
         </span>
       ),
       sortKey: (r) => r.status,

@@ -1,6 +1,7 @@
 import {
   HEALTH_THRESHOLD,
   OPS_THRESHOLD,
+  type DataQualityEpic,
   type HealthMetricName,
   type JobRun,
   type OpsHealthResponse,
@@ -103,6 +104,19 @@ export interface RawPlanDrift {
   readonly planWorkdays: number;
 }
 
+export interface RawDataQualityRatios {
+  readonly missingEstimateRatio: number;
+  readonly unclassifiedPhaseRatio: number;
+  readonly missingWbsDateRatio: number;
+  readonly unparsedSubtaskRatio: number;
+}
+
+export interface RawEpicDataQuality extends RawDataQualityRatios {
+  readonly epicKey: string;
+  readonly displayName: string;
+  readonly total: number;
+}
+
 export interface OpsHealthInput {
   readonly collectedAt: Date;
   /** Thời lượng lần chạy job đêm (DAILY) gần nhất, tính bằng phút. `null` nếu chưa từng chạy. */
@@ -111,14 +125,12 @@ export interface OpsHealthInput {
   readonly erroredEpicCount: number;
   /** Số Epic ACTIVE đã lỡ ít nhất một snapshot đêm. */
   readonly snapshotBehindCount: number;
-  readonly data: {
+  readonly data: RawDataQualityRatios & {
     /** Số Sub-task đang xét. 0 nghĩa là CHƯA có dữ liệu → mọi tỉ lệ là "chưa đo được". */
     readonly total: number;
-    readonly missingEstimateRatio: number;
-    readonly unclassifiedPhaseRatio: number;
-    readonly missingWbsDateRatio: number;
-    readonly unparsedSubtaskRatio: number;
   };
+  /** Chất lượng dữ liệu tách theo TỪNG Epic đang theo dõi. */
+  readonly dataByEpic: readonly RawEpicDataQuality[];
   readonly recentRuns: readonly RawRun[];
   readonly erroredEpics: readonly RawErroredEpic[];
   readonly planDrift: readonly RawPlanDrift[];
@@ -132,14 +144,12 @@ const HOUR_MS = 3_600_000;
  * MỘT lần gọi trả về cả bốn nhóm. Dashboard gọi sáu endpoint thì đúng lúc hệ
  * thống đang tải nặng chính nó lại góp phần làm nặng thêm (T-33).
  */
-export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
-  const hasData = input.data.total > 0;
-
-  const dataMetrics: OpsMetric[] = DATA_METRICS.map(({ name, label, key }) => {
-    const ratio = input.data[key];
+export function dataQualityMetrics(total: number, ratios: RawDataQualityRatios): OpsMetric[] {
+  return DATA_METRICS.map(({ name, label, key }) => {
+    const ratio = ratios[key];
     // Chưa có Sub-task nào thì "0%" là lời nói dối — trông y hệt dữ liệu sạch.
     // Nói "chưa đo được" thay vì hiện 0.
-    if (!hasData) {
+    if (total <= 0) {
       return { name, label, value: null, threshold: round(HEALTH_THRESHOLD[key].warn * 100), unit: '%', level: 'UNKNOWN' };
     }
     return {
@@ -151,6 +161,23 @@ export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
       level: levelOf(key, ratio),
     };
   });
+}
+
+export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
+  const dataMetrics = dataQualityMetrics(input.data.total, input.data);
+
+  // Cùng ngưỡng, cùng cách tính với số toàn cục — chỉ khác phạm vi. Epic tệ nhất
+  // lên trước để người trực thấy ngay đội nào cần sửa dữ liệu.
+  const worstOf = (ms: readonly OpsMetric[]): number =>
+    Math.max(...ms.map((m) => (m.level === 'CRITICAL' ? 2 : m.level === 'WARN' ? 1 : 0)));
+  const byEpic: DataQualityEpic[] = input.dataByEpic
+    .map((e) => ({
+      epicKey: e.epicKey,
+      displayName: e.displayName,
+      total: e.total,
+      metrics: dataQualityMetrics(e.total, e),
+    }))
+    .sort((a, b) => worstOf(b.metrics) - worstOf(a.metrics) || a.epicKey.localeCompare(b.epicKey));
 
   const recentRuns: JobRun[] = input.recentRuns.map((r) => ({
     runId: r.runId,
@@ -227,7 +254,7 @@ export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
         }),
       ],
     },
-    data: { metrics: dataMetrics },
+    data: { metrics: dataMetrics, byEpic },
     planDrift: { rows: planDriftRows },
   };
 }

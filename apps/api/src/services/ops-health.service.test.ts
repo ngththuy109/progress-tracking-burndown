@@ -23,6 +23,7 @@ function input(over: Partial<OpsHealthInput> = {}): OpsHealthInput {
       missingWbsDateRatio: 0.05,
       unparsedSubtaskRatio: 0.05,
     },
+    dataByEpic: [],
     recentRuns: [],
     erroredEpics: [],
     planDrift: [],
@@ -129,6 +130,63 @@ describe('buildOpsHealth — chưa đo được nói "chưa đo được", KHÔN
       expect(m.level).toBe('UNKNOWN');
       // Ngưỡng vẫn hiện để biết đang đo cái gì.
       expect(m.threshold).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () => {
+  it('mỗi Epic có bộ 4 số đo riêng, cùng ngưỡng với số toàn cục', () => {
+    const res = buildOpsHealth(
+      input({
+        dataByEpic: [
+          {
+            epicKey: 'PAY-1',
+            displayName: 'Payment',
+            total: 50,
+            missingEstimateRatio: 0.4, // CRITICAL
+            unclassifiedPhaseRatio: 0,
+            missingWbsDateRatio: 0,
+            unparsedSubtaskRatio: 0,
+          },
+          {
+            epicKey: 'CRM-1',
+            displayName: 'CRM',
+            total: 50,
+            missingEstimateRatio: 0,
+            unclassifiedPhaseRatio: 0,
+            missingWbsDateRatio: 0,
+            unparsedSubtaskRatio: 0,
+          },
+        ],
+      }),
+    );
+    expect(res.data.byEpic).toHaveLength(2);
+    // Epic tệ nhất lên trước — người trực đọc từ trên xuống.
+    expect(res.data.byEpic[0]?.epicKey).toBe('PAY-1');
+    expect(res.data.byEpic[0]?.metrics.find((m) => m.name === 'missingEstimate')?.level).toBe('CRITICAL');
+    expect(res.data.byEpic[1]?.metrics.every((m) => m.level === 'OK')).toBe(true);
+    expect(() => opsHealthResponseSchema.parse(res)).not.toThrow();
+  });
+
+  it('Epic chưa có Sub-task nào → null/UNKNOWN, không hiện 0 như thể sạch', () => {
+    const res = buildOpsHealth(
+      input({
+        dataByEpic: [
+          {
+            epicKey: 'NEW-1',
+            displayName: 'Mới thêm',
+            total: 0,
+            missingEstimateRatio: 0,
+            unclassifiedPhaseRatio: 0,
+            missingWbsDateRatio: 0,
+            unparsedSubtaskRatio: 0,
+          },
+        ],
+      }),
+    );
+    for (const m of res.data.byEpic[0]?.metrics ?? []) {
+      expect(m.value).toBeNull();
+      expect(m.level).toBe('UNKNOWN');
     }
   });
 });

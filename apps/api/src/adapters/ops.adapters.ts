@@ -1,6 +1,12 @@
 import type { PrismaClient } from '@app/db';
-import type { OpsHealthResponse } from '@app/shared';
-import { buildOpsHealth, type RawErroredEpic, type RawPlanDrift, type RawRun } from '../services/ops-health.service.js';
+import type { DataQualityIssue, DqProblem, OpsHealthResponse, SyncRunDetail } from '@app/shared';
+import {
+  buildOpsHealth,
+  type RawEpicDataQuality,
+  type RawErroredEpic,
+  type RawPlanDrift,
+  type RawRun,
+} from '../services/ops-health.service.js';
 
 /**
  * Nối cổng `opsHealth()` của dashboard giám sát vào PostgreSQL (T-33).
@@ -16,6 +22,22 @@ import { buildOpsHealth, type RawErroredEpic, type RawPlanDrift, type RawRun } f
 
 export interface OpsHealthPort {
   opsHealth(): Promise<OpsHealthResponse>;
+  /** Chi tiết MỘT lần chạy job — bước lỗi, nguyên nhân, stack. `null` = không có. */
+  runDetail(runId: string): Promise<SyncRunDetail | null>;
+  /** Từng ticket đang lỗi dữ liệu (kể cả ticket đã đánh dấu bỏ qua, kèm cờ). */
+  dataQualityIssues(): Promise<readonly DataQualityIssue[]>;
+  /**
+   * Đặt/gỡ cờ "không cần sửa dữ liệu" cho một Sub-task.
+   * Trả về `projectKey` của Epic chứa ticket để tầng route kiểm quyền,
+   * hoặc `null` nếu ticket không tồn tại / không phải Sub-task.
+   */
+  issueProject(issueKey: string): Promise<{ projectKey: string } | null>;
+  setDataQualityExempt(args: {
+    issueKey: string;
+    exempt: boolean;
+    by: string;
+    at: Date;
+  }): Promise<void>;
 }
 
 export interface OpsHealthPortOptions {
@@ -39,7 +61,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
       const since24h = new Date(collectedAt.getTime() - DAY_MS);
 
       // Chạy song song: các truy vấn độc lập, không phụ thuộc kết quả của nhau.
-      const [nightlyRows, rateRows, snapRows, dataRows, runRows, erroredRows, driftRows] = await Promise.all([
+      const [nightlyRows, rateRows, snapRows, dataRows, dataByEpicRows, runRows, erroredRows, driftRows] = await Promise.all([
         // Thời lượng lần chạy job đêm (DAILY) gần nhất đã kết thúc.
         prisma.$queryRawUnsafe<{ duration_ms: number | null }[]>(
           `SELECT duration_ms
@@ -66,6 +88,8 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                   ) < CURRENT_DATE - 1`,
         ),
         // Chất lượng dữ liệu trên toàn bộ Sub-task đang hoạt động (không đọc token).
+        // Ticket đã đánh dấu "không cần sửa dữ liệu" bị loại khỏi cả tử số lẫn
+        // mẫu số — đó chính là ý nghĩa của cờ dq_exempt.
         prisma.$queryRawUnsafe<
           { total: bigint; no_estimate: bigint; unclassified: bigint; no_wbs: bigint; unparsed: bigint }[]
         >(
@@ -75,7 +99,36 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                   COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
                   COUNT(*) FILTER (WHERE sb_parse_status = 'UNPARSED')::bigint AS unparsed
              FROM jira_issue
-            WHERE issue_type = 'SUBTASK' AND removed_at IS NULL`,
+            WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = FALSE`,
+        ),
+        // Cùng số đo, tách theo TỪNG Epic đang theo dõi — số toàn cục không nói
+        // được đội nào phải sửa dữ liệu.
+        prisma.$queryRawUnsafe<
+          {
+            epic_key: string;
+            display_name: string;
+            total: bigint;
+            no_estimate: bigint;
+            unclassified: bigint;
+            no_wbs: bigint;
+            unparsed: bigint;
+          }[]
+        >(
+          `SELECT te.epic_key,
+                  te.display_name,
+                  COUNT(ji.*)::bigint AS total,
+                  COUNT(ji.*) FILTER (WHERE ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0)::bigint AS no_estimate,
+                  COUNT(ji.*) FILTER (WHERE ji.phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
+                  COUNT(ji.*) FILTER (WHERE ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL)::bigint AS no_wbs,
+                  COUNT(ji.*) FILTER (WHERE ji.sb_parse_status = 'UNPARSED')::bigint AS unparsed
+             FROM tracked_epic te
+             LEFT JOIN jira_issue ji
+               ON ji.epic_key = te.epic_key
+              AND ji.issue_type = 'SUBTASK'
+              AND ji.removed_at IS NULL
+              AND ji.dq_exempt = FALSE
+            GROUP BY te.epic_key, te.display_name
+            ORDER BY te.epic_key`,
         ),
         // 20 lần chạy job gần nhất — mới nhất trước.
         prisma.$queryRawUnsafe<
@@ -150,6 +203,21 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         planWorkdays: toNumber(r.plan_workdays),
       }));
 
+      const dataByEpic: RawEpicDataQuality[] = dataByEpicRows.map((r) => {
+        const epicTotal = toNumber(r.total);
+        const epicRatio = (n: bigint | undefined): number =>
+          epicTotal === 0 ? 0 : toNumber(n) / epicTotal;
+        return {
+          epicKey: r.epic_key,
+          displayName: r.display_name,
+          total: epicTotal,
+          missingEstimateRatio: epicRatio(r.no_estimate),
+          unclassifiedPhaseRatio: epicRatio(r.unclassified),
+          missingWbsDateRatio: epicRatio(r.no_wbs),
+          unparsedSubtaskRatio: epicRatio(r.unparsed),
+        };
+      });
+
       return buildOpsHealth({
         collectedAt,
         nightlyDurationMinutes: durationMs === null ? null : Math.round(durationMs / 60_000),
@@ -163,9 +231,136 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           missingWbsDateRatio: ratio(dataRow?.no_wbs),
           unparsedSubtaskRatio: ratio(dataRow?.unparsed),
         },
+        dataByEpic,
         recentRuns,
         erroredEpics,
         planDrift,
+      });
+    },
+
+    async runDetail(runId: string): Promise<SyncRunDetail | null> {
+      // `id` là BigInt; chuỗi không phải số thì không có gì để tra.
+      if (!/^\d+$/.test(runId)) return null;
+      const rows = await prisma.$queryRawUnsafe<
+        {
+          id: bigint;
+          epic_key: string;
+          run_type: string;
+          status: string;
+          started_at: Date;
+          finished_at: Date | null;
+          duration_ms: number | null;
+          api_calls_made: number;
+          rate_limit_hits: number;
+          days_computed: number;
+          error_step: string | null;
+          error_message: string | null;
+          error_detail: string | null;
+        }[]
+      >(
+        `SELECT id, epic_key, run_type, status, started_at, finished_at, duration_ms,
+                api_calls_made, rate_limit_hits, days_computed,
+                error_step, error_message, error_detail
+           FROM sync_run
+          WHERE id = $1`,
+        BigInt(runId),
+      );
+      const r = rows[0];
+      if (r === undefined) return null;
+      return {
+        runId: String(r.id),
+        epicKey: r.epic_key,
+        runType: r.run_type,
+        status: r.status,
+        startedAt: r.started_at.toISOString(),
+        finishedAt: r.finished_at?.toISOString() ?? null,
+        durationSeconds: r.duration_ms === null ? null : r.duration_ms / 1000,
+        apiCallsMade: r.api_calls_made,
+        rateLimitHits: r.rate_limit_hits,
+        daysComputed: r.days_computed,
+        errorStep: r.error_step,
+        errorMessage: r.error_message,
+        errorDetail: r.error_detail,
+      };
+    },
+
+    async dataQualityIssues(): Promise<readonly DataQualityIssue[]> {
+      // Ticket exempt VẪN nằm trong danh sách (kèm cờ) — không thì không gỡ
+      // đánh dấu được; nhưng chúng đã bị loại khỏi các SỐ ĐO ở opsHealth().
+      const rows = await prisma.$queryRawUnsafe<
+        {
+          issue_key: string;
+          epic_key: string;
+          display_name: string;
+          summary: string;
+          no_estimate: boolean;
+          no_wbs: boolean;
+          unclassified: boolean;
+          unparsed: boolean;
+          dq_exempt: boolean;
+          dq_exempt_by: string | null;
+        }[]
+      >(
+        `SELECT ji.issue_key,
+                te.epic_key,
+                te.display_name,
+                ji.summary,
+                (ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0) AS no_estimate,
+                (ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL) AS no_wbs,
+                (ji.phase_code = 'UNCLASSIFIED') AS unclassified,
+                (ji.sb_parse_status = 'UNPARSED') AS unparsed,
+                ji.dq_exempt,
+                ji.dq_exempt_by
+           FROM jira_issue ji
+           JOIN tracked_epic te ON te.epic_key = ji.epic_key
+          WHERE ji.issue_type = 'SUBTASK'
+            AND ji.removed_at IS NULL
+            AND (ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0
+                 OR ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL
+                 OR ji.phase_code = 'UNCLASSIFIED'
+                 OR ji.sb_parse_status = 'UNPARSED')
+          ORDER BY te.epic_key, ji.issue_key`,
+      );
+      return rows.map((r) => {
+        const problems: DqProblem[] = [];
+        if (r.no_estimate) problems.push('MISSING_ESTIMATE');
+        if (r.no_wbs) problems.push('MISSING_WBS_DATE');
+        if (r.unclassified) problems.push('UNCLASSIFIED_PHASE');
+        if (r.unparsed) problems.push('UNPARSED_TITLE');
+        return {
+          issueKey: r.issue_key,
+          epicKey: r.epic_key,
+          epicDisplayName: r.display_name,
+          summary: r.summary,
+          problems,
+          exempt: r.dq_exempt,
+          exemptBy: r.dq_exempt_by,
+        };
+      });
+    },
+
+    async issueProject(issueKey: string): Promise<{ projectKey: string } | null> {
+      const rows = await prisma.$queryRawUnsafe<{ project_key: string }[]>(
+        `SELECT te.project_key
+           FROM jira_issue ji
+           JOIN tracked_epic te ON te.epic_key = ji.epic_key
+          WHERE ji.issue_key = $1 AND ji.issue_type = 'SUBTASK'`,
+        issueKey,
+      );
+      const r = rows[0];
+      return r === undefined ? null : { projectKey: r.project_key };
+    },
+
+    async setDataQualityExempt(args): Promise<void> {
+      await prisma.jiraIssue.update({
+        where: { issueKey: args.issueKey },
+        data: {
+          dqExempt: args.exempt,
+          // Gỡ cờ thì xoá luôn dấu vết ai/lúc nào — thông tin đó thuộc về lần
+          // đánh dấu, không phải về ticket.
+          dqExemptBy: args.exempt ? args.by : null,
+          dqExemptAt: args.exempt ? args.at : null,
+        },
       });
     },
   };

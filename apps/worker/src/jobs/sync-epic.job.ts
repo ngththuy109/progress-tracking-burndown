@@ -1,4 +1,4 @@
-import type { EffectiveConfig, TrackedEpicStatus } from '@app/shared';
+import type { EffectiveConfig, SyncStep, TrackedEpicStatus } from '@app/shared';
 import type { JiraClient, ResolvedFieldMapping } from '@app/jira';
 import { fetchEpicTree, fetchHistory, skewedWatermark } from '../pipeline/fetch-epic-tree.js';
 import {
@@ -54,6 +54,10 @@ export interface SyncRunPort {
     issuesRead: number;
     worklogsRead: number;
     errorMessage: string | null;
+    /** Bước đang chạy khi job ném lỗi — màn hình Monitoring trả lời "lỗi ở đâu". */
+    errorStep: SyncStep | null;
+    /** Stack trace nguyên văn — nguồn của màn hình chi tiết lần chạy. */
+    errorDetail: string | null;
   }): Promise<void>;
 }
 
@@ -137,6 +141,10 @@ export async function syncEpic(
   // không để lại dấu vết nào, và người vận hành không biết nó đã chạy hay chưa.
   const runId = await deps.syncRuns.start({ epicKey, runType, startedAt });
 
+  // Bước ĐANG chạy — cập nhật trước mỗi giai đoạn để khi ném lỗi biết được job
+  // chết ở đâu: phía Jira (FETCH_*), phía database (PERSIST) hay lúc chốt sổ.
+  let step: SyncStep = 'FETCH_TREE';
+
   try {
     const since = rereadAll ? null : skewedWatermark(state.lastSyncedAt);
 
@@ -144,6 +152,7 @@ export async function syncEpic(
     const tree = await fetchEpicTree(deps.jira, { epicKey, fields: deps.fields, since });
 
     // --- GIAI ĐOẠN 2: worklog + changelog song song ---
+    step = 'FETCH_HISTORY';
     // Chỉ Task và Sub-task mới có worklog đáng kể; bản thân Epic thì không.
     const historyTargets = [...tree.tasks, ...tree.subtasks];
     const idToKey = new Map(historyTargets.map((i) => [i.id, i.key]));
@@ -156,6 +165,7 @@ export async function syncEpic(
     const history = await fetchHistory(deps.jira, { issueIdToKey: idToKey, since });
 
     // --- GIAI ĐOẠN 3: phân tách tiêu đề rồi ghi xuống ---
+    step = 'PERSIST';
     const built = buildRecords({
       epicKey,
       tree,
@@ -183,6 +193,7 @@ export async function syncEpic(
     const retroLogDetected = hasRetroLog(built.worklogs);
     if (retroLogDetected) await deps.dirty.add([epicKey]);
 
+    step = 'FINALIZE';
     const finishedAt = deps.now();
     await deps.syncRuns.finish({
       id: runId,
@@ -193,6 +204,8 @@ export async function syncEpic(
       issuesRead: built.issues.length,
       worklogsRead: built.worklogs.length,
       errorMessage: null,
+      errorStep: null,
+      errorDetail: null,
     });
 
     await deps.epics.setSynced(epicKey, finishedAt);
@@ -226,6 +239,10 @@ export async function syncEpic(
       issuesRead: 0,
       worklogsRead: 0,
       errorMessage,
+      errorStep: step,
+      // Stack trace giữ NGUYÊN VĂN: đây là thứ màn hình chi tiết lần chạy hiện
+      // ra để người trực khỏi phải grep log worker giữa đêm.
+      errorDetail: err instanceof Error ? (err.stack ?? errorMessage) : String(err),
     });
 
     // Chuyển ERROR chứ KHÔNG gỡ khỏi sổ (E-26): có thể chỉ là lỗi tạm thời hoặc
