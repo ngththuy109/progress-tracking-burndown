@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { ChangelogEvent, StatusCategory } from '@app/shared';
 import {
   resolveStatusCategoryAt,
+  currentStatusCategory,
   findFirstInProgressMs,
   findLastDoneMs,
 } from './resolve-status-category.js';
@@ -123,5 +124,25 @@ describe('mốc bắt đầu và kết thúc thực tế', () => {
     const log = [ev('10002', '2026-03-12T02:00:00Z')];
     expect(findFirstInProgressMs(log, STATUS_MAP)).toBeNull();
     expect(findLastDoneMs(log, STATUS_MAP)).toBe(D('2026-03-12T02:00:00Z'));
+  });
+});
+
+describe('trạng thái HIỆN TẠI', () => {
+  it('chưa có changelog thì là nhóm To Do', () => {
+    expect(currentStatusCategory([], STATUS_MAP)).toBe('new');
+  });
+
+  it('lấy trạng thái SAU sự kiện đổi cuối cùng, không phụ thuộc mốc thời gian', () => {
+    const log = [ev('10001', '2026-03-09T02:00:00Z'), ev('10002', '2026-03-12T02:00:00Z')];
+    expect(currentStatusCategory(log, STATUS_MAP)).toBe('done');
+  });
+
+  it('chuyển nhầm In Progress rồi kéo về To Do thì hiện tại là To Do', () => {
+    // Đây là điểm mấu chốt của bug reset actual_start: dấu vết In Progress vẫn
+    // còn nhưng trạng thái cuối đã về `new`.
+    const log = [ev('10001', '2026-03-09T02:00:00Z'), ev('10000', '2026-03-10T02:00:00Z')];
+    expect(currentStatusCategory(log, STATUS_MAP)).toBe('new');
+    // ...trong khi dấu vết In Progress trong quá khứ vẫn tìm thấy được:
+    expect(findFirstInProgressMs(log, STATUS_MAP)).toBe(D('2026-03-09T02:00:00Z'));
   });
 });

@@ -44,6 +44,25 @@ export function resolveStatusCategoryAt(
   return current;
 }
 
+/** Mốc xa nhất một `Date` biểu diễn được — không sự kiện thật nào vượt qua. */
+const END_OF_TIME_MS = 8_640_000_000_000_000;
+
+/**
+ * Nhóm trạng thái HIỆN TẠI của issue — sau khi áp dụng TOÀN BỘ changelog.
+ *
+ * Khác `findFirstInProgressMs`/`findLastDoneMs` (tìm dấu vết trong quá khứ), hàm
+ * này trả về trạng thái issue đang đứng ở đâu ngay bây giờ. Cần để phân biệt
+ * "đang/đã làm" với "đã bị kéo ngược về To Do": một Sub-task chuyển nhầm sang In
+ * Progress rồi trả lại Open vẫn còn dấu vết In Progress trong changelog, chỉ có
+ * trạng thái CUỐI mới cho biết nó thực sự đã quay về nhóm `new`.
+ */
+export function currentStatusCategory(
+  changelog: readonly ChangelogEvent[],
+  statusIdMap: StatusIdMap,
+): StatusCategory {
+  return resolveStatusCategoryAt(changelog, statusIdMap, END_OF_TIME_MS);
+}
+
 /**
  * Lần ĐẦU TIÊN issue chuyển sang nhóm `indeterminate` (In Progress).
  * Trả về mốc mili-giây, hoặc null nếu chưa từng.

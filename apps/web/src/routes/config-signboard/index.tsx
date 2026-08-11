@@ -8,6 +8,7 @@ import {
   isDirty,
   loadDraft,
   payloadToSave,
+  phaseCodeOptions,
   subPhaseGroups,
   type DraftAction,
   type DraftState,
@@ -325,6 +326,9 @@ function SubPhaseOrderSection({
 }) {
   const groups = subPhaseGroups(state);
   const disabled = state.projectKey !== null && state.inherited.subPhaseOrders;
+  // Danh sách Phase ĐÃ ĐỊNH NGHĨA ở khu ② — để ô Phase là ô CHỌN, không cho gõ
+  // tay mã sai chính tả. Cùng nguồn, cùng cách với ô chọn Phase ở khu ③.
+  const phaseCodes = phaseCodeOptions(state);
 
   return (
     <section className="panel" aria-labelledby="sub-phase-order-title">
@@ -349,12 +353,12 @@ function SubPhaseOrderSection({
       />
 
       {groups.map((group, gi) => (
-        // Key theo dòng ĐẦU của nhóm, KHÔNG theo mã Phase: mã là thứ đang gõ dở
-        // trong ô — key đổi theo từng phím thì input bị dựng lại và mất focus.
+        // Key theo dòng ĐẦU của nhóm, KHÔNG theo mã Phase: mã Phase là khoá
+        // nhóm, đổi khi PM chọn Phase khác — key đổi theo thì cả khối bị dựng lại.
         <div className="stack" key={group.rows[0]?.index ?? gi}>
           <label className="field">
             <span>Phase</span>
-            <input
+            <select
               className="input input--code"
               value={group.phaseCode}
               disabled={disabled}
@@ -366,7 +370,21 @@ function SubPhaseOrderSection({
                   value: e.target.value,
                 })
               }
-            />
+            >
+              {/* Nhóm mới (chưa chọn) hoặc mã Phase không còn trong danh sách ②
+                  vẫn phải hiện ra: ẩn đi thì PM không thấy nhóm sai để sửa. Cùng
+                  cách giữ lại giá trị đang có như ô chọn Phase ở khu ③. */}
+              {!phaseCodes.includes(group.phaseCode) && (
+                <option value={group.phaseCode}>
+                  {group.phaseCode === '' ? '(select a Phase)' : group.phaseCode}
+                </option>
+              )}
+              {phaseCodes.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
           </label>
           <ul className="rows">
             {group.rows.map(({ row, index }, groupIndex) => {

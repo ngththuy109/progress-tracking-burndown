@@ -29,6 +29,12 @@ npx playwright install chromium     # trình duyệt cho test E2E, ~300MB
 > **Đừng gộp `prisma generate` vào `postinstall`:** prisma generate tự chạy `pnpm add @prisma/client`
 > → lại kích hoạt `postinstall` → **đệ quy vô hạn**. Vì vậy setup là hai bước tuần tự.
 
+> **Tài liệu không bị lệch:** hook `PostToolUse` (`.claude/hooks/docs-reminder.mjs`) chạy sau khi
+> Claude Code sửa một file mã nguồn và chèn lời nhắc (một lần / file / phiên) để rà soát xem
+> `README.md`, `docs/` hay `docs/tasks/` có cần cập nhật cho khớp không. Nó chỉ **nhắc** — không chặn
+> thao tác, không tự sửa file — và bỏ qua tài liệu, test, file cấu hình. Tắt bằng menu `/hooks` hoặc
+> xoá mục `PostToolUse` trong `.claude/settings.json`.
+
 ## 2. Biến môi trường
 
 ```bash
@@ -46,6 +52,8 @@ Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đ�
 | `JIRA_API_TOKEN` | https://id.atlassian.com/manage-profile/security/api-tokens |
 
 > **Chỉ cần Jira thật khi muốn đồng bộ dữ liệu thật.** Toàn bộ test chạy được mà không cần Jira, PostgreSQL hay Redis — xem mục 5.
+
+> **Muốn ô Signboard mở/copy được link ticket?** Đặt thêm `VITE_JIRA_BASE_URL` (thường trùng `JIRA_BASE_URL`). Rê chuột vào một ô task sẽ hiện thẻ có nút **mở** ticket trên Jira (tab mới) và **copy** link. Bỏ trống thì ô vẫn chạy, chỉ copy được *mã* ticket. Đây là biến của **frontend** — server không đọc `JIRA_BASE_URL` hộ trình duyệt được.
 
 > **Xác thực khi chạy local.** Ở môi trường triển khai, app dùng **SSO qua một cổng** đặt header danh tính `x-user-id` (xem [AUTH.md](./AUTH.md)). Ở local **không có cổng**: các API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic, sửa cấu hình, quản lý người dùng) cần header danh tính — thiếu là **401** (đặt mỗi `AUTH_BOOTSTRAP_ADMINS` chưa đủ: nó chỉ ánh xạ *danh tính → ADMIN*, không tự tạo danh tính). Dùng app qua **trình duyệt**: chạy `AUTH_BOOTSTRAP_ADMINS=you@cty.com VITE_DEV_USER=you@cty.com pnpm dev` — Vite dev proxy tự chèn `x-user-id` (đóng vai cổng ở local). Gọi bằng **`curl`**: thêm `-H 'x-user-id: you@cty.com'`. Chi tiết ở [AUTH.md §9](./AUTH.md). Các biến `AUTH_*` đều tùy chọn — mặc định người đã xác thực nhưng chưa cấp quyền là `VIEWER`.
 
@@ -113,6 +121,11 @@ pnpm dev                 # chạy song song api + worker + web
 | Web | 5180 | **Cố ý không dùng 5173** — đó là cổng mặc định của Vite mà mọi dự án khác đều nhắm vào |
 | API | 3000 | |
 | E2E | 5199 | Cổng riêng, để chạy test không phải tắt dev server |
+
+> **Muốn chạy bản ĐÃ BUILD (không phải dev server)?** `pnpm web:start` build
+> `apps/web` rồi phục vụ bản tĩnh ở **cổng 8080** (đổi qua `WEB_PORT`). Dùng khi
+> thử bản production tại chỗ, chạy trong container, hoặc self-host. Chi tiết:
+> [WEB-SERVER.md](./WEB-SERVER.md).
 
 ## 5. Chạy test
 

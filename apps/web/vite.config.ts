@@ -18,6 +18,29 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
  */
 export const WEB_DEV_PORT = 5180;
 
+/**
+ * Cổng của MÁY CHỦ WEB đã build — `vite preview` phục vụ bản tĩnh trong `dist/`
+ * sau khi `vite build` (xem `docs/WEB-SERVER.md`). KHÁC `WEB_DEV_PORT`: đó là
+ * dev server nóng (HMR), còn đây là bản build tĩnh để chạy/thử như production.
+ *
+ * Mặc định 8080; đổi qua env `WEB_PORT`. CỐ Ý KHÔNG dùng chung biến `PORT` với
+ * API (mặc định 3000 — xem `apps/api/src/server.ts`): hai tiến trình chạy song
+ * song, xài chung một biến sẽ tranh cổng.
+ */
+export const WEB_PREVIEW_PORT = 8080;
+
+/**
+ * Cổng cho máy chủ web đã build, đọc từ env `WEB_PORT`.
+ *
+ * Lùi về 8080 khi biến trống HOẶC không phải số cổng hợp lệ (1–65535) — thà
+ * chạy trên cổng mặc định còn hơn để `NaN` lọt xuống `vite preview` rồi chết
+ * bằng một lỗi khó hiểu ở tận trong Vite.
+ */
+export function resolveWebPort(env: Record<string, string | undefined>): number {
+  const raw = Number(env['WEB_PORT']);
+  return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : WEB_PREVIEW_PORT;
+}
+
 /** Header danh tính mặc định — KHỚP `AUTH_IDENTITY_HEADER` mặc định của API. */
 const DEFAULT_IDENTITY_HEADER = 'x-user-id';
 
@@ -86,9 +109,15 @@ export default defineConfig(({ command, mode }) => {
 
   const apiTarget = env['VITE_API_TARGET'] ?? 'http://localhost:3000';
 
-  // Shim danh tính CHỈ khi chạy dev server (`vite`/`vite dev`), KHÔNG khi build.
-  // `vite build` bỏ qua `server.proxy` sẵn, nhưng chặn ở đây cho tường minh.
-  const identity = command === 'serve' ? devIdentity(env) : null;
+  // Shim danh tính CHỈ cho DEV SERVER (`vite` / `pnpm dev`) — KHÔNG cho
+  // `vite preview` (máy chủ web đã build) và KHÔNG cho `vite build`.
+  //
+  // Cả dev lẫn preview đều là `command === 'serve'`; chúng khác nhau ở `mode`
+  // (dev = 'development', preview = 'production'). Dựa vào `mode` để bản build
+  // tĩnh phục vụ trên cổng 8080 KHÔNG BAO GIỜ tự chèn danh tính giả — bản đó
+  // đứng sau cổng SSO thật, chèn danh tính ở đây là mở toang một lối ghi.
+  const isDevServer = command === 'serve' && mode !== 'production';
+  const identity = isDevServer ? devIdentity(env) : null;
 
   if (identity !== null) {
     // In MỘT dòng để lập trình viên THẤY shim đang bật — không hiểu nhầm là auth
@@ -126,6 +155,28 @@ export default defineConfig(({ command, mode }) => {
         // và mã nguồn không cần biết API nằm ở cổng nào. Khi có `VITE_DEV_USER`,
         // proxy còn đặt luôn header danh tính (đóng vai cổng SSO ở local).
         '/api': apiProxy(apiTarget, identity),
+      },
+    },
+
+    // Máy chủ web cho bản ĐÃ BUILD (`vite preview`, tức `pnpm web:start` /
+    // `pnpm web:serve`). Xem `docs/WEB-SERVER.md`.
+    preview: {
+      // Mặc định 8080, đổi qua env `WEB_PORT`.
+      port: resolveWebPort(env),
+
+      // Nghe trên mọi giao diện mạng để container/Docker/máy khác truy cập được
+      // (giống API bind `0.0.0.0`). Thu hẹp về máy này bằng `WEB_HOST=127.0.0.1`.
+      host: env['WEB_HOST']?.trim() || '0.0.0.0',
+
+      // Như dev: cổng bận thì BÁO LỖI NGAY thay vì âm thầm nhảy sang cổng khác —
+      // nếu không, hướng dẫn ghi 8080 mà thực tế lại chạy 8081, rất khó lần ra.
+      strictPort: true,
+
+      proxy: {
+        // Proxy `/api` sang API y hệt dev, NHƯNG truyền `null` nên KHÔNG chèn
+        // danh tính — bản build phục vụ sau cổng SSO thật, thao tác GHI vẫn phải
+        // qua cổng đó. Đọc thì chạy ngay. (Chi tiết mô hình bảo mật: docs/AUTH.md.)
+        '/api': apiProxy(apiTarget, null),
       },
     },
 

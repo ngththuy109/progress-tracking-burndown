@@ -8,7 +8,7 @@ depends_on: ["T-04", "T-12"]
 touches:
   - packages/engine/src/rollup/subtask-actual-dates.ts
   - packages/shared/src/actual-dates.ts
-prd_refs: ["§2.7.2", "E-13"]
+prd_refs: ["§2.7.2", "E-13", "E-32"]
 owner: null
 started_at: 2026-08-03
 finished_at: 2026-08-03
@@ -25,7 +25,7 @@ Suy ra `actual_start` và `actual_end` của một Sub-task từ lịch sử. Ji
 
 | Mốc | Cách tính |
 |---|---|
-| `actual_start` | Ngày worklog **sớm nhất** (theo `started`). Không có worklog → lần đầu chuyển sang `In Progress` (changelog). Vẫn không có mà đã Done → lấy đúng ngày Done |
+| `actual_start` | Ngày worklog **sớm nhất** (theo `started`). Không có worklog → lần đầu chuyển sang `In Progress` (changelog), **trừ khi hiện đã kéo về `To Do` và chưa từng Done** → `null` (E-32). Vẫn không có mà đã Done → lấy đúng ngày Done |
 | `actual_end` | Chưa Done → **chưa tính** (`null`), không tạm tính từ worklog. Đã Done → ngày worklog **muộn nhất**; không có worklog → lần **CUỐI CÙNG** chuyển sang `Done` |
 
 **Vì sao lấy lần Done cuối cùng** — ca mở lại (E-13), task không log giờ:
@@ -70,7 +70,7 @@ Suy ra `actual_start` và `actual_end` của một Sub-task từ lịch sử. Ji
    ```
 2. `actual_start`:
    - Có worklog (bỏ `is_deleted`) → lấy worklog **sớm nhất** theo `startedAtMs`
-   - Không có worklog → sự kiện changelog `status` **đầu tiên** có `to` thuộc nhóm `indeterminate`
+   - Không có worklog → sự kiện changelog `status` **đầu tiên** có `to` thuộc nhóm `indeterminate` — **trừ khi** trạng thái HIỆN TẠI (sau sự kiện đổi cuối cùng) là `new` **và** chưa từng `Done`, khi đó coi như chưa bắt đầu → `null` (E-32)
    - Vẫn không có mà đã Done → lấy mốc Done cuối cùng; còn lại → `null`
 3. `actual_end`:
    - Chưa từng Done → `null`, `isProvisional = true` — KHÔNG tạm tính từ worklog
@@ -149,3 +149,18 @@ Chạy hàm trên bảng ví dụ 5 sự kiện của PRD §2.7.2 cho ra `actual
 ### Dùng lại T-04 và T-12, không viết lại
 
 `findFirstInProgressMs` / `findLastDoneMs` đã có sẵn ở T-04 với đúng hướng duyệt cần thiết, và `localDateOf` vừa thêm ở T-12. Card này chỉ ghép ba mảnh đó lại — nên chỗ duy nhất còn có thể sai là quy tắc *chọn nguồn nào*, và đó đúng là chỗ tôi dồn test vào.
+
+## Cập nhật 2026-08-11 — reset `actual_start` khi kéo ngược về To Do (E-32)
+
+**Lỗi người dùng báo:** chuyển nhầm Sub-task sang `In Progress` dù chưa bắt đầu, sửa lại về `Open` rồi bấm resync — `actual_start` vẫn không về `null`.
+
+**Nguyên nhân:** `findFirstInProgressMs` quét *toàn bộ* changelog và trả về lần chuyển `In Progress` **đầu tiên**, bất kể sau đó ticket đã bị kéo ngược về `To Do`. Dấu vết cũ nằm mãi trong changelog nên resync tính lại vẫn ra một `actual_start` "ma".
+
+**Cách sửa** (`resolveSubtaskActualDates`): chỉ tính lần `In Progress` khi ticket **hiện không còn ở nhóm `new`**. Điều kiện đầy đủ để reset là `lastDoneMs === null && currentStatusCategory(...) === 'new'` — tức **chưa từng Done và hiện là To Do**. Thêm helper `currentStatusCategory()` (thêm file `engine/status/resolve-status-category.ts` ngoài `touches` gốc).
+
+**Ba cân nhắc đã khoá bằng test:**
+- **Không chặn quá tay:** nếu ticket lại đang `In Progress`, hoặc đã từng `Done` (ca `To Do→In Progress→Done→To Do`), thì `actual_start` giữ nguyên — việc là thật.
+- **Worklog vẫn thắng:** có giờ log thì `actual_start` giữ nguyên dù trạng thái là gì (nó đứng đầu chuỗi `??`).
+- **Bất biến `start = null ⟹ end = null`:** `lastDoneMs` vẫn khép chuỗi nên `start` chỉ `null` khi `lastDoneMs` cũng `null`.
+
+Thêm 4 test cho `subtask-actual-dates` + 3 test cho `currentStatusCategory`. Toàn bộ engine (gồm 46 golden + property test) và 1084 test unit vẫn xanh.

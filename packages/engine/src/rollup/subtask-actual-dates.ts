@@ -1,5 +1,9 @@
 import type { StatusIdMap, SubtaskActualDates, SubtaskRecord } from '@app/shared';
-import { findFirstInProgressMs, findLastDoneMs } from '../status/resolve-status-category.js';
+import {
+  currentStatusCategory,
+  findFirstInProgressMs,
+  findLastDoneMs,
+} from '../status/resolve-status-category.js';
 import { localDateOf } from '../calendar/end-of-day.js';
 
 /**
@@ -28,11 +32,33 @@ export function resolveSubtaskActualDates(
   const lastDoneMs = findLastDoneMs(sub.changelog, statusIdMap);
 
   // --- actual_start ---
+  // Ba nguồn theo thứ tự ưu tiên: worklog → lần đầu In Progress → ngày Done.
+  //
+  // Worklog là bằng chứng chắc chắn nhất (giờ đã log là việc đã thật sự làm),
+  // nên nó thắng dù trạng thái hiện tại là gì — vì thế nó đứng đầu chuỗi `??`.
+  //
+  // Ca chuyển NHẦM sang In Progress rồi kéo lại về Open (To Do): dấu vết In
+  // Progress vẫn nằm trong changelog, `findFirstInProgressMs` vẫn thấy — nhưng
+  // nếu ticket HIỆN đã về To Do và CHƯA từng Done (không có worklog nào) thì coi
+  // như CHƯA bắt đầu, bỏ dấu vết In Progress đó đi. Không chặn thì resync không
+  // bao giờ xoá được `actual_start` "ma": biểu đồ vẫn vẽ đường Thực tế và
+  // Signboard vẫn báo "đang làm" cho một task đang nằm ở To Do (§6.3, bước 4).
+  //
+  // Điều kiện phải là "chưa từng Done", KHÔNG chỉ "hiện là To Do": task
+  // To Do→In Progress→Done→To Do (kéo về backlog sau khi đã xong) vẫn là việc
+  // THẬT, phải giữ ngày bắt đầu chính xác từ lần In Progress đầu. `lastDoneMs`
+  // là bằng chứng đã hoàn thành, tương đương worklog ở điểm này.
+  //
   // Đã Done mà không có worklog lẫn lần chuyển In Progress (chuyển thẳng sang
   // Done, quên log giờ) thì coi như bắt đầu đúng ngày Done — task 0 ngày còn
-  // hơn task không có ngày bắt đầu.
-  const startMs =
-    firstWorklogMs ?? findFirstInProgressMs(sub.changelog, statusIdMap) ?? lastDoneMs;
+  // hơn task không có ngày bắt đầu. Vì `lastDoneMs` vẫn khép chuỗi nên bất biến
+  // "start = null ⟹ end = null" luôn đúng: start chỉ null khi lastDoneMs cũng null.
+  const revertedToTodoUntouched =
+    lastDoneMs === null && currentStatusCategory(sub.changelog, statusIdMap) === 'new';
+  const inProgressMs = revertedToTodoUntouched
+    ? null
+    : findFirstInProgressMs(sub.changelog, statusIdMap);
+  const startMs = firstWorklogMs ?? inProgressMs ?? lastDoneMs;
 
   // --- actual_end ---
   // Chưa Done thì KHÔNG tạm tính ngày kết thúc — trả null, tầng hiển thị ghi

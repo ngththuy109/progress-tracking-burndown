@@ -9,6 +9,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/docs-reminder.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Kiểm tra tài liệu cần cập nhật…"
+          }
+        ]
+      }
     ]
   }
 }

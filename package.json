@@ -26,6 +26,9 @@
     "auth:testuser": "node tools/auth/add-basic-user.mjs",
     "seed:admin": "node tools/auth/seed-admin.mjs",
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "web:build": "pnpm --filter @app/web build",
+    "web:serve": "pnpm --filter @app/web preview",
+    "web:start": "pnpm --filter @app/web start",
     "smoke": "node tools/smoke/smoke.mjs",
     "reconcile": "node tools/smoke/reconcile.mjs"
   },
