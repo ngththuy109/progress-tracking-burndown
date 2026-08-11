@@ -110,6 +110,12 @@ stops the process with a clear message rather than a half-running server.
 > `pnpm add @prisma/client`, which re-triggers `postinstall` → `prisma generate` → … in an **infinite
 > loop**. That is why setup is two sequential steps rather than a single `pnpm install`.
 
+> **Docs stay in sync with the code.** A `PostToolUse` hook (`.claude/hooks/docs-reminder.mjs`) fires
+> after Claude Code edits a source file and injects a one-time reminder to check whether `README.md`,
+> `docs/`, or `docs/tasks/` need updating to match. It only *nudges* — it never blocks the edit or
+> changes files — and skips docs, tests and config. Disable it from the `/hooks` menu or by removing
+> the `PostToolUse` entry in `.claude/settings.json`.
+
 Full setup instructions, including seeding, are in
 [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) *(Vietnamese)*.
 
