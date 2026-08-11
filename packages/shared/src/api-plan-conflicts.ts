@@ -49,6 +49,20 @@ export const planConflictSchema = z.object({
 });
 export type PlanConflict = z.infer<typeof planConflictSchema>;
 
+/**
+ * GET /api/plan-conflicts/summary?project= — số xung đột của TỪNG Epic, để màn
+ * hình Epics hiện cảnh báo cạnh cụm health mà không phải gọi N lần API chi tiết.
+ */
+export const planConflictCountsResponseSchema = z.object({
+  counts: z.array(
+    z.object({
+      epicKey: z.string(),
+      total: z.number().int().nonnegative(),
+    }),
+  ),
+});
+export type PlanConflictCountsResponse = z.infer<typeof planConflictCountsResponseSchema>;
+
 export const planConflictsResponseSchema = z.object({
   epicKey: z.string(),
   summary: z.object({

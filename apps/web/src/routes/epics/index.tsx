@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { TrackedEpicSummary } from '@app/shared';
 import { useEpicList, useMissingDates, usePatchEpic } from '../../api/use-epics.js';
+import { usePlanConflictSummary } from '../../api/use-plan-conflicts.js';
 import {
   Badge,
   DataTable,
@@ -58,6 +59,9 @@ export function lastSyncedLabel(epic: Epic): string {
 
 export function EpicListScreen() {
   const query = useEpicList();
+  // Số Sub-task có plan rơi vào ngày nghỉ (T-37) — một lần gọi cho cả danh
+  // sách. Lỗi ở đây KHÔNG chặn màn hình: cột chỉ để trống.
+  const conflictSummary = usePlanConflictSummary();
   const patch = usePatchEpic();
   const [removing, setRemoving] = useState<Epic | null>(null);
   const [resyncing, setResyncing] = useState<Epic | null>(null);
@@ -75,6 +79,9 @@ export function EpicListScreen() {
   }
 
   const epics = query.data;
+  const conflictCounts = new Map(
+    (conflictSummary.data?.counts ?? []).map((c) => [c.epicKey, c.total]),
+  );
 
   const columns: readonly Column<Epic>[] = [
     {
@@ -127,6 +134,28 @@ export function EpicListScreen() {
           </button>
         ),
       sortKey: (e) => e.dataHealth.missingWbsDateCount,
+    },
+    {
+      // Plan rơi vào ngày nghỉ (T-37): bấm vào là sang màn Sub-tasks, nơi từng
+      // dòng vi phạm được gắn cờ ⚠ kèm lý do.
+      key: 'planConflicts',
+      header: 'On days off',
+      align: 'right',
+      render: (e) => {
+        const count = conflictCounts.get(e.epicKey) ?? 0;
+        return count === 0 ? (
+          <span className="muted">0</span>
+        ) : (
+          <Link
+            className="button"
+            to={`/phase-subtasks?epic=${e.epicKey}`}
+            title="Planned start/end dates falling on a day off. Click to see which sub-tasks."
+          >
+            ⚠ {count}
+          </Link>
+        );
+      },
+      sortKey: (e) => conflictCounts.get(e.epicKey) ?? 0,
     },
     {
       key: 'actions',

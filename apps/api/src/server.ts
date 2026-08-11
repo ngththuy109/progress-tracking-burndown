@@ -10,6 +10,8 @@ import { registerEpicRoutes } from './routes/epics.routes.js';
 import { registerBurndownRoutes } from './routes/burndown.routes.js';
 import { registerCalendarRoutes } from './routes/calendars.routes.js';
 import { createCalendarStore } from './adapters/calendars.adapters.js';
+import { registerPlanConflictRoutes } from './routes/plan-conflicts.routes.js';
+import { createPlanConflictReadPort } from './adapters/plan-conflicts.adapters.js';
 import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
 import { registerSignboardRoutes } from './routes/signboard.routes.js';
 import { registerPhaseSubtaskRoutes } from './routes/phase-subtasks.routes.js';
@@ -181,6 +183,12 @@ export function createServer(deps: ServerDeps): FastifyInstance {
 
   registerPhaseSubtaskRoutes(app, {
     reads: createPhaseSubtaskReadPort(deps.prisma),
+    resolvePrincipal: getPrincipal,
+  });
+
+  // Kiểm tra plan rơi vào ngày nghỉ (T-37): báo cáo sau-sync, tính lúc đọc.
+  registerPlanConflictRoutes(app, {
+    reads: createPlanConflictReadPort(deps.prisma),
     resolvePrincipal: getPrincipal,
   });
 
