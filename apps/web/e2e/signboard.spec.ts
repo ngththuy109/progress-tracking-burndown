@@ -156,6 +156,10 @@ test('chọn một Phase thì thấy ma trận Function × loại task', async (
   await expect(page.getByRole('columnheader', { name: 'BAL review' })).toBeVisible();
   await expect(page.getByRole('rowheader', { name: 'Login' })).toBeVisible();
   await expect(page.getByRole('rowheader', { name: 'Thanh toán' })).toBeVisible();
+
+  // Chỉ MỘT Sub-phase → không có gì để xếp thứ tự, link khai thứ tự Sub-phase
+  // không được hiện kẻo gây nhiễu.
+  await expect(page.getByRole('link', { name: 'Set sub-phase order' })).toHaveCount(0);
 });
 
 test('hai ticket cùng một ô thì hiện huy hiệu ≡2 và trạng thái xấu nhất', async ({ page }) => {
@@ -327,6 +331,14 @@ test('nhiều Sub-phase thì hiện header nhóm và cột lặp dưới từng 
   await expect(page.getByRole('columnheader', { name: 'FUT_TestCase' })).toBeVisible();
   // Loại task 'Create' lặp lại ở CẢ HAI nhóm → có đúng 2 header cùng tên.
   await expect(page.getByRole('columnheader', { name: 'Create', exact: true })).toHaveCount(2);
+
+  // Nhiều nhóm → hiện link mở khu "⑤ Sub-phase order" ở màn Signboard columns,
+  // kèm sẵn Phase đang xem + các Sub-phase đang có (khoá đã chuẩn hoá) để điền
+  // trước — không có nó PM đi tìm nút setting không tồn tại trên màn này.
+  await expect(page.getByRole('link', { name: 'Set sub-phase order' })).toHaveAttribute(
+    'href',
+    '/config/signboard?orderPhase=DESIGN&subs=fut_confirmpoint%2Cfut_testcase',
+  );
 });
 
 test('Sub-task đặt tên sai định dạng hiện ở khu dưới, KHÔNG bị giấu đi', async ({ page }) => {

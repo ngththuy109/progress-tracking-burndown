@@ -9,6 +9,7 @@ import {
   payloadToPreview,
   payloadToSave,
   phaseCodeOptions,
+  subPhaseGroups,
   type DraftAction,
   type DraftState,
 } from './draft-state.js';
@@ -30,6 +31,7 @@ const GLOBAL_CONFIG: EffectiveConfigResponse = {
     { keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
   ],
   signboardColumns: [],
+  subPhaseOrders: [],
   projectKey: null,
   globalVersion: 4,
   projectVersion: null,
@@ -39,6 +41,7 @@ const GLOBAL_CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    subPhaseOrders: false,
   },
 };
 
@@ -53,6 +56,7 @@ const PROJECT_CONFIG: EffectiveConfigResponse = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 };
 
@@ -247,5 +251,82 @@ describe('kế thừa theo project', () => {
     expect(preview.phaseDefinitions).toHaveLength(3);
     expect(preview.matchRules).toHaveLength(2);
     expect(payloadToSave(state).phaseDefinitions).toEqual([]);
+  });
+});
+
+describe('thứ tự Sub-phase trong từng Phase (khu ⑤)', () => {
+  const withGroup = draftReducer(loadDraft(GLOBAL_CONFIG), {
+    type: 'ADD_SUB_PHASE_GROUP',
+    phaseCode: 'FUT_TestCase',
+    subPhaseCodes: ['fut_confirmpoint', 'fut_testcase'],
+  });
+
+  it('thêm nhóm điền sẵn: mỗi dòng mang đúng Phase và displayOrder 1..n', () => {
+    expect(withGroup.draft.subPhaseOrders).toEqual([
+      { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_confirmpoint', displayOrder: 1 },
+      { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_testcase', displayOrder: 2 },
+    ]);
+  });
+
+  it('đổi chỗ trong nhóm: displayOrder đánh lại theo nhóm, không xuyên nhóm', () => {
+    // Nhóm thứ hai cho Phase khác — để chứng minh đánh số KHÔNG chảy sang nhóm bên.
+    const two = draftReducer(withGroup, {
+      type: 'ADD_SUB_PHASE_GROUP',
+      phaseCode: 'UAT',
+      subPhaseCodes: ['round1'],
+    });
+    const moved = draftReducer(two, { type: 'MOVE_SUB_PHASE', index: 0, delta: 1 });
+
+    expect(moved.draft.subPhaseOrders).toEqual([
+      { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_testcase', displayOrder: 1 },
+      { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_confirmpoint', displayOrder: 2 },
+      { phaseCode: 'UAT', subPhaseCode: 'round1', displayOrder: 1 },
+    ]);
+  });
+
+  it('dòng cuối nhóm không đổi chỗ xuống được (nhóm khác không phải đích)', () => {
+    const two = draftReducer(withGroup, {
+      type: 'ADD_SUB_PHASE_GROUP',
+      phaseCode: 'UAT',
+      subPhaseCodes: ['round1'],
+    });
+    // index 1 là dòng CUỐI của nhóm FUT_TestCase; dưới nó chỉ còn nhóm UAT.
+    expect(draftReducer(two, { type: 'MOVE_SUB_PHASE', index: 1, delta: 1 })).toBe(two);
+  });
+
+  it('đổi mã Phase đổi CẢ nhóm, thêm dòng mới rơi vào đúng nhóm', () => {
+    const renamed = draftReducer(withGroup, {
+      type: 'RENAME_SUB_PHASE_GROUP',
+      phaseCode: 'FUT_TestCase',
+      value: 'FUT',
+    });
+    expect(renamed.draft.subPhaseOrders.map((r) => r.phaseCode)).toEqual(['FUT', 'FUT']);
+
+    const added = draftReducer(renamed, { type: 'ADD_SUB_PHASE', phaseCode: 'FUT' });
+    expect(added.draft.subPhaseOrders).toHaveLength(3);
+    expect(added.draft.subPhaseOrders[2]).toEqual({
+      phaseCode: 'FUT',
+      subPhaseCode: '',
+      displayOrder: 3,
+    });
+  });
+
+  it('xoá dòng giữa nhóm thì phần còn lại đánh số lại 1..n', () => {
+    const removed = draftReducer(withGroup, { type: 'REMOVE_SUB_PHASE', index: 0 });
+    expect(removed.draft.subPhaseOrders).toEqual([
+      { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_testcase', displayOrder: 1 },
+    ]);
+  });
+
+  it('subPhaseGroups gom theo Phase, giữ chỉ số PHẲNG để dispatch', () => {
+    const two = draftReducer(withGroup, {
+      type: 'ADD_SUB_PHASE_GROUP',
+      phaseCode: 'UAT',
+      subPhaseCodes: ['round1'],
+    });
+    const groups = subPhaseGroups(two);
+    expect(groups.map((g) => g.phaseCode)).toEqual(['FUT_TestCase', 'UAT']);
+    expect(groups[0]?.rows.map((r) => r.index)).toEqual([0, 1]);
+    expect(groups[1]?.rows.map((r) => r.index)).toEqual([2]);
   });
 });

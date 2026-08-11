@@ -30,6 +30,7 @@ const CONFIG: EffectiveConfig = {
     { keyword: 'Development', matchMode: 'CONTAINS', phaseCode: 'DEVELOPMENT', matchPriority: 40 },
   ],
   signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  subPhaseOrders: [],
   projectKey: null,
   globalVersion: 1,
   projectVersion: null,
@@ -39,6 +40,7 @@ const CONFIG: EffectiveConfig = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 };
 
