@@ -41,6 +41,40 @@ export function resolveWebPort(env: Record<string, string | undefined>): number 
   return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : WEB_PREVIEW_PORT;
 }
 
+/**
+ * Danh sách host được phép cho MÁY CHỦ WEB đã build (`vite preview`).
+ *
+ * Từ Vite 6, máy chủ preview CHẶN mọi request có header `Host` là TÊN MÁY / TÊN
+ * MIỀN không nằm trong danh sách cho phép — trả **403 "Blocked request. This
+ * host is not allowed"** (lá chắn chống DNS-rebinding). Địa chỉ IP (v4/v6) và
+ * `localhost` thì Vite LUÔN cho qua sẵn; nhưng mở bằng TÊN MÁY (vd
+ * `http://vm:8080`) hay TÊN MIỀN (`http://app.cty.com:8080`) từ máy khác sẽ bị
+ * 403 — nhìn HỆT như "chỉ localhost mới vào được", dù đã bind `0.0.0.0`.
+ *
+ * Máy chủ này CỐ Ý phơi ra mạng (bind `0.0.0.0`, xem `host` ở khối `preview`) để
+ * máy khác / Docker truy cập, nên **mặc định cho phép MỌI host** (`true`): bind
+ * mọi giao diện mạng rồi lại chặn theo tên host là tự mâu thuẫn. Siết lại khi
+ * cần (vd phơi thẳng ra mạng không tin cậy) bằng `WEB_ALLOWED_HOSTS` — danh sách
+ * tên host ngăn cách bởi dấu phẩy:
+ *
+ *   WEB_ALLOWED_HOSTS=app.cty.com,vm
+ *
+ * Tiền tố `.` khớp cả subdomain: `.cty.com` cho phép `a.cty.com`, `b.cty.com`…
+ * (quy ước của Vite). Bỏ trống — hoặc chỉ toàn dấu phẩy rỗng — thì quay về
+ * `true` (mở mọi host) thay vì `[]` (chặn sạch, hồi sinh đúng con bug này).
+ */
+export function resolveAllowedHosts(
+  env: Record<string, string | undefined>,
+): true | string[] {
+  const raw = env['WEB_ALLOWED_HOSTS']?.trim();
+  if (!raw) return true;
+  const hosts = raw
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
+  return hosts.length > 0 ? hosts : true;
+}
+
 /** Header danh tính mặc định — KHỚP `AUTH_IDENTITY_HEADER` mặc định của API. */
 const DEFAULT_IDENTITY_HEADER = 'x-user-id';
 
@@ -193,6 +227,13 @@ export default defineConfig(({ command, mode }) => {
       // Nghe trên mọi giao diện mạng để container/Docker/máy khác truy cập được
       // (giống API bind `0.0.0.0`). Thu hẹp về máy này bằng `WEB_HOST=127.0.0.1`.
       host: env['WEB_HOST']?.trim() || '0.0.0.0',
+
+      // Cho phép mở bằng TÊN MÁY / TÊN MIỀN, không chỉ IP. Vite preview mặc định
+      // trả 403 "Blocked request" cho Host lạ (chống DNS-rebinding); bind
+      // `0.0.0.0` mà không mở host thì máy khác gọi bằng tên vẫn bị chặn — đúng
+      // triệu chứng "chỉ localhost vào được". Mặc định mở mọi host; siết bằng
+      // `WEB_ALLOWED_HOSTS`. Xem `resolveAllowedHosts` + docs/WEB-SERVER.md §3.
+      allowedHosts: resolveAllowedHosts(env),
 
       // Như dev: cổng bận thì BÁO LỖI NGAY thay vì âm thầm nhảy sang cổng khác —
       // nếu không, hướng dẫn ghi 8080 mà thực tế lại chạy 8081, rất khó lần ra.

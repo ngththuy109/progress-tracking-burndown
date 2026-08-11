@@ -109,6 +109,29 @@ máy khác / trong Docker — giống API. Thu hẹp về chỉ máy này bằng
 WEB_HOST=127.0.0.1 pnpm web:start   # chỉ localhost gọi được
 ```
 
+### Mở bằng tên máy / tên miền — `WEB_ALLOWED_HOSTS` (tuỳ chọn)
+
+`vite preview` có một lá chắn chống **DNS-rebinding**: nó **chặn** (`403 Blocked
+request`) mọi request mà header `Host` là **tên máy / tên miền** không nằm trong
+danh sách cho phép. **Địa chỉ IP** (v4/v6) và **`localhost`** thì luôn được cho
+qua sẵn.
+
+Hệ quả: dù đã bind `0.0.0.0`, mở bằng **tên** — `http://vm:8080`,
+`http://app.cty.com:8080` — từ máy khác vẫn bị 403, **nhìn hệt như "chỉ localhost
+mới vào được"**. Vì vậy máy chủ này **mặc định cho phép MỌI host** để hết lỗi
+ngay: bind mọi giao diện mạng rồi lại chặn theo tên là tự mâu thuẫn.
+
+Cần siết lại (vd phơi thẳng ra mạng không tin cậy) thì liệt kê host qua
+`WEB_ALLOWED_HOSTS` — ngăn cách bởi dấu phẩy:
+
+```bash
+WEB_ALLOWED_HOSTS=app.cty.com,vm pnpm web:start   # chỉ 2 tên này (+ IP/localhost)
+```
+
+Tiền tố `.` khớp cả subdomain: `.cty.com` cho phép `a.cty.com`, `b.cty.com`… Bỏ
+trống thì quay về **cho phép mọi host** (xem `resolveAllowedHosts` trong
+`apps/web/vite.config.ts`).
+
 ---
 
 ## 4. Build một lần, phục vụ nhiều lần (CI / triển khai)
@@ -202,7 +225,8 @@ Trình duyệt ──HTTPS──▶ nginx (cổng 443, +SSO)
 | Chạy `web:serve` báo không có build / thư mục `dist` trống | Chưa build. Chạy `pnpm web:build` trước, hoặc dùng `pnpm web:start`. |
 | Trang lên nhưng mọi màn hình lỗi tải dữ liệu | API chưa chạy hoặc `VITE_API_TARGET` sai. Bật API (`pnpm dev` / `pnpm --filter @app/api dev`) và kiểm lại đích proxy. |
 | Thao tác ghi trả **401** | Đúng thiết kế — bản build không chèn danh tính. Đặt sau cổng SSO (§6), hoặc thử ghi bằng dev server + `VITE_DEV_USER`. |
-| Máy khác trong LAN không mở được | `WEB_HOST` đang là `127.0.0.1`. Để trống (mặc định `0.0.0.0`) hoặc đặt IP cụ thể. |
+| Máy khác trong LAN không mở được **bằng IP** | `WEB_HOST` đang là `127.0.0.1`. Để trống (mặc định `0.0.0.0`) hoặc đặt IP cụ thể. |
+| Mở **bằng IP thì được, bằng tên máy/tên miền lại `403 Blocked request`** | Lá chắn DNS-rebinding của Vite chặn Host lạ. Mặc định đã cho phép mọi host; nếu bạn có đặt `WEB_ALLOWED_HOSTS` thì thêm tên đó vào (hoặc bỏ trống để mở hết) — xem §3. |
 
 ---
 
