@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Kế hoạch 02/03 → 06/03 = 5 ngày, 28800/5 = 5760s/ngày → Kế hoạch 23040, 17280, 11520, 5760, 0. Đường Thực tế đi theo trạng thái TẠI TỪNG MỐC: 02/03 đang làm, quy tắc 3 cho 28800 − 14400 = 14400; 03/03 đã Done nên quy tắc 1 cho 0; 04/03 bị mở lại nên quay về quy tắc 3 = 28800 − 14400 = 14400; 05/03 log thêm 7200 nên còn 7200; 06/03 Done lần nữa nên về 0. Ngày thực tế kết thúc lấy lần chuyển sang Done CUỐI CÙNG = 06/03.",
+  "_how": "TÍNH TAY. Kế hoạch 02/03 → 06/03 = 5 ngày, 28800/5 = 5760s/ngày → Kế hoạch 23040, 17280, 11520, 5760, 0. Đường Thực tế đi theo trạng thái TẠI TỪNG MỐC: 02/03 đang làm, quy tắc 3 cho 28800 − 14400 = 14400; 03/03 đã Done nên quy tắc 1 cho 0; 04/03 bị mở lại nên quay về quy tắc 3 = 28800 − 14400 = 14400; 05/03 log thêm 7200 nên còn 7200; 06/03 Done lần nữa nên về 0. Ngày thực tế kết thúc: đã Done và CÓ worklog nên lấy ngày worklog MUỘN NHẤT = 05/03; lần Done cuối 06/03 chỉ là ngày bấm nút, không phải ngày làm việc cuối.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -14,7 +14,7 @@
       "planEnd": "2026-03-06",
       "planWorkdays": 5,
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-06",
+      "actualEnd": "2026-03-05",
       "actualEndIsProvisional": false,
       "totalOriginalS": 28800,
       "subtaskCount": 1,
@@ -27,7 +27,7 @@
     {
       "key": "PAY-11",
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-06"
+      "actualEnd": "2026-03-05"
     }
   ],
   "snapshots": [

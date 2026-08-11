@@ -21,26 +21,25 @@ Suy ra `actual_start` và `actual_end` của một Sub-task từ lịch sử. Ji
 
 ## Ngữ cảnh cần biết
 
-**Cách tính đã chốt** (PRD §2.7.2) — kết hợp cả trạng thái lẫn worklog:
+**Cách tính đã chốt** (PRD §2.7.2) — worklog là nguồn ưu tiên, trạng thái là dự phòng:
 
 | Mốc | Cách tính |
 |---|---|
-| `actual_start` | **Ngày sớm hơn** giữa: lần đầu chuyển sang `In Progress` (changelog) và ngày worklog đầu tiên (theo `started`) |
-| `actual_end` | Lần **CUỐI CÙNG** chuyển sang `Done`. Chưa bao giờ Done → lấy ngày worklog cuối, đánh dấu **tạm tính** |
+| `actual_start` | Ngày worklog **sớm nhất** (theo `started`). Không có worklog → lần đầu chuyển sang `In Progress` (changelog). Vẫn không có mà đã Done → lấy đúng ngày Done |
+| `actual_end` | Chưa Done → **chưa tính** (`null`), không tạm tính từ worklog. Đã Done → ngày worklog **muộn nhất**; không có worklog → lần **CUỐI CÙNG** chuyển sang `Done` |
 
-**Vì sao lấy lần Done cuối cùng** — ca mở lại (E-13):
+**Vì sao lấy lần Done cuối cùng** — ca mở lại (E-13), task không log giờ:
 
 | Ngày | Sự kiện | Ghi chú |
 |---|---|---|
 | 09/03 | `未対応` → `対応中` | ← `actual_start` = 09/03 |
-| 10/03 | Log 8 giờ | |
 | 12/03 | `対応中` → `完了` | Lần Done thứ nhất |
 | 13/03 | `完了` → `対応中` | Mở lại vì phát hiện lỗi |
 | 16/03 | `対応中` → `完了` | ← `actual_end` = **16/03** |
 
 > Nếu lấy lần Done đầu tiên (12/03) thì mất trắng 4 ngày làm lại — báo cáo sẽ sai.
 
-**Vì sao kết hợp cả hai nguồn:** chỉ dùng trạng thái thì team quên chuyển trạng thái sẽ không có ngày; chỉ dùng worklog thì task Done mà quên log giờ cũng không có ngày. Lấy nguồn nào sớm hơn phủ được cả hai ca.
+**Vì sao worklog là nguồn ưu tiên:** giờ được log là việc đã thật sự làm, còn thời điểm bấm chuyển trạng thái thường trễ so với lúc làm thật. Changelog trạng thái chỉ dùng khi không có worklog nào; task Done mà không có cả hai nguồn thì lấy đúng ngày Done làm cả hai mốc.
 
 ## Phạm vi
 
@@ -66,17 +65,17 @@ Suy ra `actual_start` và `actual_end` của một Sub-task từ lịch sử. Ji
    interface SubtaskActualDates {
      actualStart: string | null;              // 'YYYY-MM-DD'
      actualEnd: string | null;
-     actualEndIsProvisional: boolean;         // true = chưa Done, mới là tạm tính
+     actualEndIsProvisional: boolean;         // true = chưa Done (khi đó actualEnd = null)
    }
    ```
 2. `actual_start`:
-   - Tìm sự kiện changelog `status` **đầu tiên** có `to` thuộc nhóm `indeterminate` → lấy `createdAtMs`
-   - Tìm worklog **đầu tiên** theo `startedAtMs` (bỏ `is_deleted`)
-   - Lấy **min** của hai mốc; cả hai đều không có → `null`
+   - Có worklog (bỏ `is_deleted`) → lấy worklog **sớm nhất** theo `startedAtMs`
+   - Không có worklog → sự kiện changelog `status` **đầu tiên** có `to` thuộc nhóm `indeterminate`
+   - Vẫn không có mà đã Done → lấy mốc Done cuối cùng; còn lại → `null`
 3. `actual_end`:
-   - Tìm sự kiện changelog `status` **cuối cùng** có `to` thuộc nhóm `done` → lấy mốc đó, `isProvisional = false`
-   - Không có → lấy worklog **cuối cùng**, `isProvisional = true`
-   - Không có worklog nào → `null`, `isProvisional = true`
+   - Chưa từng Done → `null`, `isProvisional = true` — KHÔNG tạm tính từ worklog
+   - Đã Done, có worklog → worklog **muộn nhất**, `isProvisional = false`
+   - Đã Done, không có worklog → sự kiện changelog `status` **cuối cùng** có `to` thuộc nhóm `done`, `isProvisional = false`
 4. Đổi mốc UTC sang ngày theo `tz` của Epic: `DateTime.fromMillis(ms, { zone: tz }).toISODate()`.
 5. Hàm **thuần**, nhận `tz` qua tham số, không đọc đồng hồ.
 
@@ -99,19 +98,19 @@ Từ [CONVENTIONS.md](./CONVENTIONS.md):
 ## Test phải viết
 
 **Ca mở lại — quan trọng nhất:**
-1. `tái hiện đúng bảng ví dụ PRD §2.7.2: start 09/03, end 16/03` — chuỗi `未対応 → 対応中 → 完了 → 対応中 → 完了`
+1. `task không log giờ: start = lần đầu In Progress 09/03, end = lần Done cuối 16/03` — chuỗi `未対応 → 対応中 → 完了 → 対応中 → 完了`
 2. `actual_end lấy lần Done CUỐI CÙNG, không lấy lần Done đầu tiên`
 
-**Kết hợp hai nguồn:**
-3. `chuyển In Progress ngày 09/03 và log giờ đầu ngày 10/03 thì actual_start = 09/03` — lấy sớm hơn
+**Worklog là nguồn ưu tiên:**
+3. `đã có worklog thì actual_start = ngày worklog SỚM NHẤT, kể cả khi chuyển In Progress sớm hơn`
 4. `log giờ ngày 08/03 nhưng chuyển In Progress ngày 09/03 thì actual_start = 08/03`
 5. `chỉ có worklog, chưa từng chuyển In Progress thì vẫn có actual_start`
-6. `chỉ chuyển In Progress, chưa log giờ nào thì vẫn có actual_start`
+6. `chỉ chuyển In Progress, chưa log giờ nào thì actual_start lấy từ changelog`
 
-**Tạm tính:**
-7. `Sub-task chưa Done thì actual_end lấy worklog cuối và actualEndIsProvisional = true`
-8. `Sub-task đã Done thì actualEndIsProvisional = false`
-9. `Sub-task chưa Done và chưa log giờ thì actual_end = null, provisional = true`
+**Chưa Done thì không tạm tính:**
+7. `Sub-task chưa Done thì actual_end = null dù đã có worklog — KHÔNG lấy tạm worklog cuối`
+8. `Sub-task đã Done thì actualEndIsProvisional = false; đã Done có worklog thì actual_end = ngày worklog MUỘN NHẤT`
+9. `Sub-task Done mà không có worklog lẫn In Progress thì start = end = ngày Done`
 
 **Chưa bắt đầu:**
 10. `Sub-task chưa động vào thì actual_start và actual_end đều null`

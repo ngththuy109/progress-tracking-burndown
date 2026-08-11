@@ -159,7 +159,7 @@ Cả chín lần đều là **tôi sai**, và mỗi lần đều học được 
 
 | Điều tôi hiểu sai | Sự thật | Ghi ở |
 |---|---|---|
-| Chưa Done thì `actualEnd` là `null` | Lấy **ngày worklog cuối** kèm cờ `actualEndIsProvisional` — đội quên chuyển trạng thái là chuyện thường, trả `null` sẽ mất luôn mốc ước chừng | 7 bộ |
+| Chưa Done thì `actualEnd` là `null` | Ban đầu spec lấy **ngày worklog cuối** kèm cờ `actualEndIsProvisional`; sau đã đổi lại đúng như tôi hiểu: chưa Done thì `actualEnd = null`, không tạm tính (PRD §2.7.2 bản hiện tại) | 7 bộ |
 | Mẫu `[{name}]` khớp được đoạn `[Design]` giữa tiêu đề | Mẫu neo hai đầu (`^...$`) nên phải khớp **toàn bộ** tiêu đề; quy ước đúng là `[Phase] {name}` | GD-13 |
 | Tiêu đề sai định dạng sinh cảnh báo `NO_SUBTASK_PATTERN` | Đó là cảnh báo mức **cấu hình**; một tiêu đề lẻ đặt sai chỉ mang trạng thái `UNPARSED` | GD-19 |
 

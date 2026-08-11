@@ -65,19 +65,22 @@ describe('công thức tổng hợp — ví dụ PRD §2.7.1', () => {
    * | PAY-111  | 02/03     | 04/03   | 03/03        | 05/03        |
    * | PAY-112  | 03/03     | 06/03   | 03/03        | 09/03        |
    * | PAY-113  | 02/03     | 05/03   | 04/03        | (chưa xong)  |
+   *
+   * Ngày actual lấy từ worklog: start = worklog sớm nhất, end = worklog muộn
+   * nhất (chỉ khi đã Done). PAY-113 chưa Done nên end chưa tính.
    */
   const THREE = [
     sub('PAY-111', {
       wbsStartDate: '2026-03-02',
       wbsEndDate: '2026-03-04',
-      changelog: [status('3', '2026-03-02T20:00:00Z'), status('10001', '2026-03-04T20:00:00Z')],
-      worklogs: [wl('2026-03-02T20:00:00Z')],
+      changelog: [status('3', '2026-03-02T20:00:00Z'), status('10001', '2026-03-05T20:00:00Z')],
+      worklogs: [wl('2026-03-02T20:00:00Z'), wl('2026-03-05T02:00:00Z')],
     }),
     sub('PAY-112', {
       wbsStartDate: '2026-03-03',
       wbsEndDate: '2026-03-06',
-      changelog: [status('3', '2026-03-02T20:00:00Z'), status('10001', '2026-03-08T20:00:00Z')],
-      worklogs: [wl('2026-03-02T20:00:00Z')],
+      changelog: [status('3', '2026-03-02T20:00:00Z'), status('10001', '2026-03-09T20:00:00Z')],
+      worklogs: [wl('2026-03-02T20:00:00Z'), wl('2026-03-09T02:00:00Z')],
     }),
     sub('PAY-113', {
       wbsStartDate: '2026-03-02',

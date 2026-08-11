@@ -9,13 +9,12 @@ import type { DateOnly } from './calendar.js';
  */
 export interface SubtaskActualDates {
   readonly actualStart: DateOnly | null;
-  readonly actualEnd: DateOnly | null;
   /**
-   * `true` = Sub-task CHƯA từng chuyển sang Done, nên `actualEnd` mới chỉ là
-   * ngày worklog cuối cùng — một phỏng đoán, không phải sự thật.
-   *
-   * Tầng hiển thị phải phân biệt rõ hai thứ này, nếu không PM sẽ đọc một ngày
-   * kết thúc tạm tính như thể việc đã xong.
+   * Chỉ có giá trị khi Sub-task ĐÃ Done. Chưa Done thì là `null` — KHÔNG tạm
+   * tính từ worklog, tầng hiển thị ghi rõ "chưa tính" thay vì đưa ra một ngày
+   * phỏng đoán mà PM sẽ đọc như thể việc đã xong.
    */
+  readonly actualEnd: DateOnly | null;
+  /** `true` = Sub-task CHƯA từng chuyển sang Done (khi đó `actualEnd` là null). */
   readonly actualEndIsProvisional: boolean;
 }
