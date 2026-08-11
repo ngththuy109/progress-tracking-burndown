@@ -399,13 +399,19 @@ function BoardTable({
     );
   }
 
+  // Cột Σ (gộp mỗi Sub-phase) CHỈ có nghĩa khi có ≥2 Sub-phase để so với nhau.
+  // Một Sub-phase thì Σ của nó TRÙNG KHÍT cột "Overall" (cùng đúng bộ ticket) —
+  // hiện cả hai là in "total" hai lần. Bỏ Σ, giữ "Overall" cho rõ nghĩa.
+  const showSubtotals = columnGroups.length > 1;
+
   return (
     <section className="panel">
       <div className="table-wrap">
         <table className="table signboard">
           <caption className="table__caption">Function × sub-phase × task type grid</caption>
           <thead>
-            {/* Tầng 1: nhóm Sub-phase. Mỗi nhóm trải trên bộ cột loại task + cột Σ. */}
+            {/* Tầng 1: nhóm Sub-phase. Mỗi nhóm trải trên bộ cột loại task, cộng
+                cột Σ khi có ≥2 nhóm (một nhóm thì Σ trùng Overall — xem trên). */}
             <tr>
               {/* Cột Function DÍNH bên trái: bảng rất rộng, cuộn sang phải mà
                   mất tên hàng thì mọi ô trở nên vô nghĩa. */}
@@ -420,7 +426,7 @@ function BoardTable({
                 <th
                   key={g.subPhaseKey}
                   scope="colgroup"
-                  colSpan={g.taskColumns.length + 1}
+                  colSpan={g.taskColumns.length + (showSubtotals ? 1 : 0)}
                   className="table__th signboard__group"
                 >
                   {g.subPhaseLabel}
@@ -430,7 +436,8 @@ function BoardTable({
                 Overall
               </th>
             </tr>
-            {/* Tầng 2: loại task trong từng nhóm, cộng một cột Σ khép nhóm. */}
+            {/* Tầng 2: loại task trong từng nhóm, cộng một cột Σ khép nhóm (chỉ
+                khi ≥2 nhóm). */}
             <tr>
               {columnGroups.map((g) => (
                 <Fragment key={g.subPhaseKey}>
@@ -439,13 +446,15 @@ function BoardTable({
                       {c.label}
                     </th>
                   ))}
-                  <th
-                    scope="col"
-                    className="table__th signboard__subtotal-head"
-                    title={`Worst status across ${g.subPhaseLabel}`}
-                  >
-                    Σ
-                  </th>
+                  {showSubtotals && (
+                    <th
+                      scope="col"
+                      className="table__th signboard__subtotal-head"
+                      title={`Worst status across ${g.subPhaseLabel}`}
+                    >
+                      Σ
+                    </th>
+                  )}
                 </Fragment>
               ))}
             </tr>
@@ -484,11 +493,13 @@ function BoardTable({
                         </td>
                       );
                     })}
-                    <td className="table__td signboard__subtotal" data-status={tdStatus(row.subtotals[gi], null)}>
-                      {row.subtotals[gi] !== undefined && (
-                        <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
-                      )}
-                    </td>
+                    {showSubtotals && (
+                      <td className="table__td signboard__subtotal" data-status={tdStatus(row.subtotals[gi], null)}>
+                        {row.subtotals[gi] !== undefined && (
+                          <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
+                        )}
+                      </td>
+                    )}
                   </Fragment>
                 ))}
                 <td className="table__td" data-status={tdStatus(row.total, null)}>

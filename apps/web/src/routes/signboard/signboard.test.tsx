@@ -175,3 +175,20 @@ describe('SignboardScreen — Reload xoá bộ lọc', () => {
     expect((screen.getByLabelText('Search Functions') as HTMLInputElement).value).toBe('');
   });
 });
+
+/**
+ * Một Sub-phase thì cột Σ (gộp Sub-phase đó) TRÙNG cột "Overall" — hiện cả hai là
+ * in "total" hai lần. BOARD ở trên đúng một Sub-phase, nên bảng chỉ được có
+ * "Overall", KHÔNG có Σ.
+ */
+describe('SignboardScreen — một Sub-phase không lặp total', () => {
+  it('chỉ hiện cột Overall, KHÔNG hiện thêm cột Σ trùng nó', async () => {
+    stubFetchRouted();
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+
+    expect(screen.getByRole('columnheader', { name: 'Overall' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'Σ' })).toBeNull();
+  });
+});

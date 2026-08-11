@@ -336,6 +336,9 @@ test('nhiều Sub-phase thì hiện header nhóm và cột lặp dưới từng 
   await expect(page.getByRole('columnheader', { name: 'FUT_TestCase' })).toBeVisible();
   // Loại task 'Create' lặp lại ở CẢ HAI nhóm → có đúng 2 header cùng tên.
   await expect(page.getByRole('columnheader', { name: 'Create', exact: true })).toHaveCount(2);
+  // ≥2 Sub-phase: mỗi nhóm có cột Σ riêng để so với nhau (khác cột Overall). Một
+  // Sub-phase thì Σ bị bỏ vì trùng Overall — xem test đơn Sub-phase ở unit test.
+  await expect(page.getByRole('columnheader', { name: 'Σ' })).toHaveCount(2);
 
   // Nhiều nhóm → hiện link mở khu "⑤ Sub-phase order" ở màn Signboard columns,
   // kèm sẵn Phase đang xem + các Sub-phase đang có (khoá đã chuẩn hoá) để điền
