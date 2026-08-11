@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Múi giờ Nhật (UTC+9) nên mốc chốt sổ 23:59:59.999 giờ địa phương = 14:59:59.999Z CÙNG NGÀY. Kế hoạch 02/03 → 04/03 = 3 ngày, 28800/3 = 9600s/ngày → Kế hoạch 19200, 9600, 0. Thực tế: 02/03 log 14400 nên còn 14400; 03/03 log thêm 14400 nên còn 0 theo quy tắc 3; 04/03 chuyển sang 完了 nên quy tắc 1 cho 0. Đếm trạng thái: 進行中 (id 3) và レビュー中 (id 10003) là hai TÊN khác nhau nhưng cùng nhóm \"đang làm\", nên cả 02/03 lẫn 03/03 đều rơi vào countInProgress.",
+  "_how": "TÍNH TAY. Múi giờ Nhật (UTC+9) nên mốc chốt sổ 23:59:59.999 giờ địa phương = 14:59:59.999Z CÙNG NGÀY. Kế hoạch 02/03 → 04/03 = 3 ngày, 28800/3 = 9600s/ngày → Kế hoạch 19200, 9600, 0. Thực tế: 02/03 log 14400 nên còn 14400; 03/03 log thêm 14400 nên còn 0 theo quy tắc 3; 04/03 chuyển sang 完了 nên quy tắc 1 cho 0. Ngày kết thúc thực tế: đã Done và có worklog nên lấy ngày worklog muộn nhất = 03/03, không phải ngày bấm Done 04/03. Đếm trạng thái: 進行中 (id 3) và レビュー中 (id 10003) là hai TÊN khác nhau nhưng cùng nhóm \"đang làm\", nên cả 02/03 lẫn 03/03 đều rơi vào countInProgress.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -12,7 +12,7 @@
       "planEnd": "2026-03-04",
       "planWorkdays": 3,
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-04",
+      "actualEnd": "2026-03-03",
       "actualEndIsProvisional": false,
       "totalOriginalS": 28800,
       "subtaskCount": 1,
@@ -25,7 +25,7 @@
     {
       "key": "PAY-11",
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-04"
+      "actualEnd": "2026-03-03"
     }
   ],
   "snapshots": [
