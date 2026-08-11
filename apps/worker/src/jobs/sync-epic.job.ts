@@ -1,6 +1,6 @@
 import type { EffectiveConfig, SyncStep, TrackedEpicStatus } from '@app/shared';
 import type { JiraClient, ResolvedFieldMapping } from '@app/jira';
-import { fetchEpicTree, fetchHistory, skewedWatermark } from '../pipeline/fetch-epic-tree.js';
+import { fetchRootTree, fetchHistory, skewedWatermark } from '../pipeline/fetch-epic-tree.js';
 import {
   buildRecords,
   hasRetroLog,
@@ -34,8 +34,14 @@ export interface IssueWritePort {
 
 export interface WorklogWritePort {
   upsertMany(rows: readonly WorklogRecord[]): Promise<void>;
-  /** Worklog bị xoá trên Jira: đặt cờ, KHÔNG xoá dòng (E-17). */
-  markDeleted(worklogIds: readonly bigint[]): Promise<number>;
+  /**
+   * Worklog bị xoá trên Jira: đặt cờ, KHÔNG xoá dòng (E-17).
+   *
+   * PHẢI scope theo tenant: `/worklog/deleted` trả ID của CẢ SITE, mà worklog
+   * ID chỉ duy nhất trong một site — thiếu projectKey thì danh sách xoá của
+   * site này có thể đóng dấu nhầm dòng của tenant ở site khác trùng ID số.
+   */
+  markDeleted(projectKey: string, worklogIds: readonly bigint[]): Promise<number>;
 }
 
 export interface ChangelogWritePort {
@@ -44,7 +50,12 @@ export interface ChangelogWritePort {
 }
 
 export interface SyncRunPort {
-  start(args: { epicKey: string; runType: string; startedAt: Date }): Promise<number>;
+  start(args: {
+    epicKey: string;
+    projectKey: string;
+    runType: string;
+    startedAt: Date;
+  }): Promise<number>;
   finish(args: {
     id: number;
     status: 'SUCCESS' | 'FAILED';
@@ -74,6 +85,10 @@ export interface DirtyEpicQueuePort {
 export interface SyncEpicDeps {
   readonly jira: JiraClient;
   readonly fields: ResolvedFieldMapping;
+  /** Tenant sở hữu root này — lấy từ `tracked_epic.project_key`. */
+  readonly projectKey: string;
+  /** Số tầng dưới root (1..4) — `project.hierarchy_depth`. */
+  readonly hierarchyDepth: number;
   readonly config: EffectiveConfig;
   readonly issues: IssueWritePort;
   readonly worklogs: WorklogWritePort;
@@ -139,7 +154,12 @@ export async function syncEpic(
   const runType = rereadAll || state.lastSyncedAt === null ? 'BACKFILL' : 'DAILY';
   // Ghi `sync_run` NGAY TỪ ĐẦU. Chỉ ghi lúc kết thúc thì job chết giữa chừng sẽ
   // không để lại dấu vết nào, và người vận hành không biết nó đã chạy hay chưa.
-  const runId = await deps.syncRuns.start({ epicKey, runType, startedAt });
+  const runId = await deps.syncRuns.start({
+    epicKey,
+    projectKey: deps.projectKey,
+    runType,
+    startedAt,
+  });
 
   // Bước ĐANG chạy — cập nhật trước mỗi giai đoạn để khi ném lỗi biết được job
   // chết ở đâu: phía Jira (FETCH_*), phía database (PERSIST) hay lúc chốt sổ.
@@ -148,13 +168,18 @@ export async function syncEpic(
   try {
     const since = rereadAll ? null : skewedWatermark(state.lastSyncedAt);
 
-    // --- GIAI ĐOẠN 1: cây issue, đúng 2 lần gọi search ---
-    const tree = await fetchEpicTree(deps.jira, { epicKey, fields: deps.fields, since });
+    // --- GIAI ĐOẠN 1: cây issue 1..N tầng, vòng lặp frontier ---
+    const tree = await fetchRootTree(deps.jira, {
+      rootKey: epicKey,
+      depth: deps.hierarchyDepth,
+      fields: deps.fields,
+      since,
+    });
 
     // --- GIAI ĐOẠN 2: worklog + changelog song song ---
     step = 'FETCH_HISTORY';
-    // Chỉ Task và Sub-task mới có worklog đáng kể; bản thân Epic thì không.
-    const historyTargets = [...tree.tasks, ...tree.subtasks];
+    // Mọi tầng DƯỚI root mới có worklog đáng kể; bản thân root thì không.
+    const historyTargets = tree.byTier.slice(1).flat();
     const idToKey = new Map(historyTargets.map((i) => [i.id, i.key]));
     // Issue có thể đã đồng bộ từ lần trước và lần này không đổi — vẫn cần
     // `issueId` của chúng để nhận diện worklog lấy theo lô.
@@ -168,6 +193,8 @@ export async function syncEpic(
     step = 'PERSIST';
     const built = buildRecords({
       epicKey,
+      projectKey: deps.projectKey,
+      hierarchyDepth: deps.hierarchyDepth,
       tree,
       worklogsByIssue: history.worklogsByIssue,
       changelogByIssue: history.changelogByIssue,
@@ -180,12 +207,13 @@ export async function syncEpic(
     await deps.worklogs.upsertMany(built.worklogs);
 
     const worklogsDeleted = await deps.worklogs.markDeleted(
+      deps.projectKey,
       history.deletedWorklogIds.map((n) => BigInt(n)),
     );
 
     // Chạy ở MỌI lần đồng bộ, kể cả tăng dần: `tree.liveKeys` đến từ một lần
     // quét key riêng KHÔNG có bộ lọc `updated`, nên nó luôn là danh sách đầy đủ
-    // những gì còn sống trên Jira (xem `fetchEpicTree`).
+    // những gì còn sống trên Jira (xem `fetchRootTree`).
     const removed = await deps.issues.markRemoved(epicKey, tree.liveKeys, deps.now());
 
     // Log giờ lùi ngày làm sai lịch sử của những ngày ĐÃ CHỐT SỔ, nên phải tính

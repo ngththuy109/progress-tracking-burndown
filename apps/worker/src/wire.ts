@@ -1,7 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { parse as parseYaml } from 'yaml';
 import type { Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import {
@@ -10,21 +6,13 @@ import {
   findActiveConfigSet,
   findByKey,
   findManyByKeys,
+  findProjectConnection,
   getCalendar,
   listActiveEpics,
   toDateString,
   type PrismaClient,
 } from '@app/db';
-import {
-  type JiraClient,
-  type ResolvedFieldMapping,
-  type StatusMapCache,
-  type FieldMappingConfig,
-  fieldMappingConfigSchema,
-  getFields,
-  loadStatusIdMap,
-  resolveFieldMapping,
-} from '@app/jira';
+import type { JiraClientRegistry, ProjectJiraContext } from '@app/jira';
 import { listWorkdays, localDateOf, mergeInheritance } from '@app/engine';
 import {
   parseSyncJobPayload,
@@ -32,12 +20,11 @@ import {
   type DateOnly,
   type EffectiveConfig,
   type IssueTotals,
-  type StatusIdMap,
 } from '@app/shared';
 import { addReplacingFinished, createQueues, jobIdFor, type QueueSet } from './queue/queues.js';
 import { QUEUE_NAME } from './queue/queues.js';
 import { JOB_NAME, createSyncWorker, type HandlerMap } from './queue/worker.js';
-import { fetchEpicTree } from './pipeline/fetch-epic-tree.js';
+import { fetchRootTree } from './pipeline/fetch-epic-tree.js';
 import { syncEpic, type SyncEpicDeps } from './jobs/sync-epic.job.js';
 import { reconstructEpic, type ReconstructDeps } from './jobs/reconstruct-epic.job.js';
 import { reconcileEpic, type ReconcileDeps } from './jobs/reconcile-epic.job.js';
@@ -81,7 +68,12 @@ export interface WireDeps {
   readonly workerConn: Redis;
   /** Kết nối chung: khoá, token bucket, dirty:epics, cache, status map. */
   readonly generalConn: Redis;
-  readonly jira: JiraClient;
+  /**
+   * Registry client Jira THEO DỰ ÁN (multi-tenant). Thay cho JiraClient toàn
+   * cục cũ: mỗi job tự hỏi registry lấy client + field mapping + status map
+   * của đúng tenant nó phục vụ. Khởi động KHÔNG còn chạm Jira.
+   */
+  readonly registry: JiraClientRegistry;
   readonly log: (event: Record<string, unknown>) => void;
   readonly nightlyCron: string;
   readonly weeklyReconcileCron: string;
@@ -96,9 +88,15 @@ export interface WiredWorker {
 interface JobContext {
   readonly prisma: PrismaClient;
   readonly generalConn: Redis;
-  readonly jira: JiraClient;
-  readonly fields: ResolvedFieldMapping;
-  readonly statusIdMap: StatusIdMap;
+  /**
+   * Registry theo dự án — client/fields/statusIdMap KHÔNG còn nằm ở cấp tiến
+   * trình; `loadEpicContext` lấy chúng cho đúng tenant của từng job.
+   *
+   * Status map giờ cache theo khoá `meta:statuscategory:<projectKey>` (registry
+   * tự lo). Khoá toàn cục cũ `meta:statuscategory` đã CHẾT — không ai đọc nữa,
+   * tự hết hạn theo TTL 24h (ghi chú deploy nằm trong plan multi-tenant).
+   */
+  readonly registry: JiraClientRegistry;
   readonly calendarCache: CalendarCache;
   readonly queues: QueueSet;
   readonly log: (event: Record<string, unknown>) => void;
@@ -106,24 +104,22 @@ interface JobContext {
 }
 
 /**
- * Nạp field mapping + status map (chặn khởi động nếu Jira sai/không tới được),
- * dựng bảng điều phối, rồi chạy một Worker cho mỗi hàng đợi.
+ * Dựng bảng điều phối rồi chạy một Worker cho mỗi hàng đợi.
+ *
+ * KHÔNG chạm Jira lúc khởi động: field mapping + status map giờ thuộc về từng
+ * tenant và được registry nạp lười ở lần job đầu tiên của mỗi dự án — một
+ * tenant cấu hình sai không được phép chặn worker phục vụ các tenant còn lại.
  */
 export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
-  const { prisma, jira, log } = deps;
+  const { prisma, registry, log } = deps;
   const now = (): Date => new Date();
-
-  const fields = resolveFieldMapping(loadFieldMappingConfig(), await getFields(jira));
-  const statusIdMap = await loadStatusIdMap(jira, createStatusMapCache(deps.generalConn));
 
   const queues = createQueues(deps.queueConn);
 
   const ctx: JobContext = {
     prisma,
     generalConn: deps.generalConn,
-    jira,
-    fields,
-    statusIdMap,
+    registry,
     calendarCache: new CalendarCache(),
     queues,
     log,
@@ -179,12 +175,14 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
 /** `sync-epic` và `backfill-epic`: đọc Jira (giai đoạn 1–3) rồi dựng lại (4–5). */
 async function runSyncJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
   const epicKey = parseSyncJobPayload(rawPayload).epicKey;
-  const { config, calendar } = await loadEpicContext(ctx, epicKey);
+  const { config, calendar, projectKey, hierarchyDepth, jira } = await loadEpicContext(ctx, epicKey);
   const sourceReadAtMs = ctx.now().getTime();
 
   const syncDeps: SyncEpicDeps = {
-    jira: ctx.jira,
-    fields: ctx.fields,
+    jira: jira.client,
+    fields: jira.fields,
+    projectKey,
+    hierarchyDepth,
     config,
     issues: createIssueWritePort(ctx.prisma),
     worklogs: createWorklogWritePort(ctx.prisma),
@@ -195,7 +193,7 @@ async function runSyncJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
     now: ctx.now,
   };
 
-  const reconstructDeps = buildReconstructDeps(ctx, calendar, sourceReadAtMs, epicKey);
+  const reconstructDeps = buildReconstructDeps(ctx, jira, calendar, sourceReadAtMs, epicKey);
 
   const syncJobDeps: SyncJobDeps = {
     ports: {
@@ -243,9 +241,12 @@ async function runSyncJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
 async function runReconstructJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
   const payload = parseSyncJobPayload(rawPayload);
   const epicKey = payload.epicKey;
-  const { calendar } = await loadEpicContext(ctx, epicKey);
+  // Job này không đọc Jira, nhưng vẫn cần `statusIdMap` của ĐÚNG tenant để
+  // dịch changelog — registry trả từ cache Redis theo dự án nên thường không
+  // tốn lời gọi Jira nào.
+  const { calendar, jira } = await loadEpicContext(ctx, epicKey);
 
-  const reconstructDeps = buildReconstructDeps(ctx, calendar, ctx.now().getTime(), epicKey);
+  const reconstructDeps = buildReconstructDeps(ctx, jira, calendar, ctx.now().getTime(), epicKey);
   const range = resolveRebuildRange({
     full: payload.full,
     from: payload.from,
@@ -272,10 +273,11 @@ async function runReconstructJob(ctx: JobContext, rawPayload: unknown): Promise<
 /** `reconcile-epic`: so tổng DB với tổng Jira, lệch quá ngưỡng thì đẩy backfill (T-26). */
 async function runReconcileJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
   const epicKey = parseSyncJobPayload(rawPayload).epicKey;
+  const { hierarchyDepth, jira } = await loadEpicContext(ctx, epicKey);
 
   const deps: ReconcileDeps = {
     reads: createReconcileReadPort(ctx.prisma),
-    jira: { jiraTotals: (key) => jiraTotals(ctx, key) },
+    jira: { jiraTotals: (key) => jiraTotals(jira, hierarchyDepth, key) },
     writes: {
       recordRun: (record) => {
         // Chưa có bảng riêng cho đối soát; ghi log có cấu trúc để theo dõi xu hướng.
@@ -309,7 +311,9 @@ async function runReconcileJob(ctx: JobContext, rawPayload: unknown): Promise<vo
 }
 
 async function runNightlySweep(ctx: JobContext): Promise<void> {
-  const epics = await listActiveEpics(ctx.prisma);
+  // Loại Epic của project đã ARCHIVED: lưu trữ tenant đồng nghĩa job đêm phải
+  // ngừng đụng vào Jira của họ, dù Epic trong sổ vẫn đang ACTIVE.
+  const epics = await listActiveEpics(ctx.prisma, { excludeArchivedProjects: true });
   for (const epicKey of epics) {
     // `addReplacingFinished` dọn xác job hôm trước (completed còn trong 24h giữ
     // lại, hoặc failed giữ vĩnh viễn) — không dọn thì BullMQ nuốt lượt đêm nay.
@@ -324,7 +328,7 @@ async function runNightlySweep(ctx: JobContext): Promise<void> {
 }
 
 async function runWeeklyReconcileSweep(ctx: JobContext): Promise<void> {
-  const epics = await listActiveEpics(ctx.prisma);
+  const epics = await listActiveEpics(ctx.prisma, { excludeArchivedProjects: true });
   for (const epicKey of epics) {
     await addReplacingFinished(
       ctx.queues.reconcile,
@@ -373,15 +377,37 @@ async function enqueueBackfill(queues: QueueSet, epicKey: string): Promise<void>
   );
 }
 
-/** Nạp cấu hình hiệu lực + lịch làm việc của một Epic. */
+/**
+ * Nạp cấu hình hiệu lực + lịch làm việc + NGỮ CẢNH TENANT của một Epic.
+ *
+ * Từ multi-tenant, đây là chỗ duy nhất nối "epicKey trong payload job" với
+ * "dự án sở hữu nó": hàng `project` cho hierarchyDepth, còn registry cho
+ * client/field mapping/status map của đúng site Jira. Payload job vẫn chỉ có
+ * `{epicKey}` — key đã mang tiền tố dự án nên không cần đổi khuôn payload.
+ */
 async function loadEpicContext(
   ctx: JobContext,
   epicKey: string,
-): Promise<{ config: EffectiveConfig; calendar: Awaited<ReturnType<typeof getCalendar>> }> {
+): Promise<{
+  config: EffectiveConfig;
+  calendar: Awaited<ReturnType<typeof getCalendar>>;
+  projectKey: string;
+  hierarchyDepth: number;
+  jira: ProjectJiraContext;
+}> {
   const epic = await findByKey(ctx.prisma, epicKey);
   if (!epic) {
     throw new Error(`Epic ${epicKey} không có trong sổ theo dõi — không xử lý được.`);
   }
+  const project = await findProjectConnection(ctx.prisma, epic.projectKey);
+  if (!project) {
+    // FK bảo đảm điều này gần như không xảy ra — nhưng nếu xảy ra thì báo rõ
+    // thay vì để registry ném lỗi kết nối khó hiểu hơn.
+    throw new Error(
+      `Epic ${epicKey} trỏ tới dự án ${epic.projectKey} không còn trong bảng project.`,
+    );
+  }
+  const jira = await ctx.registry.forProject(epic.projectKey);
   const config = await loadEffectiveConfig(ctx.prisma, epic.projectKey);
   // Đọc lại lịch ở ĐẦU MỖI JOB thay vì cache vĩnh viễn trong RAM: admin vừa
   // import ngày lễ (T-36) mà worker chạy suốt vài tuần không restart thì lịch
@@ -390,20 +416,27 @@ async function loadEpicContext(
   // job dùng chung; query lịch rất nhẹ nên đọc lại mỗi job không đáng kể.
   ctx.calendarCache.invalidate(epic.calendarId);
   const calendar = await getCalendar(ctx.prisma, epic.calendarId, ctx.calendarCache);
-  return { config, calendar };
+  return {
+    config,
+    calendar,
+    projectKey: epic.projectKey,
+    hierarchyDepth: project.hierarchyDepth,
+    jira,
+  };
 }
 
 function buildReconstructDeps(
   ctx: JobContext,
+  jira: ProjectJiraContext,
   calendar: Awaited<ReturnType<typeof getCalendar>>,
   sourceReadAtMs: number,
   epicKey: string,
 ): ReconstructDeps {
   return {
-    ports: createReconstructPorts(ctx.prisma, ctx.generalConn, ctx.statusIdMap, ctx.now),
+    ports: createReconstructPorts(ctx.prisma, ctx.generalConn, jira.statusIdMap, ctx.now),
     redis: ctx.generalConn,
     calendar,
-    statusIdMap: ctx.statusIdMap,
+    statusIdMap: jira.statusIdMap,
     sourceReadAtMs,
     now: ctx.now,
     // Token duy nhất mỗi lượt chạy để nhả/gia hạn đúng khoá của mình.
@@ -487,13 +520,27 @@ async function earliestMissingSnapshotDate(
   return workday ?? null;
 }
 
-async function jiraTotals(ctx: JobContext, epicKey: string): Promise<readonly IssueTotals[]> {
-  const tree = await fetchEpicTree(ctx.jira, { epicKey, fields: ctx.fields, since: null });
-  return [...tree.tasks, ...tree.subtasks].map((i) => ({
-    issueKey: i.key,
-    timeSpentS: numberOf(i.fields['timespent']),
-    originalEstimateS: numberOf(i.fields['timeoriginalestimate']),
-  }));
+async function jiraTotals(
+  jira: ProjectJiraContext,
+  hierarchyDepth: number,
+  epicKey: string,
+): Promise<readonly IssueTotals[]> {
+  const tree = await fetchRootTree(jira.client, {
+    rootKey: epicKey,
+    depth: hierarchyDepth,
+    fields: jira.fields,
+    since: null,
+  });
+  // Mọi tầng dưới root — giống bộ [tasks, subtasks] cũ; so tổng theo issueKey
+  // nên hàng MIDDLE chỉ khớp với chính nó, không làm lệch phép đối soát.
+  return tree.byTier
+    .slice(1)
+    .flat()
+    .map((i) => ({
+      issueKey: i.key,
+      timeSpentS: numberOf(i.fields['timespent']),
+      originalEstimateS: numberOf(i.fields['timeoriginalestimate']),
+    }));
 }
 
 function numberOf(v: unknown): number {
@@ -504,21 +551,4 @@ function numberOf(v: unknown): number {
 function withFull(raw: unknown): unknown {
   const base = typeof raw === 'object' && raw !== null ? raw : {};
   return { ...base, full: true };
-}
-
-function loadFieldMappingConfig(): FieldMappingConfig {
-  const override = process.env['JIRA_FIELDS_CONFIG'];
-  const path = override
-    ? resolve(override)
-    : resolve(dirname(fileURLToPath(import.meta.url)), '../../../config/jira-fields.yaml');
-  return fieldMappingConfigSchema.parse(parseYaml(readFileSync(path, 'utf8')));
-}
-
-function createStatusMapCache(redis: Redis): StatusMapCache {
-  return {
-    get: (key) => redis.get(key),
-    set: async (key, value, ttlSeconds) => {
-      await redis.set(key, value, 'EX', ttlSeconds);
-    },
-  };
 }

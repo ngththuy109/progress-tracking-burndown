@@ -344,7 +344,7 @@ describe('biến môi trường', () => {
   });
 
   it('gom TẤT CẢ biến thiếu vào một thông báo', () => {
-    // Báo từng cái một khiến người dựng môi trường phải chạy lại năm lần.
+    // Báo từng cái một khiến người dựng môi trường phải chạy lại nhiều lần.
     const err = (() => {
       try {
         readEnv({ REDIS_URL: 'redis://x' });
@@ -355,11 +355,42 @@ describe('biến môi trường', () => {
     })();
 
     expect(err).toBeInstanceOf(MissingEnvError);
-    expect(err?.names).toEqual(['DATABASE_URL', 'JIRA_BASE_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']);
+    // JIRA_* vắng CẢ BA là hợp lệ từ multi-tenant (fallback = null) — chỉ còn
+    // DATABASE_URL là thật sự thiếu.
+    expect(err?.names).toEqual(['DATABASE_URL']);
     expect(err?.message).toContain('.env.example');
   });
 
+  it('vắng cả ba biến JIRA_* là HỢP LỆ — fallback env = null (multi-tenant)', () => {
+    const env = readEnv({
+      REDIS_URL: 'redis://user:secret@redis-host:6379',
+      DATABASE_URL: 'postgres://user:secret@db-host:5432/burndown',
+    });
+    expect(env.jiraBaseUrl).toBeNull();
+    expect(env.jiraEmail).toBeNull();
+    expect(env.jiraApiToken).toBeNull();
+  });
+
+  it('đặt JIRA_* NỬA VỜI (1–2 trên 3) là cấu hình hỏng — báo thiếu ngay', () => {
+    const err = (() => {
+      try {
+        readEnv({
+          REDIS_URL: 'redis://x',
+          DATABASE_URL: 'postgres://y',
+          JIRA_BASE_URL: 'https://example.atlassian.net',
+        });
+        return null;
+      } catch (e) {
+        return e as MissingEnvError;
+      }
+    })();
+
+    expect(err).toBeInstanceOf(MissingEnvError);
+    expect(err?.names).toEqual(['JIRA_EMAIL', 'JIRA_API_TOKEN']);
+  });
+
   it('biến rỗng hoặc toàn khoảng trắng bị coi là thiếu', () => {
+    // Token trống trong khi hai biến JIRA_* còn lại có giá trị = nửa vời.
     expect(() => readEnv({ ...FULL_ENV, JIRA_API_TOKEN: '   ' })).toThrow(MissingEnvError);
   });
 });

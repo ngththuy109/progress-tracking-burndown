@@ -103,7 +103,16 @@ function run(opts: FakeJiraOptions, epicKey = 'PAY-100', options: SyncEpicOption
   return {
     jira,
     result: syncEpic(
-      { jira: client, fields: FIELDS, config: CONFIG, ...ports, now: () => NOW },
+      {
+        jira: client,
+        fields: FIELDS,
+        // Tenant + độ sâu 2 tầng — đúng cấu trúc Epic→Task→Sub-task cũ.
+        projectKey: 'PAY',
+        hierarchyDepth: 2,
+        config: CONFIG,
+        ...ports,
+        now: () => NOW,
+      },
       epicKey,
       options,
     ),

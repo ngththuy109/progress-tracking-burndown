@@ -26,10 +26,27 @@ import {
 /** Trừ lùi watermark 5 phút phòng lệch đồng hồ — PRD §4.2. */
 export const WATERMARK_SKEW_MINUTES = 5;
 
-export interface EpicTree {
-  readonly epic: JiraIssue | null;
-  readonly tasks: readonly JiraIssue[];
-  readonly subtasks: readonly JiraIssue[];
+/**
+ * Số key tối đa trong một mệnh đề `parent IN (...)`.
+ *
+ * JQL không có giới hạn cứng công bố, nhưng danh sách IN quá dài làm câu truy
+ * vấn phình tới mức Jira từ chối hoặc chậm bất thường. ~50 key giữ mỗi câu ở
+ * cỡ vài KB; tầng biên giới (frontier) lớn hơn thì tách thành nhiều câu.
+ */
+export const PARENT_IN_CHUNK_SIZE = 50;
+
+/**
+ * Cây issue lấy về theo TẦNG — thay cho bộ ba cố định epic/tasks/subtasks.
+ *
+ * `byTier[0]` là tầng gốc (`[root]` hoặc `[]` nếu root đã biến mất trên Jira),
+ * `byTier[d]` (1..depth) là mọi issue ở tầng d. Vai trò (EPIC/TASK/SUBTASK/
+ * MIDDLE) KHÔNG nằm ở đây — nó được gán từ vị trí tầng trong `buildRecords`.
+ */
+export interface RootTree {
+  /** Issue gốc — `null` nếu Jira không còn trả về nó. */
+  readonly root: JiraIssue | null;
+  /** Độ dài luôn là `depth + 1`; tầng không có issue là mảng rỗng. */
+  readonly byTier: readonly (readonly JiraIssue[])[];
   /** Key của MỌI issue Jira đang trả về — dùng để phát hiện issue đã biến mất. */
   readonly liveKeys: ReadonlySet<string>;
 }
@@ -58,30 +75,48 @@ function quote(s: string): string {
   return `"${s.replace(/"/g, '\\"')}"`;
 }
 
+/** Cắt danh sách key thành từng lô cho mệnh đề `parent IN (...)`. */
+function chunked<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+function parentInJql(keys: readonly string[]): string {
+  return `parent IN (${keys.map(quote).join(',')})`;
+}
+
 /**
- * Lấy cả cây Epic bằng ĐÚNG 2 lần `searchIssues`.
+ * Lấy cả cây issue 1..N tầng bằng vòng lặp biên giới (frontier):
+ * frontier = [rootKey], rồi mỗi tầng lấy con qua `parent IN (...)` (tách lô
+ * ~50 key) cho tới tầng lá.
  *
- * Bộ lọc `updated >=` CHỈ áp cho tầng Sub-task, cố ý:
+ * Bộ lọc `updated >=` CHỈ áp cho TẦNG LÁ, cố ý:
  *
- *   • Tầng Epic + Task là câu hỏi về CẤU TRÚC — cần biết Epic này có những Phase
- *     nào. Lọc theo `updated` ở đây thì một Task không đổi sẽ biến mất khỏi kết
- *     quả, kéo theo mọi Sub-task của nó không được truy vấn nữa. Lỗi này hoàn
- *     toàn im lặng: job vẫn chạy xong, chỉ là thiếu dữ liệu.
- *   • Tầng Sub-task mới là chỗ có khối lượng (500 ticket) — lọc ở đây mới là
- *     chỗ tiết kiệm thật.
+ *   • Các tầng trên là câu hỏi về CẤU TRÚC — cần biết root này có những nhánh
+ *     nào. Lọc theo `updated` ở đây thì một nhánh không đổi sẽ biến mất khỏi
+ *     kết quả, kéo theo mọi con cháu của nó không được truy vấn nữa. Lỗi này
+ *     hoàn toàn im lặng: job vẫn chạy xong, chỉ là thiếu dữ liệu.
+ *   • Tầng lá mới là chỗ có khối lượng (500 ticket) — lọc ở đây mới là chỗ
+ *     tiết kiệm thật.
  *
- * Số Phase của một Epic chỉ vài cái, nên lấy lại toàn bộ tầng trên gần như
- * không tốn gì.
+ * Số issue ở các tầng trên chỉ vài chục, nên lấy lại toàn bộ gần như không tốn
+ * gì. Với `depth = 2` chuỗi JQL phát ra GIỐNG TỪNG BYTE bản epic→task→subtask
+ * cũ (một câu `key = X OR parent = X`, một câu `parent IN (...)` cho lá, và
+ * một câu quét key khi tăng dần) — có test khoá chặt điều này.
  */
-export async function fetchEpicTree(
+export async function fetchRootTree(
   client: JiraClient,
   args: {
-    epicKey: string;
+    /** Key của issue gốc (tracked root — cột `epic_key` trong DB). */
+    rootKey: string;
+    /** Số tầng DƯỚI root: 1..4 (`project.hierarchy_depth`). */
+    depth: number;
     fields: ResolvedFieldMapping;
     /** Đã trừ lùi sẵn. `null` = backfill. */
     since: Date | null;
   },
-): Promise<EpicTree> {
+): Promise<RootTree> {
   const issueFields = [
     'summary',
     'issuetype',
@@ -95,53 +130,83 @@ export async function fetchEpicTree(
     ...fieldIdsForSearch(args.fields),
   ];
 
-  // (1) Bản thân Epic + các Task con. KHÔNG lọc theo `updated` — xem chú thích.
-  const top = await searchIssues(client, {
-    jql: `key = ${quote(args.epicKey)} OR parent = ${quote(args.epicKey)}`,
-    fields: issueFields,
-  });
+  const leafFilter = args.since ? ` AND updated >= ${quote(toJqlTimestamp(args.since))}` : '';
+  const byTier: JiraIssue[][] = [];
+  let root: JiraIssue | null = null;
 
-  const epic = top.find((i) => i.key === args.epicKey) ?? null;
-  const tasks = top.filter((i) => i.key !== args.epicKey);
+  if (args.depth >= 2) {
+    // (1) Root + tầng 1 trong MỘT câu — tầng 1 không bao giờ bị lọc `updated`
+    // nên gộp được, giữ nguyên số lần gọi của bản cũ.
+    const top = await searchIssues(client, {
+      jql: `key = ${quote(args.rootKey)} OR parent = ${quote(args.rootKey)}`,
+      fields: issueFields,
+    });
+    root = top.find((i) => i.key === args.rootKey) ?? null;
+    byTier.push(root ? [root] : []);
+    byTier.push(top.filter((i) => i.key !== args.rootKey));
+  } else {
+    // depth = 1: tầng 1 chính là tầng lá và cần bộ lọc `updated`, mà bộ lọc đó
+    // KHÔNG được chạm vào root (root không đổi sẽ biến mất) — nên tách hai câu.
+    const rootRes = await searchIssues(client, {
+      jql: `key = ${quote(args.rootKey)}`,
+      fields: issueFields,
+    });
+    root = rootRes.find((i) => i.key === args.rootKey) ?? null;
+    byTier.push(root ? [root] : []);
+  }
 
-  // (2) Sub-task, CÓ lọc theo `updated` khi đồng bộ tăng dần.
-  const taskKeys = tasks.map((t) => t.key);
-  const subtasks =
-    taskKeys.length === 0
-      ? []
-      : await searchIssues(client, {
-          jql:
-            `parent IN (${taskKeys.map(quote).join(',')})` +
-            (args.since ? ` AND updated >= ${quote(toJqlTimestamp(args.since))}` : ''),
+  // (2) Vòng lặp biên giới cho các tầng còn lại; tầng lá có lọc `updated`.
+  for (let d = byTier.length; d <= args.depth; d++) {
+    const isLeaf = d === args.depth;
+    // Tầng 1 luôn hỏi theo rootKey — kể cả khi Jira không còn trả về root,
+    // giống hệt `parent = X` của bản cũ.
+    const frontier = d === 1 ? [args.rootKey] : byTier[d - 1]!.map((i) => i.key);
+    const tier: JiraIssue[] = [];
+    for (const keys of chunked(frontier, PARENT_IN_CHUNK_SIZE)) {
+      tier.push(
+        ...(await searchIssues(client, {
+          jql: parentInJql(keys) + (isLeaf ? leafFilter : ''),
           fields: issueFields,
-        });
+        })),
+      );
+    }
+    byTier.push(tier);
+  }
 
-  // (3) Quét KEY để biết issue nào còn sống — chỉ cần khi đồng bộ tăng dần.
+  // (3) Quét KEY tầng lá để biết issue nào còn sống — chỉ cần khi tăng dần.
   //
-  // Ở chế độ tăng dần, kết quả (2) chỉ chứa Sub-task VỪA ĐỔI. Lấy nó làm
-  // `liveKeys` thì mọi Sub-task không đổi sẽ bị coi là đã biến mất và bị xoá
-  // mềm sạch sau mỗi đêm. Nhưng nếu bỏ hẳn việc xoá mềm ở chế độ tăng dần thì
-  // issue gỡ khỏi Jira sẽ KHÔNG BAO GIỜ được đánh dấu — vì sau lần backfill đầu
-  // tiên, mọi lần chạy đều là tăng dần.
+  // Ở chế độ tăng dần, kết quả (2) chỉ chứa lá VỪA ĐỔI. Lấy nó làm `liveKeys`
+  // thì mọi lá không đổi sẽ bị coi là đã biến mất và bị xoá mềm sạch sau mỗi
+  // đêm. Nhưng nếu bỏ hẳn việc xoá mềm ở chế độ tăng dần thì issue gỡ khỏi
+  // Jira sẽ KHÔNG BAO GIỜ được đánh dấu — vì sau lần backfill đầu tiên, mọi
+  // lần chạy đều là tăng dần.
   //
-  // Nên phải quét riêng danh sách key, không kèm bộ lọc `updated`. Chỉ lấy đúng
-  // một trường nên phản hồi rất nhẹ, và đổi lại thì việc xoá mềm hoạt động
-  // đúng ở MỌI lần chạy.
-  const liveSubtaskKeys =
-    args.since === null || taskKeys.length === 0
-      ? subtasks.map((i) => i.key)
-      : (
-          await searchIssues(client, {
-            jql: `parent IN (${taskKeys.map(quote).join(',')})`,
-            fields: ['summary'],
-          })
-        ).map((i) => i.key);
+  // Nên phải quét riêng danh sách key, không kèm bộ lọc `updated`. Chỉ lấy
+  // đúng một trường nên phản hồi rất nhẹ, và đổi lại thì việc xoá mềm hoạt
+  // động đúng ở MỌI lần chạy. Các tầng trên đã được lấy TRỌN VẸN nên key của
+  // chúng chính là danh sách sống, không cần quét lại.
+  const leafFrontier = args.depth === 1 ? [args.rootKey] : byTier[args.depth - 1]!.map((i) => i.key);
+  let liveLeafKeys: string[];
+  if (args.since === null || leafFrontier.length === 0) {
+    liveLeafKeys = byTier[args.depth]!.map((i) => i.key);
+  } else {
+    liveLeafKeys = [];
+    for (const keys of chunked(leafFrontier, PARENT_IN_CHUNK_SIZE)) {
+      liveLeafKeys.push(
+        ...(await searchIssues(client, { jql: parentInJql(keys), fields: ['summary'] })).map(
+          (i) => i.key,
+        ),
+      );
+    }
+  }
 
   return {
-    epic,
-    tasks,
-    subtasks,
-    liveKeys: new Set([...top.map((i) => i.key), ...liveSubtaskKeys]),
+    root,
+    byTier,
+    liveKeys: new Set([
+      ...byTier.slice(0, args.depth).flatMap((tier) => tier.map((i) => i.key)),
+      ...liveLeafKeys,
+    ]),
   };
 }
 
