@@ -117,6 +117,39 @@ describe('migration init — các lớp bảo vệ Prisma không tự sinh đư�
 });
 
 // ===========================================================================
+// Nhóm 1b — Migration workdays_mask_guard: quy ước bit của lịch làm việc.
+//
+// Lỗi thật đã gặp: bản ghi lịch tạo tay với mask 126 (bit 1-indexed thay vì
+// 0-indexed) làm mọi Thứ Hai biến mất khỏi biểu đồ Burndown. Migration này
+// vừa chữa dữ liệu vừa thêm CHECK — hai phần đều là SQL thô mà Prisma không tự
+// sinh được, nên phải khoá bằng test đọc file y như nhóm 1.
+// ===========================================================================
+describe('migration workdays_mask_guard — chặn mask sai quy ước bit', () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((d) => d.endsWith('_workdays_mask_guard'));
+  if (!dir) throw new Error('Không tìm thấy migration _workdays_mask_guard');
+  const sql = readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf8');
+
+  it('chữa các vết trượt 1-indexed đã biết bằng dịch phải 1 bit (62, 126, 254)', () => {
+    expect(sql).toMatch(/workdays_mask >> 1 WHERE workdays_mask IN \(62, 126, 254\)/);
+  });
+
+  it('có CHECK khoảng 7 bit và CHECK bắt buộc Thứ Hai', () => {
+    expect(sql).toMatch(/ck_workdays_mask_range CHECK \(workdays_mask BETWEEN 1 AND 127\)/);
+    expect(sql).toMatch(/ck_workdays_mask_has_monday CHECK \(\(workdays_mask & 1\) = 1\)/);
+  });
+
+  it('chữa dữ liệu TRƯỚC khi thêm CHECK — thứ tự ngược lại làm hỏng lượt nâng cấp', () => {
+    expect(sql.indexOf('workdays_mask >> 1')).toBeLessThan(sql.indexOf('ADD CONSTRAINT'));
+  });
+
+  it('có kịch bản rollback đi kèm (CONVENTIONS.md C-13)', () => {
+    const rollback = readFileSync(join(MIGRATIONS_DIR, dir, 'ROLLBACK.sql'), 'utf8');
+    expect(rollback).toContain('DROP CONSTRAINT IF EXISTS ck_workdays_mask_has_monday');
+    expect(rollback).toContain('DROP CONSTRAINT IF EXISTS ck_workdays_mask_range');
+  });
+});
+
+// ===========================================================================
 // Nhóm 2 — Hằng số seed. Không cần database.
 // ===========================================================================
 describe('seed lịch làm việc', () => {
@@ -197,6 +230,27 @@ describe('ràng buộc thật trên PostgreSQL', async () => {
         INSERT INTO tracked_epic (epic_key, epic_id, project_key, display_name, status,
                                   timezone, calendar_id, added_by)
         VALUES ('X-1', 999001, 'X', 'test', 'FOO', 'Asia/Ho_Chi_Minh', 'VN_STANDARD', 'test')
+      `,
+    ).rejects.toThrow();
+  });
+
+  it('mask thiếu Thứ Hai (126 — vết trượt 1-indexed) bị CHECK constraint chặn ngay lúc ghi', async () => {
+    // Đây chính là giá trị đã làm mọi Thứ Hai biến mất khỏi biểu đồ Burndown.
+    // Từ migration workdays_mask_guard, database từ chối nó kể cả khi sửa tay.
+    await prisma.workCalendar.deleteMany({ where: { calendarId: 'BAD_MASK_TEST' } });
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO work_calendar (calendar_id, timezone, workdays_mask, hours_per_day)
+        VALUES ('BAD_MASK_TEST', 'Asia/Ho_Chi_Minh', 126, 8)
+      `,
+    ).rejects.toThrow();
+  });
+
+  it('mask ngoài 7 bit (254) cũng bị chặn', async () => {
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO work_calendar (calendar_id, timezone, workdays_mask, hours_per_day)
+        VALUES ('BAD_MASK_TEST', 'Asia/Ho_Chi_Minh', 254, 8)
       `,
     ).rejects.toThrow();
   });

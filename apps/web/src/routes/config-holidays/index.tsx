@@ -1,5 +1,5 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
-import type { CalendarSummary, HolidayImportMode } from '@app/shared';
+import { describeWorkdaysMask, workdaysMaskWarning, type CalendarSummary, type HolidayImportMode } from '@app/shared';
 import {
   useCalendars,
   useDeleteHoliday,
@@ -135,11 +135,22 @@ function CalendarPanel({ calendar }: { readonly calendar: CalendarSummary }) {
           📅 Days off — {CALENDAR_LABEL[calendar.calendarId] ?? calendar.calendarId}
         </h2>
         <p className="panel__hint">
-          Weekends come from the calendar itself (Mon–Fri work week). This list holds the
+          {/* Giải mã mask ra từng ngày thay vì gán cứng "Mon–Fri": mask sai
+              (như 126) phải NHÌN THẤY ĐƯỢC ngay ở đây, không phải đợi biểu đồ
+              thiếu ngày rồi mới đi dò database. */}
+          Working days come from the calendar itself (
+          <strong>{describeWorkdaysMask(calendar.workdaysMask)}</strong> · {calendar.timezone}).
+          This list holds the
           <strong> public holidays</strong> on top of that. The Planned line of every Epic using this
           calendar skips these days, and planned start/end dates falling on them are flagged on the
           Sub-tasks screen.
         </p>
+
+        {workdaysMaskWarning(calendar.workdaysMask) !== null && (
+          <p className="notice notice--error" role="alert">
+            📅 {workdaysMaskWarning(calendar.workdaysMask)}
+          </p>
+        )}
 
         <div className="scope">
           <span className="scope__label">Year:</span>

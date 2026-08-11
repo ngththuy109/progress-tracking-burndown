@@ -6,7 +6,7 @@ import {
   loadPhaseRollups,
   loadSnapshotsForChart,
 } from '@app/db';
-import { DEFAULT_HOURS_PER_DAY, DEFAULT_WORKDAYS_MASK, type PhaseRollup, type PlanShiftRecord, type WorkCalendar } from '@app/shared';
+import { DEFAULT_HOURS_PER_DAY, DEFAULT_WORKDAYS_MASK, workdaysMaskWarning, type PhaseRollup, type PlanShiftRecord, type WorkCalendar } from '@app/shared';
 import type { BurndownReadPort } from '../routes/burndown.routes.js';
 
 /**
@@ -59,6 +59,13 @@ export function createBurndownReadPort(prisma: PrismaClient): BurndownReadPort {
             'as working days. An Admin can import them on the Days off screen.',
         );
       }
+
+      // Mask sai quy ước bit (thiếu Thứ Hai / ngoài 7 bit) làm cả tuần trượt
+      // một ngày: Chủ nhật thành ngày làm việc còn mọi Thứ Hai biến mất khỏi
+      // trục biểu đồ. Đây từng là lỗi thật với bản ghi lịch tạo tay mask 126 —
+      // phải hiện ngay trên màn hình Burndown thay vì bắt người xem tự dò.
+      const maskWarning = workdaysMaskWarning(row.workdays_mask ?? DEFAULT_WORKDAYS_MASK);
+      if (maskWarning !== null) warnings.push(maskWarning);
 
       const calendar: WorkCalendar = {
         calendarId: 'epic',
