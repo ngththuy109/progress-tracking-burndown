@@ -13,9 +13,10 @@ export default tseslint.config(
 
   // Script vận hành chạy thẳng bằng Node, không qua TypeScript. Chúng dùng
   // `process`, `console`, `fetch` — toàn biến toàn cục của Node, mà cấu hình
-  // mặc định của eslint không biết.
+  // mặc định của eslint không biết. Hook của Claude Code (.claude/hooks) cùng
+  // thể loại: file .mjs chạy thẳng bằng Node.
   {
-    files: ['tools/**/*.mjs'],
+    files: ['tools/**/*.mjs', '.claude/hooks/**/*.mjs'],
     languageOptions: {
       globals: {
         process: 'readonly',
