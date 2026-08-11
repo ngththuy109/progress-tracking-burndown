@@ -7,14 +7,12 @@ import {
   type PlanConflictReadPort,
 } from './plan-conflicts.routes.js';
 import type { PlanCheckSubtask, SideCalendar } from '../services/plan-conflicts.service.js';
+import { asAdmin, asPm, testGuards } from '../test-fakes.js';
 
 /**
- * Test tầng route của plan-conflicts — T-37: phân quyền theo project, chọn
- * lịch theo phía, và endpoint tổng hợp lọc theo PM.
+ * Test tầng route của plan-conflicts — T-37: phân quyền theo tenant, chọn
+ * lịch theo phía, và endpoint tổng hợp đã bó trong một dự án.
  */
-
-const ADMIN: Principal = { userId: 'admin', role: 'ADMIN', projects: [] };
-const PM_PAY: Principal = { userId: 'pm', role: 'PM', projects: ['PAY'] };
 
 function sideCalendar(id: string, holidays: Record<string, string>): SideCalendar {
   const cal: WorkCalendar = {
@@ -41,8 +39,8 @@ class FakeReads implements PlanConflictReadPort {
     const found = this.epics.find((e) => e.epicKey === epicKey);
     return found === undefined ? null : { projectKey: found.projectKey, calendarId: found.calendarId };
   }
-  async listEpics(projectKey: string | null) {
-    return this.epics.filter((e) => projectKey === null || e.projectKey === projectKey);
+  async listEpics(projectKey: string) {
+    return this.epics.filter((e) => e.projectKey === projectKey);
   }
   async subtasksForCheck(epicKey: string) {
     return this.subtasks[epicKey] ?? [];
@@ -75,9 +73,12 @@ let principal: Principal | null;
 
 beforeEach(async () => {
   reads = new FakeReads();
-  principal = ADMIN;
+  principal = asAdmin();
   app = Fastify();
-  registerPlanConflictRoutes(app, { reads, resolvePrincipal: () => principal });
+  registerPlanConflictRoutes(app, {
+    reads,
+    guards: testGuards({ principal: () => principal, projects: ['PAY', 'SHOP'] }),
+  });
   await app.ready();
 });
 
@@ -85,7 +86,7 @@ describe('chi tiết một Epic', () => {
   it('task JMReview kết thúc đúng ngày lễ JP bị bắt, dù lịch VN hôm đó đi làm', async () => {
     reads.subtasks['PAY-1'] = [jmReviewEndsOnJpHoliday];
 
-    const res = await app.inject({ method: 'GET', url: '/api/epics/PAY-1/plan-conflicts' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/PAY/epics/PAY-1/plan-conflicts' });
     expect(res.statusCode).toBe(200);
 
     const body = res.json();
@@ -98,20 +99,28 @@ describe('chi tiết một Epic', () => {
   });
 
   it('Epic không theo dõi trả 404', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/epics/NOPE-1/plan-conflicts' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/PAY/epics/NOPE-1/plan-conflicts' });
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe('EPIC_NOT_FOUND');
   });
 
-  it('PM không phụ trách project đó bị chặn 403', async () => {
-    principal = PM_PAY;
-    const res = await app.inject({ method: 'GET', url: '/api/epics/SHOP-1/plan-conflicts' });
-    expect(res.statusCode).toBe(403);
+  it('PM không phụ trách project đó nhận 404 — không lộ tenant tồn tại', async () => {
+    principal = asPm('PAY');
+    const res = await app.inject({ method: 'GET', url: '/api/projects/SHOP/epics/SHOP-1/plan-conflicts' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('PROJECT_NOT_FOUND');
+  });
+
+  it('Epic của tenant khác ghép vào URL dự án mình → 404 EPIC_NOT_FOUND', async () => {
+    principal = asPm('PAY');
+    const res = await app.inject({ method: 'GET', url: '/api/projects/PAY/epics/SHOP-1/plan-conflicts' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('EPIC_NOT_FOUND');
   });
 
   it('chưa đăng nhập bị chặn 401', async () => {
     principal = null;
-    const res = await app.inject({ method: 'GET', url: '/api/epics/PAY-1/plan-conflicts' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/PAY/epics/PAY-1/plan-conflicts' });
     expect(res.statusCode).toBe(401);
   });
 });
@@ -120,17 +129,17 @@ describe('tổng hợp cho màn Epics', () => {
   it('chỉ trả Epic CÓ vi phạm, Epic sạch không chiếm chỗ', async () => {
     reads.subtasks['PAY-1'] = [jmReviewEndsOnJpHoliday];
 
-    const res = await app.inject({ method: 'GET', url: '/api/plan-conflicts/summary' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/PAY/plan-conflicts/summary' });
     expect(res.statusCode).toBe(200);
     expect(res.json().counts).toEqual([{ epicKey: 'PAY-1', total: 1 }]);
   });
 
-  it('PM chỉ nhận số liệu của project mình phụ trách — cùng luật §9.3 với biểu đồ', async () => {
-    principal = PM_PAY;
+  it('tổng hợp CHỈ đếm Epic của tenant trong URL — không rò số liệu tenant khác', async () => {
+    principal = asPm('PAY');
     reads.subtasks['PAY-1'] = [jmReviewEndsOnJpHoliday];
     reads.subtasks['SHOP-1'] = [{ ...jmReviewEndsOnJpHoliday, issueKey: 'SHOP-101' }];
 
-    const res = await app.inject({ method: 'GET', url: '/api/plan-conflicts/summary' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects/PAY/plan-conflicts/summary' });
     expect(res.json().counts).toEqual([{ epicKey: 'PAY-1', total: 1 }]);
   });
 });

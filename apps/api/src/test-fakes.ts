@@ -210,8 +210,10 @@ export class FakeTrackedEpicStore implements TrackedEpicStore {
     return Promise.resolve(row === undefined ? null : { status: row.status, projectKey: row.projectKey });
   }
 
-  existingKeys(keys: readonly string[]): Promise<ReadonlySet<string>> {
-    return Promise.resolve(new Set(keys.filter((k) => this.rows.has(k))));
+  existingKeys(keys: readonly string[], projectKey: string): Promise<ReadonlySet<string>> {
+    return Promise.resolve(
+      new Set(keys.filter((k) => this.rows.get(k)?.projectKey === projectKey)),
+    );
   }
 
   insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<readonly string[]> {

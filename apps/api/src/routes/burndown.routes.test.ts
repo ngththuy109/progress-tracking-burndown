@@ -12,6 +12,7 @@ import {
 import { registerBurndownRoutes, type BurndownReadPort } from './burndown.routes.js';
 import { chartCachePattern, createChartCache, type CacheRedis } from '../adapters/chart-cache.js';
 import { summarizeShifts, toHours } from '../services/burndown.service.js';
+import { asAdmin, asPm, asViewer, testGuards } from '../test-fakes.js';
 
 const CALENDAR: WorkCalendar = {
   calendarId: 'test',
@@ -22,7 +23,6 @@ const CALENDAR: WorkCalendar = {
   warnings: [],
 };
 
-const ADMIN: Principal = { userId: 'admin', role: 'ADMIN', projects: [] };
 
 function rollup(phaseCode: string, planStart: string | null, planEnd: string | null, planWorkdays: number | null, totalOriginalS = 0): PhaseRollup {
   return {
@@ -163,7 +163,7 @@ let principal: Principal | null;
 beforeEach(async () => {
   reads = new FakeReads();
   redis = new FakeCacheRedis();
-  principal = ADMIN;
+  principal = asAdmin();
 
   // Hai tuần làm việc, mọi ngày đều có snapshot.
   const days = [
@@ -176,7 +176,7 @@ beforeEach(async () => {
   registerBurndownRoutes(app, {
     reads,
     cache: createChartCache({ redis }),
-    resolvePrincipal: () => principal,
+    guards: testGuards({ principal: () => principal }),
   });
   await app.ready();
 });
@@ -190,7 +190,7 @@ async function get(url: string): Promise<{ status: number; body: BurndownRespons
 
 describe('ba chế độ xem', () => {
   it('chế độ Tổng Epic trải từ MIN(plan_start) tới MAX(plan_end) của mọi Phase', async () => {
-    const { status, body } = await get('/api/burndown/epic/PAY-1');
+    const { status, body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     expect(status).toBe(200);
     expect(body.mode).toBe('EPIC');
@@ -208,7 +208,7 @@ describe('ba chế độ xem', () => {
     // Quyết định 2026-08: worker chốt sổ mọi ngày lịch. Giờ log cuối tuần phải
     // hiện đúng hôm làm trên đường Thực tế, không dồn vào sáng Thứ 2.
     reads.snapshots = [...reads.snapshots, snapshot('2026-03-07', 200_000, 210_000)];
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     const sat = body.series[0]?.points.find((p) => p.date === '2026-03-07');
     expect(sat?.isOffDay).toBe(true);
@@ -217,7 +217,7 @@ describe('ba chế độ xem', () => {
   });
 
   it('cuối tuần KHÔNG có snapshot thì điểm là null — API không bịa số, tầng hiển thị tự kéo phẳng', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     const sun = body.series[0]?.points.find((p) => p.date === '2026-03-08');
 
     expect(sun?.isOffDay).toBe(true);
@@ -230,7 +230,7 @@ describe('ba chế độ xem', () => {
     // Đây là lỗi PM báo: ở chế độ Single Phase / Compare không có Phase nào để
     // chọn. Gốc rễ: phản hồi Tổng Epic phải kèm sẵn chuỗi từng Phase (đổi Phase
     // KHÔNG gọi lại API — xem use-burndown.ts), nhưng trước đây chỉ trả mỗi EPIC.
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     // EPIC đứng đầu, theo sau là từng Phase đúng thứ tự rollup (display_order).
     expect(body.series.map((s) => s.key)).toEqual(['EPIC', 'DESIGN', 'DEV']);
@@ -246,7 +246,7 @@ describe('ba chế độ xem', () => {
   it('chế độ một Phase CO LẠI đúng khoảng của Phase đó', async () => {
     // Để nguyên khoảng của cả Epic sẽ vẽ ra một đường nằm ngang dài lê thê ở
     // hai đầu (PRD §5.1).
-    const { body } = await get('/api/burndown/epic/PAY-1/phase/DEV');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phase/DEV');
 
     expect(body.from).toBe('2026-03-09');
     expect(body.to).toBe('2026-03-13');
@@ -254,7 +254,7 @@ describe('ba chế độ xem', () => {
   });
 
   it('chế độ một Phase chỉ lấy số từ per_phase, KHÔNG lấy số mức Epic', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1/phase/DESIGN');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phase/DESIGN');
     const first = body.series[0]?.points[0];
 
     // Trong fixture, số của Phase bằng một nửa số của Epic.
@@ -263,7 +263,7 @@ describe('ba chế độ xem', () => {
   });
 
   it('chế độ so sánh trả mỗi Phase một chuỗi số riêng, kèm nhãn và màu', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1/phases/compare?codes=DESIGN,DEV');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phases/compare?codes=DESIGN,DEV');
 
     expect(body.series.map((s) => s.key)).toEqual(['DESIGN', 'DEV']);
     expect(body.series[0]?.label).toBe('Thiết kế');
@@ -273,7 +273,7 @@ describe('ba chế độ xem', () => {
 
   it('so sánh quá 4 Phase bị từ chối HTTP 400 kèm lý do đọc được', async () => {
     reads.rollups = ['A', 'B', 'C', 'D', 'E'].map((c) => rollup(c, '2026-03-02', '2026-03-06', 5));
-    const { status, body } = await get('/api/burndown/epic/PAY-1/phases/compare?codes=A,B,C,D,E');
+    const { status, body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phases/compare?codes=A,B,C,D,E');
 
     expect(status).toBe(400);
     expect(body.error).toBe('TOO_MANY_PHASES');
@@ -281,7 +281,7 @@ describe('ba chế độ xem', () => {
   });
 
   it('Phase không tồn tại trong Epic trả HTTP 404 kèm danh sách Phase đang có', async () => {
-    const { status, body } = await get('/api/burndown/epic/PAY-1/phase/KHONGCO');
+    const { status, body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phase/KHONGCO');
 
     expect(status).toBe(404);
     expect(body.error).toBe('PHASE_NOT_FOUND');
@@ -290,7 +290,7 @@ describe('ba chế độ xem', () => {
 
   it('Epic không nằm trong sổ theo dõi trả HTTP 404 kèm cách khắc phục', async () => {
     reads.meta = null;
-    const { status, body } = await get('/api/burndown/epic/LA-1');
+    const { status, body } = await get('/api/projects/PAY/epics/LA-1/burndown');
 
     expect(status).toBe(404);
     expect(body.message).toContain('Add it on the Epics screen');
@@ -301,7 +301,7 @@ describe('không tính lịch sử tại chỗ', () => {
   it('chỉ chạy đúng MỘT truy vấn trên daily_snapshot', async () => {
     // API này KHÔNG BAO GIỜ tính lịch sử tại chỗ (PRD §9.1) — đó là lý do đạt
     // được mốc p95 ≤ 800ms.
-    await get('/api/burndown/epic/PAY-1');
+    await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(reads.snapshotQueries).toBe(1);
   });
 });
@@ -313,14 +313,14 @@ describe('ngày thiếu snapshot', () => {
 
   it('missingSnapshotDays chứa đúng NGÀY CỤ THỂ bị thiếu', async () => {
     // Trả một con số ("thiếu 1 ngày") không giúp PM tìm được nguyên nhân.
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(body.dataHealth.missingSnapshotDays).toEqual(['2026-03-12']);
   });
 
   it('ngày thiếu là LỖ THỦNG null, tuyệt đối KHÔNG nội suy', async () => {
     // Nối tắt hai điểm bên cạnh trông đẹp hơn và không test nào đỏ, nhưng PM sẽ
     // đọc ra một tiến độ không có thật (E-12).
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     const hole = body.series[0]?.points.find((p) => p.date === '2026-03-12');
 
     expect(hole?.plannedRemainingHours).toBeNull();
@@ -330,7 +330,7 @@ describe('ngày thiếu snapshot', () => {
 
   it('vẫn giữ đủ số điểm trên trục, không bỏ hẳn ngày đó đi', async () => {
     // Bỏ hẳn ngày sẽ làm trục thời gian co lại và biểu đồ nhìn như liền mạch.
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(body.series[0]?.points).toHaveLength(12); // 10 ngày làm việc + 2 cuối tuần
   });
 });
@@ -346,7 +346,7 @@ describe('Epic trễ so với kế hoạch — nới trục qua plan_end', () =>
     ];
     // reads.snapshots giữ nguyên: 2026-03-02 .. 2026-03-13
 
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     expect(body.to).toBe('2026-03-13');
     // Ngày SAU plan_end vẫn có số liệu thật, không bị cắt.
@@ -359,7 +359,7 @@ describe('Epic trễ so với kế hoạch — nới trục qua plan_end', () =>
       rollup('DESIGN', '2026-03-02', '2026-03-04', 3, 144_000),
       rollup('DEV', '2026-03-05', '2026-03-06', 2, 144_000),
     ];
-    const { body } = await get('/api/burndown/epic/PAY-1/phase/DESIGN');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phase/DESIGN');
 
     // Đúng plan_end của DESIGN, KHÔNG nới theo snapshot mức Epic (03-13).
     expect(body.to).toBe('2026-03-04');
@@ -381,14 +381,14 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
     // 03-09..03-13 trống vì CHƯA TỚI (đường Kế hoạch còn chạy tiếp), không phải
     // job đêm hỏng. Trước đây chúng bị đếm vào missingSnapshotDays → dải đỏ báo
     // động giả "5 ngày chưa có snapshot".
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(body.dataHealth.missingSnapshotDays).toEqual([]);
   });
 
   it('sau snapshot cuối, đường Kế hoạch vẫn vẽ tiếp và chạm 0 đúng ngày plan_end', async () => {
     // Đây là điều PM cần nhìn thấy: kế hoạch dự kiến kết thúc KHI NÀO. Trước
     // đây đường Kế hoạch đứt ở hôm nay cùng chỗ với đường Thực tế.
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     const points = body.series[0]?.points ?? [];
 
     // 2026-03-09: DESIGN đã cháy trọn 40h, DEV cháy 1/5 của 40h → còn 32h.
@@ -397,7 +397,7 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
   });
 
   it('đường Thực tế thì KHÔNG chiếu tiếp — tương lai chưa xảy ra', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     const future = body.series[0]?.points.find((p) => p.date === '2026-03-13');
 
     expect(future?.actualRemainingHours).toBeNull();
@@ -407,7 +407,7 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
   it('chế độ một Phase chưa có snapshot nào vẫn vẽ trọn đường Kế hoạch của Phase đó', async () => {
     // DEV bắt đầu 2026-03-09, hoàn toàn trong tương lai: không một snapshot nào
     // trong khoảng. Cả trục chỉ có đường Kế hoạch, chiếu từ rollup của Phase.
-    const { body } = await get('/api/burndown/epic/PAY-1/phase/DEV');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown/phase/DEV');
     const points = body.series[0]?.points ?? [];
 
     expect(points).toHaveLength(5);
@@ -423,7 +423,7 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
       rollup('DESIGN', '2026-03-02', '2026-03-06', 5, 144_000),
       rollup('DEV', '2026-03-09', '2026-03-13', null, 144_000),
     ];
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     const dev = body.series.find((s) => s.key === 'DEV');
     const future = dev?.points.find((p) => p.date === '2026-03-13');
 
@@ -434,33 +434,33 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
 
 describe('cache', () => {
   it('lần gọi thứ hai lấy từ cache, không chạm database', async () => {
-    await get('/api/burndown/epic/PAY-1');
+    await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(reads.snapshotQueries).toBe(1);
 
-    await get('/api/burndown/epic/PAY-1');
+    await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(reads.snapshotQueries).toBe(1);
   });
 
   it('khoảng thời gian khác nhau tạo khoá cache khác nhau', async () => {
     // Thiếu phần khoảng trong khoá thì đổi bộ lọc ngày sẽ nhận lại dữ liệu của
     // khoảng cũ — số liệu vẫn trông hợp lý, chỉ là của khoảng khác.
-    await get('/api/burndown/epic/PAY-1?from=2026-03-02&to=2026-03-06');
-    await get('/api/burndown/epic/PAY-1?from=2026-03-09&to=2026-03-13');
+    await get('/api/projects/PAY/epics/PAY-1/burndown?from=2026-03-02&to=2026-03-06');
+    await get('/api/projects/PAY/epics/PAY-1/burndown?from=2026-03-09&to=2026-03-13');
 
     expect(reads.snapshotQueries).toBe(2);
     expect(redis.store.size).toBe(2);
   });
 
   it('chế độ xem khác nhau cũng tạo khoá khác nhau', async () => {
-    await get('/api/burndown/epic/PAY-1/phase/DESIGN');
-    await get('/api/burndown/epic/PAY-1/phases/compare?codes=DESIGN');
+    await get('/api/projects/PAY/epics/PAY-1/burndown/phase/DESIGN');
+    await get('/api/projects/PAY/epics/PAY-1/burndown/phases/compare?codes=DESIGN');
 
     expect(redis.store.size).toBe(2);
   });
 
   it('xoá cache dùng SCAN, KHÔNG dùng KEYS', async () => {
-    await get('/api/burndown/epic/PAY-1');
-    await get('/api/burndown/epic/PAY-2');
+    await get('/api/projects/PAY/epics/PAY-1/burndown');
+    await get('/api/projects/PAY/epics/PAY-2/burndown');
 
     const cache = createChartCache({ redis });
     const removed = await cache.invalidateEpic('PAY-1');
@@ -484,11 +484,11 @@ describe('cache', () => {
     registerBurndownRoutes(app2, {
       reads,
       cache: createChartCache({ redis, onWarning: (code) => warnings.push(code) }),
-      resolvePrincipal: () => ADMIN,
+      guards: testGuards({ principal: () => asAdmin() }),
     });
     await app2.ready();
 
-    const res = await app2.inject({ method: 'GET', url: '/api/burndown/epic/PAY-1' });
+    const res = await app2.inject({ method: 'GET', url: '/api/projects/PAY/epics/PAY-1/burndown' });
 
     expect(res.statusCode).toBe(200);
     expect(warnings).toContain('CACHE_READ_FAILED');
@@ -499,7 +499,7 @@ describe('cache', () => {
 describe('đường Kế hoạch trôi theo dữ liệu Jira', () => {
   it('phản hồi LUÔN có planIsFloating và câu giải thích', async () => {
     // Không nói rõ thì PM thấy điểm hôm qua đổi chỗ và tưởng hệ thống hỏng.
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     expect(body.planIsFloating).toBe(true);
     expect(body.planNote).toContain('recomputed after every sync');
@@ -512,7 +512,7 @@ describe('đường Kế hoạch trôi theo dữ liệu Jira', () => {
       projectKey: 'PAY',
       calendar: { ...CALENDAR, warnings: ['Lịch "VN_STANDARD" chưa khai ngày lễ nào.'] },
     };
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     expect(body.calendarWarnings).toEqual(['Lịch "VN_STANDARD" chưa khai ngày lễ nào.']);
   });
@@ -565,7 +565,7 @@ describe('đường Kế hoạch trôi theo dữ liệu Jira', () => {
 describe('dấu mốc', () => {
   it('phát sinh việc sinh dấu mốc SCOPE_ADDED tính bằng giờ', async () => {
     reads.snapshots = [snapshot('2026-03-02', 288_000, 288_000, { scopeAddedS: 36_000 })];
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     const marker = body.markers.find((m) => m.type === 'SCOPE_ADDED');
     expect(marker?.amount).toBe(10);
@@ -576,7 +576,7 @@ describe('dấu mốc', () => {
     reads.planShifts = [
       { phaseCode: 'DESIGN', shiftType: 'END_MOVED', fromDate: '2026-03-04', toDate: '2026-03-10', shiftedWorkdays: 4, causedByKeys: ['PAY-17'] },
     ];
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     const marker = body.markers.find((m) => m.type === 'PLAN_SHIFTED');
     expect(marker?.date).toBe('2026-03-10');
@@ -586,32 +586,32 @@ describe('dấu mốc', () => {
   });
 
   it('ngày không phát sinh gì thì KHÔNG sinh dấu mốc', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(body.markers).toEqual([]);
   });
 });
 
 describe('đơn vị và tham số', () => {
   it('giá trị trả về là GIỜ, không phải giây', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     expect(body.series[0]?.points[0]?.actualRemainingHours).toBe(80);
   });
 
   it('chênh lệch bằng kế hoạch trừ thực tế', async () => {
-    const { body } = await get('/api/burndown/epic/PAY-1');
+    const { body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
     const p = body.series[0]?.points[1];
     expect(p?.varianceHours).toBeCloseTo((p?.plannedRemainingHours ?? 0) - (p?.actualRemainingHours ?? 0), 10);
   });
 
   it('tham số ngày sai định dạng bị từ chối ngay, không im lặng bỏ qua', async () => {
-    const { status, body } = await get('/api/burndown/epic/PAY-1?from=02/03/2026');
+    const { status, body } = await get('/api/projects/PAY/epics/PAY-1/burndown?from=02/03/2026');
     expect(status).toBe(400);
     expect(body.message).toContain('YYYY-MM-DD');
   });
 
   it('Epic chưa Sub-task nào có ngày kế hoạch thì báo rõ, không trả biểu đồ rỗng', async () => {
     reads.rollups = [rollup('DESIGN', null, null, null)];
-    const { status, body } = await get('/api/burndown/epic/PAY-1');
+    const { status, body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
     expect(status).toBe(409);
     expect(body.message).toContain('wbs_start_date');
@@ -619,26 +619,37 @@ describe('đơn vị và tham số', () => {
 });
 
 describe('phân quyền', () => {
-  it('PM không phụ trách project nhận HTTP 403', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['SHOP'] };
-    const { status, body } = await get('/api/burndown/epic/PAY-1');
+  it('PM của dự án KHÁC nhận 404 PROJECT_NOT_FOUND — không lộ tenant tồn tại', async () => {
+    principal = asPm('CRM');
+    const { status, body } = await get('/api/projects/PAY/epics/PAY-1/burndown');
 
-    expect(status).toBe(403);
-    expect(body.message).toContain('PAY');
+    expect(status).toBe(404);
+    expect(body.error).toBe('PROJECT_NOT_FOUND');
   });
 
   it('PM phụ trách đúng project thì xem được', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['PAY'] };
-    expect((await get('/api/burndown/epic/PAY-1')).status).toBe(200);
+    principal = asPm('PAY');
+    expect((await get('/api/projects/PAY/epics/PAY-1/burndown')).status).toBe(200);
   });
 
-  it('VIEWER xem được mọi Epic — đây là dữ liệu báo cáo', async () => {
-    principal = { userId: 'v', role: 'VIEWER', projects: [] };
-    expect((await get('/api/burndown/epic/PAY-1')).status).toBe(200);
+  it('VIEWER của dự án xem được — nhưng CHỈ trong dự án của mình', async () => {
+    principal = asViewer('PAY');
+    expect((await get('/api/projects/PAY/epics/PAY-1/burndown')).status).toBe(200);
+  });
+
+  it('Epic của TENANT KHÁC ghép vào URL dự án mình → 404 EPIC_NOT_FOUND', async () => {
+    // Epic có thật nhưng thuộc CRM: PM của PAY không mở được nó qua URL của
+    // PAY — trả lời giống hệt "không tồn tại" để không dò được chéo tenant.
+    principal = asPm('PAY');
+    reads.meta = { projectKey: 'CRM', calendar: CALENDAR };
+    const { status, body } = await get('/api/projects/PAY/epics/CRM-9/burndown');
+
+    expect(status).toBe(404);
+    expect(body.error).toBe('EPIC_NOT_FOUND');
   });
 
   it('thiếu thông tin người dùng nhận HTTP 401', async () => {
     principal = null;
-    expect((await get('/api/burndown/epic/PAY-1')).status).toBe(401);
+    expect((await get('/api/projects/PAY/epics/PAY-1/burndown')).status).toBe(401);
   });
 });

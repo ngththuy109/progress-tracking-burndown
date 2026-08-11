@@ -89,7 +89,11 @@ export interface JiraEpicPort {
 export interface TrackedEpicStore {
   /** Trạng thái + tenant của một Epic trong sổ. `null` = chưa theo dõi. */
   findTracked(epicKey: string): Promise<{ status: TrackedEpicStatus; projectKey: string } | null>;
-  existingKeys(keys: readonly string[]): Promise<ReadonlySet<string>>;
+  /**
+   * Key đã theo dõi TRONG MỘT tenant. Cố ý không có bản xuyên dự án: trả lời
+   * "đã theo dõi" cho key của tenant khác là xác nhận key đó tồn tại.
+   */
+  existingKeys(keys: readonly string[], projectKey: string): Promise<ReadonlySet<string>>;
   /** Chèn các dòng chưa có, trả về KEY đã chèn thật sự (key trùng bị bỏ qua). */
   insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<readonly string[]>;
   update(epicKey: string, data: EpicPatchData): Promise<void>;
@@ -155,12 +159,13 @@ export async function validateKeys(
 
   const [lookups, tracked] = await Promise.all([
     deps.jira.lookup(projectKey, unique),
-    deps.store.existingKeys(unique),
+    deps.store.existingKeys(unique, projectKey),
   ]);
 
   const results: EpicValidationResult[] = unique.map((key) => {
     // Xét "đã theo dõi" TRƯỚC: đó là thông tin hữu ích hơn cho PM, và tránh
-    // báo NOT_FOUND cho một Epic họ biết chắc là có.
+    // báo NOT_FOUND cho một Epic họ biết chắc là có. `tracked` đã bó theo
+    // tenant nên không xác nhận nhầm Epic của dự án khác.
     if (tracked.has(key)) {
       return { key, valid: false, reason: 'ALREADY_TRACKED', message: 'Already tracked' };
     }
@@ -304,7 +309,7 @@ export async function browseEpics(
   page: { startAt: number; maxResults: number },
 ): Promise<{ items: readonly BrowsableEpic[]; total: number; startAt: number; maxResults: number }> {
   const { items, total } = await deps.jira.browse(projectKey, page);
-  const tracked = await deps.store.existingKeys(items.map((i) => i.key));
+  const tracked = await deps.store.existingKeys(items.map((i) => i.key), projectKey);
   return {
     items: items.map((i) => ({ ...i, alreadyTracked: tracked.has(i.key) })),
     total,

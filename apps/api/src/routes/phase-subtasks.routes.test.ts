@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { PhaseSubtaskResponse, Principal } from '@app/shared';
 import { registerPhaseSubtaskRoutes, type PhaseSubtaskReadPort } from './phase-subtasks.routes.js';
 import type { LoadedSubtask, PhaseDefinitionLite } from '../services/phase-subtasks.service.js';
-
-const ADMIN: Principal = { userId: 'admin', role: 'ADMIN', projects: [] };
+import { asAdmin, asPm, asViewer, testGuards } from '../test-fakes.js';
 
 function sub(over: Partial<LoadedSubtask> & { issueKey: string; phaseCode: string }): LoadedSubtask {
   return {
@@ -50,10 +49,13 @@ let principal: Principal | null;
 
 beforeEach(async () => {
   reads = new FakeReads();
-  principal = ADMIN;
+  principal = asAdmin();
 
   app = Fastify();
-  registerPhaseSubtaskRoutes(app, { reads, resolvePrincipal: () => principal });
+  registerPhaseSubtaskRoutes(app, {
+    reads,
+    guards: testGuards({ principal: () => principal }),
+  });
   await app.ready();
 });
 
@@ -62,7 +64,7 @@ async function get<T>(url: string) {
   return { status: res.statusCode, body: res.json() as T & { error?: string; message?: string } };
 }
 
-const URL = '/api/epic/PAY-1/phase-subtasks';
+const URL = '/api/projects/PAY/epics/PAY-1/phase-subtasks';
 
 describe('dựng danh sách', () => {
   it('trả về mọi Phase đã định nghĩa, kèm ticket bên trong', async () => {
@@ -144,18 +146,27 @@ describe('phân quyền và lỗi', () => {
     expect((await get(URL)).status).toBe(404);
   });
 
-  it('PM không phụ trách project nhận HTTP 403', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['SHOP'] };
-    expect((await get(URL)).status).toBe(403);
+  it('Epic của tenant khác qua URL dự án mình → 404 EPIC_NOT_FOUND', async () => {
+    reads.meta = { projectKey: 'CRM' };
+    const { status, body } = await get(URL);
+    expect(status).toBe(404);
+    expect(body.error).toBe('EPIC_NOT_FOUND');
+  });
+
+  it('PM của dự án KHÁC nhận 404 PROJECT_NOT_FOUND (không phải 403)', async () => {
+    principal = asPm('CRM');
+    const { status, body } = await get(URL);
+    expect(status).toBe(404);
+    expect(body.error).toBe('PROJECT_NOT_FOUND');
   });
 
   it('PM phụ trách đúng project xem được', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['PAY'] };
+    principal = asPm('PAY');
     expect((await get(URL)).status).toBe(200);
   });
 
-  it('VIEWER xem được mọi Epic', async () => {
-    principal = { userId: 'v', role: 'VIEWER', projects: [] };
+  it('VIEWER của dự án xem được', async () => {
+    principal = asViewer('PAY');
     expect((await get(URL)).status).toBe(200);
   });
 

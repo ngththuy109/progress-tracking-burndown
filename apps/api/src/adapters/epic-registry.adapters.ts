@@ -43,10 +43,12 @@ export function createTrackedEpicStore(prisma: PrismaClient): TrackedEpicStore {
       // `projectKey` đi kèm để service neo Epic vào đúng tenant (Phase B).
       return { status: row.status as TrackedEpicStatus, projectKey: row.projectKey };
     },
-    async existingKeys(keys) {
+    async existingKeys(keys, projectKey) {
       if (keys.length === 0) return new Set<string>();
       const rows = await prisma.trackedEpic.findMany({
-        where: { epicKey: { in: [...keys] } },
+        // Bó theo tenant: key của dự án khác coi như chưa theo dõi (đường
+        // validate sẽ trả NOT_FOUND cho nó — không lộ gì).
+        where: { epicKey: { in: [...keys] }, projectKey },
         select: { epicKey: true },
       });
       return new Set(rows.map((r) => r.epicKey));
