@@ -10,7 +10,12 @@ import type { Prisma, PrismaClient } from '../client.js';
 export interface IssueUpsertRow {
   issueKey: string;
   issueId: bigint;
+  /** Tenant sở hữu — lấy từ tracked_epic của root, KHÔNG đoán theo prefix key. */
+  projectKey: string;
+  /** Vai trò trong cây: EPIC | TASK | SUBTASK | MIDDLE (xem schema.prisma). */
   issueType: string;
+  /** Vị trí tầng thật: 0 = root, 1..depth. */
+  tierIndex: number;
   parentKey: string | null;
   epicKey: string | null;
   summary: string;
@@ -47,13 +52,16 @@ export async function upsertIssues(
 ): Promise<void> {
   if (rows.length === 0) return;
 
-  const order = { EPIC: 0, TASK: 1, SUBTASK: 2 } as Record<string, number>;
-  const sorted = [...rows].sort((a, b) => (order[a.issueType] ?? 3) - (order[b.issueType] ?? 3));
+  // Chèn cha trước con theo VỊ TRÍ TẦNG thật (tier_index), không theo vai trò:
+  // với cây sâu hơn 3 tầng, giữa EPIC và TASK còn các tầng MIDDLE.
+  const sorted = [...rows].sort((a, b) => a.tierIndex - b.tierIndex);
 
   for (const r of sorted) {
     const data = {
       issueId: r.issueId,
+      projectKey: r.projectKey,
       issueType: r.issueType,
+      tierIndex: r.tierIndex,
       parentKey: r.parentKey,
       epicKey: r.epicKey,
       summary: r.summary,

@@ -45,8 +45,20 @@ datasource db {
 // ============================================================================
 model JiraIssue {
   issueKey  String @id @map("issue_key") @db.VarChar(32)
-  issueId   BigInt @unique @map("issue_id")
-  issueType String @map("issue_type") @db.VarChar(16) // EPIC | TASK | SUBTASK
+  // ID số của Jira. KHÔNG unique toàn cục nữa: hai Jira site khác nhau có thể
+  // trùng ID số — chỉ unique TRONG một project (tenant), xem uq_issue_project_id.
+  issueId   BigInt @map("issue_id")
+  // Vai trò trong cây, KHÔNG còn là vị trí cứng: tầng 0 = EPIC, tầng lá =
+  // SUBTASK, tầng lá-1 = TASK (khi depth >= 2), các tầng giữa khác = MIDDLE.
+  // Mọi SQL tổng hợp lọc issue_type='SUBTASK' nên MIDDLE tự động đứng ngoài.
+  issueType String @map("issue_type") @db.VarChar(16) // EPIC | TASK | SUBTASK | MIDDLE
+
+  // Tenant sở hữu issue này. Key Jira dạng <PROJECT>-<n> nên issue_key vẫn
+  // unique toàn cục được — cột này chỉ để scope truy vấn + phân biệt issue_id.
+  projectKey String @map("project_key") @db.VarChar(32)
+  // Vị trí tầng thật trong cây: 0 = root, 1..depth. Giữ song song với issueType
+  // (vai trò) để UI hiển thị đúng cấu trúc 1..N tầng của từng dự án.
+  tierIndex  Int    @default(2) @map("tier_index") @db.SmallInt
 
   parentKey String? @map("parent_key") @db.VarChar(32)
   epicKey   String? @map("epic_key") @db.VarChar(32)
@@ -111,10 +123,13 @@ model JiraIssue {
   parent      JiraIssue?          @relation("IssueTree", fields: [parentKey], references: [issueKey], onDelete: NoAction, onUpdate: NoAction)
   children    JiraIssue[]         @relation("IssueTree")
   actualDates SubtaskActualDates?
+  project     Project             @relation(fields: [projectKey], references: [projectKey], onDelete: NoAction, onUpdate: NoAction)
 
+  @@unique([projectKey, issueId], map: "uq_issue_project_id")
   @@index([epicKey, issueType], map: "idx_issue_epic")
   @@index([parentKey], map: "idx_issue_parent")
   @@index([jiraUpdatedAt(sort: Desc)], map: "idx_issue_updated")
+  @@index([projectKey, issueType], map: "idx_issue_project_type")
   @@map("jira_issue")
 }
 
@@ -144,7 +159,10 @@ model IssueChangelogEvent {
 // Bảng 3: Nhật ký log giờ
 // ============================================================================
 model WorklogEntry {
-  worklogId BigInt @id @map("worklog_id") // ID gốc từ Jira → tự chống trùng
+  // ID gốc từ Jira — chỉ unique TRONG MỘT SITE nên PK ghép với project_key:
+  // hai tenant ở hai Jira site khác nhau có thể trùng worklog_id số.
+  worklogId  BigInt @map("worklog_id")
+  projectKey String @map("project_key") @db.VarChar(32)
   issueKey  String @map("issue_key") @db.VarChar(32)
   epicKey   String @map("epic_key") @db.VarChar(32)
   authorId  String? @map("author_id") @db.VarChar(64)
@@ -159,6 +177,7 @@ model WorklogEntry {
 
   isDeleted Boolean @default(false) @map("is_deleted")
 
+  @@id([projectKey, worklogId])
   @@index([issueKey, startedAt], map: "idx_worklog_issue_started")
   @@index([epicKey, startedAt], map: "idx_worklog_epic_started")
   @@map("worklog_entry")
@@ -169,10 +188,19 @@ model WorklogEntry {
 // Nguồn DUY NHẤT trả lời "job đêm phải chạy cho Epic nào".
 // ============================================================================
 model TrackedEpic {
+  // "Epic" từ multi-tenant nghĩa là "TRACKED ROOT" — issue gốc của phạm vi theo
+  // dõi, không nhất thiết là issue type Epic của Jira (dự án 1 tầng có thể dùng
+  // bất kỳ issue cha nào). Giữ tên bảng/cột cũ để không đụng engine + repository.
   epicKey     String @id @map("epic_key") @db.VarChar(32)
-  epicId      BigInt @unique @map("epic_id")
+  // ID số per-site → không unique toàn cục (hai site có thể trùng số).
+  epicId      BigInt @map("epic_id")
   projectKey  String @map("project_key") @db.VarChar(32)
   displayName String @map("display_name")
+
+  // ROOT_ISSUE = phạm vi là cây con dưới epicKey (v1).
+  // JQL        = phạm vi là kết quả rootJql (dành cho dự án phẳng — chưa bật ở v1).
+  scopeType String  @default("ROOT_ISSUE") @map("scope_type") @db.VarChar(16)
+  rootJql   String? @map("root_jql")
 
   // PENDING | BACKFILLING | ACTIVE | PAUSED | ERROR
   status String @default("PENDING") @db.VarChar(16)
@@ -191,6 +219,7 @@ model TrackedEpic {
 
   calendar     WorkCalendar @relation(fields: [calendarId], references: [calendarId])
   phaseRollups PhaseRollup[]
+  project      Project      @relation(fields: [projectKey], references: [projectKey], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([projectKey], map: "idx_tracked_project")
   @@map("tracked_epic")
@@ -241,6 +270,9 @@ model DailySnapshot {
 model SyncRun {
   id      BigInt @id @default(autoincrement())
   epicKey String @map("epic_key") @db.VarChar(32)
+  // Tenant sở hữu lần chạy — màn hình ops lọc theo dự án, và còn tra được
+  // cả khi epic đã bị gỡ khỏi sổ đăng ký.
+  projectKey String @map("project_key") @db.VarChar(32)
   runType String @map("run_type") @db.VarChar(16) // DAILY | BACKFILL | RECOMPUTE | MANUAL
   status  String @db.VarChar(16) // RUNNING | SUCCESS | FAILED | SKIPPED
 
@@ -262,6 +294,7 @@ model SyncRun {
   finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
 
   @@index([epicKey, startedAt(sort: Desc)], map: "idx_syncrun_recent")
+  @@index([projectKey, startedAt(sort: Desc)], map: "idx_syncrun_project")
   @@map("sync_run")
 }
 
@@ -289,6 +322,7 @@ model PhaseConfigSet {
   matchRules           PhaseMatchRule[]
   signboardColumns     SignboardColumn[]
   subPhaseOrders       SubPhaseOrder[]
+  project              Project? @relation(fields: [projectKey], references: [projectKey], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([scope, projectKey, version], map: "uq_config_version")
   @@map("phase_config_set")
@@ -432,7 +466,11 @@ model SubPhaseOrder {
 // Bảng 8: Lịch làm việc & ngày nghỉ
 // ============================================================================
 model WorkCalendar {
-  calendarId String @id @map("calendar_id") @db.VarChar(32) // VN_STANDARD | JP_STANDARD
+  // Lịch built-in (VN_STANDARD | JP_STANDARD): project_key NULL — dùng chung,
+  // chỉ ADMIN sửa. Lịch riêng của dự án: project_key khác NULL, ID sinh cuid,
+  // PM của dự án sửa được (clone từ built-in qua service riêng).
+  calendarId String @id @map("calendar_id") @db.VarChar(32)
+  projectKey String? @map("project_key") @db.VarChar(32)
   timezone   String @db.VarChar(48)
   // Bitmask 7 bit. Bit 0 = Thứ Hai … bit 6 = Chủ nhật (theo luxon: T2=1..CN=7).
   // KHÔNG giống Date.getDay() của JavaScript (CN=0) — nhầm chỗ này lệch cả tuần.
@@ -444,7 +482,9 @@ model WorkCalendar {
 
   holidays     CalendarHoliday[]
   trackedEpics TrackedEpic[]
+  project      Project?          @relation(fields: [projectKey], references: [projectKey], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([projectKey], map: "idx_calendar_project")
   @@map("work_calendar")
 }
 
@@ -557,34 +597,96 @@ model SubtaskActualDates {
 model AppUser {
   userId String @id @map("user_id") @db.VarChar(254)
 
-  // ADMIN | PM | VIEWER — khớp USER_ROLE ở @app/shared.
+  // Role TOÀN CỤC: ADMIN | MEMBER — khớp GLOBAL_ROLE ở @app/shared.
+  // ADMIN thấy/quản mọi dự án. MEMBER chỉ thấy dự án mình là thành viên —
+  // role trong từng dự án (PM | VIEWER) nằm ở bảng project_member.
+  // (PM/VIEWER toàn cục cũ đã chuyển thành membership per-project ở migration
+  // 20260812000000_multi_tenant.)
   role String @db.VarChar(16)
-
-  // Các project mà PM này phụ trách. Rỗng với ADMIN/VIEWER (họ thấy tất cả).
-  projects String[] @default([])
 
   displayName String?  @map("display_name")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  memberships ProjectMember[]
+
   @@map("app_user")
 }
 
 // ============================================================================
-// Bảng 13: Danh mục Project do Admin quản lý — dùng để gán PM.
+// Bảng 14: Thành viên dự án — role RIÊNG trong từng dự án (multi-tenant).
 //
-// KHÔNG ràng buộc `tracked_epic.project_key` (Epic đến từ Jira với mọi project);
-// bảng này là DANH SÁCH CHỌN có kiểm soát để Admin gắn PM vào đúng project. Nhờ
-// vậy PM không bị gõ nhầm key và mất quyền xem trong im lặng. `project_key` là
-// key Jira (chữ HOA, ví dụ PAY, CRM); một project gắn được nhiều PM (mỗi PM là
-// một dòng `app_user` có key này trong `projects`).
+// Một người có thể là PM dự án A đồng thời VIEWER dự án B. Non-admin chỉ nhìn
+// thấy dự án mình có dòng ở đây; ADMIN toàn cục không cần dòng nào.
+// ============================================================================
+model ProjectMember {
+  projectKey String @map("project_key") @db.VarChar(32)
+  userId     String @map("user_id") @db.VarChar(254)
+
+  // PM | VIEWER — role trong PHẠM VI dự án này, khớp PROJECT_ROLE ở @app/shared.
+  role String @db.VarChar(16)
+
+  addedBy String   @map("added_by") @db.VarChar(254)
+  addedAt DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectKey], references: [projectKey], onDelete: Cascade)
+  user    AppUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([projectKey, userId])
+  @@index([userId], map: "idx_member_user")
+  @@map("project_member")
+}
+
+// ============================================================================
+// Bảng 13: Project — GỐC TENANT của multi-tenant (từ 20260812000000).
+//
+// Tenant định danh bằng chính Jira project key (chữ HOA, ví dụ PAY, CRM) —
+// duy nhất TOÀN HỆ THỐNG. Vì issue key Jira luôn có dạng `<KEY>-<n>`, key
+// duy nhất kéo theo issue_key không bao giờ trùng giữa các tenant, kể cả khi
+// hai tenant nằm trên hai Jira site khác nhau. Giới hạn chấp nhận: hai site
+// cùng có project key `PAY` thì không thể cùng làm tenant ở đây.
+//
+// Mỗi tenant tự chứa: kết nối Jira riêng (base URL/email/token mã hóa),
+// field mapping riêng (thay config/jira-fields.yaml), cấu trúc phân tầng
+// riêng (hierarchy_depth), timezone/lịch mặc định, và danh sách thành viên
+// (project_member). Mọi cột kết nối NULL = dùng env JIRA_* (chế độ 1 site cũ).
 // ============================================================================
 model Project {
-  projectKey  String @id @map("project_key") @db.VarChar(32)
+  projectKey  String  @id @map("project_key") @db.VarChar(32)
   displayName String? @map("display_name")
+
+  // ACTIVE | ARCHIVED — ARCHIVED: ẩn khỏi switcher, job đêm bỏ qua.
+  status String @default("ACTIVE") @db.VarChar(16)
+
+  // ---- Kết nối Jira riêng của tenant (yêu cầu 2 của multi-tenant) ----
+  // Cả ba NULL = fallback về env JIRA_BASE_URL/JIRA_EMAIL/JIRA_API_TOKEN.
+  jiraBaseUrl String? @map("jira_base_url")
+  jiraEmail   String? @map("jira_email") @db.VarChar(254)
+  // API token mã hóa AES-256-GCM bằng APP_ENCRYPTION_KEY, định dạng
+  // "v1:<iv b64>:<tag b64>:<ct b64>" (xem packages/db/src/crypto/secret-box.ts).
+  // KHÔNG BAO GIỜ trả cột này ra API — token là write-only từ phía client.
+  jiraTokenEnc String? @map("jira_token_enc")
+
+  // Field mapping admin nhập (cùng shape với config/jira-fields.yaml) và bản
+  // đã resolve ra custom-field ID (ghi bởi endpoint "Test connection").
+  jiraFieldsJson   Json? @map("jira_fields_json")
+  jiraResolvedJson Json? @map("jira_resolved_json")
+
+  // Số tầng DƯỚI tracked root: 1..4. 2 = Epic/Task/Subtask như trước đây.
+  // Tầng 0 luôn là root; tầng lá mang vai trò SUBTASK, lá-1 mang vai trò TASK.
+  hierarchyDepth Int @default(2) @map("hierarchy_depth") @db.SmallInt
+
+  timezone          String  @default("Asia/Ho_Chi_Minh") @db.VarChar(48)
+  defaultCalendarId String? @map("default_calendar_id") @db.VarChar(32)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members       ProjectMember[]
+  issues        JiraIssue[]
+  trackedEpics  TrackedEpic[]
+  configSets    PhaseConfigSet[]
+  calendars     WorkCalendar[]
 
   @@map("project")
 }
