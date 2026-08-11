@@ -29,6 +29,12 @@ npx playwright install chromium     # trình duyệt cho test E2E, ~300MB
 > **Đừng gộp `prisma generate` vào `postinstall`:** prisma generate tự chạy `pnpm add @prisma/client`
 > → lại kích hoạt `postinstall` → **đệ quy vô hạn**. Vì vậy setup là hai bước tuần tự.
 
+> **Tài liệu không bị lệch:** hook `PostToolUse` (`.claude/hooks/docs-reminder.mjs`) chạy sau khi
+> Claude Code sửa một file mã nguồn và chèn lời nhắc (một lần / file / phiên) để rà soát xem
+> `README.md`, `docs/` hay `docs/tasks/` có cần cập nhật cho khớp không. Nó chỉ **nhắc** — không chặn
+> thao tác, không tự sửa file — và bỏ qua tài liệu, test, file cấu hình. Tắt bằng menu `/hooks` hoặc
+> xoá mục `PostToolUse` trong `.claude/settings.json`.
+
 ## 2. Biến môi trường
 
 ```bash
