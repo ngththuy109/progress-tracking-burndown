@@ -1,12 +1,23 @@
-import type { FastifyInstance } from 'fastify';
-import type { Alert, MetricsRegistry, OpsHealthResponse } from '@app/shared';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import {
+  dqExemptRequestSchema,
+  type Alert,
+  type DataQualityIssue,
+  type MetricsRegistry,
+  type OpsHealthResponse,
+  type Principal,
+  type SyncRunDetail,
+} from '@app/shared';
 
 /**
- * Ba endpoint vận hành — PRD §9.5.
+ * Các endpoint vận hành — PRD §9.5 + màn hình Monitoring (T-33).
  *
  *   • `GET /metrics`  — Prometheus lấy số đo
  *   • `GET /healthz`  — bộ cân bằng tải hỏi "còn sống không"
  *   • `GET /api/epic/:epicKey/alerts` — cảnh báo P3 để giao diện hiện banner
+ *   • `GET /api/ops/runs/:runId` — chi tiết một lần chạy job (bước lỗi, stack)
+ *   • `GET /api/ops/data-quality/issues` — từng ticket lỗi dữ liệu (để xuất file)
+ *   • `PUT /api/ops/data-quality/issues/:issueKey/exempt` — đánh dấu "không cần sửa"
  */
 
 export interface HealthCheck {
@@ -32,6 +43,18 @@ export interface OpsRouteDeps {
   readonly checks?: readonly HealthCheck[];
   /** Cảnh báo mức P3 của một Epic, để giao diện hiện banner. TUỲ CHỌN — chưa có nơi gọi thì không mở route. */
   bannerAlerts?(epicKey: string): Promise<readonly Alert[]>;
+  /** Chi tiết một lần chạy job. TUỲ CHỌN — thiếu thì không mở route. */
+  runDetail?(runId: string): Promise<SyncRunDetail | null>;
+  /** Ba cổng của phần Data quality chi tiết. TUỲ CHỌN — thiếu thì không mở route. */
+  readonly dataQuality?: {
+    issues(): Promise<readonly DataQualityIssue[]>;
+    issueProject(issueKey: string): Promise<{ projectKey: string } | null>;
+    setExempt(args: { issueKey: string; exempt: boolean; by: string; at: Date }): Promise<void>;
+  };
+  /** Cần cho route GHI (đánh dấu exempt) — chỉ ADMIN hoặc PM của project đó. */
+  resolvePrincipal?(req: FastifyRequest): Principal | null;
+  /** Đồng hồ đi qua cổng để test đóng băng được. */
+  readonly now?: () => Date;
 }
 
 export function registerOpsRoutes(app: FastifyInstance, deps: OpsRouteDeps): void {
@@ -69,6 +92,87 @@ export function registerOpsRoutes(app: FastifyInstance, deps: OpsRouteDeps): voi
         status: healthy ? 'ok' : 'degraded',
         components: Object.fromEntries(results.map((r) => [r.name, r.ok ? 'ok' : 'down'])),
       });
+    });
+  }
+
+  // Chi tiết một lần chạy job: dòng FAILED ở bảng Recent runs dẫn tới đây để
+  // trả lời "lỗi ở bước nào, nguyên nhân gì" thay vì chỉ một dòng error_message.
+  const runDetail = deps.runDetail;
+  if (runDetail !== undefined) {
+    app.get('/api/ops/runs/:runId', async (req, reply) => {
+      const runId = (req.params as { runId?: string }).runId ?? '';
+      const detail = await runDetail(runId);
+      if (detail === null) {
+        await reply.status(404).send({
+          error: 'RUN_NOT_FOUND',
+          message: `Job run ${runId} does not exist. It may have been pruned — reload the Monitoring screen.`,
+        });
+        return;
+      }
+      await reply.send(detail);
+    });
+  }
+
+  const dataQuality = deps.dataQuality;
+  if (dataQuality !== undefined) {
+    const now = deps.now ?? (() => new Date());
+
+    // Danh sách TỪNG ticket lỗi dữ liệu — nguồn của bảng chi tiết và file CSV.
+    app.get('/api/ops/data-quality/issues', async (_req, reply) => {
+      await reply.send({ collectedAt: now().toISOString(), issues: await dataQuality.issues() });
+    });
+
+    // Đánh dấu "không cần sửa dữ liệu" là thao tác GHI: chỉ ADMIN, hoặc PM của
+    // đúng project chứa ticket. Viewer nhìn thấy nút nhưng API vẫn tự chặn.
+    app.put('/api/ops/data-quality/issues/:issueKey/exempt', async (req, reply) => {
+      const principal = deps.resolvePrincipal?.(req) ?? null;
+      if (principal === null) {
+        await reply.status(401).send({
+          error: 'UNAUTHENTICATED',
+          message: 'This request has no signed-in user. Reload the page to sign in again.',
+        });
+        return;
+      }
+
+      const parsed = dqExemptRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        await reply.status(400).send({
+          error: 'BAD_REQUEST',
+          message: 'The request body is not valid — send {"exempt": true} or {"exempt": false}.',
+        });
+        return;
+      }
+
+      const issueKey = ((req.params as { issueKey?: string }).issueKey ?? '').trim();
+      const found = await dataQuality.issueProject(issueKey);
+      if (found === null) {
+        await reply.status(404).send({
+          error: 'ISSUE_NOT_FOUND',
+          message: `Sub-task ${issueKey} is not in any tracked Epic. Reload the list and try again.`,
+        });
+        return;
+      }
+
+      const allowed =
+        principal.role === 'ADMIN' ||
+        (principal.role === 'PM' && principal.projects.includes(found.projectKey));
+      if (!allowed) {
+        await reply.status(403).send({
+          error: 'FORBIDDEN',
+          message:
+            `Only an Admin, or the PM assigned to project ${found.projectKey}, can mark a sub-task as ` +
+            '"no data fix needed" — it silences a data-quality warning for everyone.',
+        });
+        return;
+      }
+
+      await dataQuality.setExempt({
+        issueKey,
+        exempt: parsed.data.exempt,
+        by: principal.userId,
+        at: now(),
+      });
+      await reply.send({ issueKey, exempt: parsed.data.exempt });
     });
   }
 

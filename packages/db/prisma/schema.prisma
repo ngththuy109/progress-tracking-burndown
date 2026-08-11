@@ -101,6 +101,13 @@ model JiraIssue {
 
   sbParseStatus String @default("UNPARSED") @map("sb_parse_status") @db.VarChar(24)
 
+  // ---- Data quality: "không cần sửa dữ liệu" (màn hình Monitoring) ----
+  // true = người vận hành đã xác nhận ticket này CỐ Ý thiếu dữ liệu → loại khỏi
+  // các số đo Data quality (cả tử số lẫn mẫu số). Ghi ai/lúc nào để truy vết.
+  dqExempt   Boolean   @default(false) @map("dq_exempt")
+  dqExemptBy String?   @map("dq_exempt_by") @db.VarChar(254)
+  dqExemptAt DateTime? @map("dq_exempt_at") @db.Timestamptz(6)
+
   parent      JiraIssue?          @relation("IssueTree", fields: [parentKey], references: [issueKey], onDelete: NoAction, onUpdate: NoAction)
   children    JiraIssue[]         @relation("IssueTree")
   actualDates SubtaskActualDates?
@@ -245,6 +252,11 @@ model SyncRun {
   rateLimitHits Int  @default(0) @map("rate_limit_hits")
   durationMs    Int? @map("duration_ms")
   errorMessage  String? @map("error_message")
+  // Bước đang chạy khi job ném lỗi (FETCH_TREE | FETCH_HISTORY | PERSIST |
+  // FINALIZE) và stack trace nguyên văn — màn hình Monitoring dẫn tới đây để
+  // trả lời "lỗi ở đâu, nguyên nhân gì" thay vì chỉ một dòng error_message.
+  errorStep    String? @map("error_step") @db.VarChar(32)
+  errorDetail  String? @map("error_detail")
 
   startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
   finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
