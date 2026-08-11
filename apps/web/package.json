@@ -8,6 +8,7 @@
     "dev:e2e": "vite --port 5199 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "vite build && vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
