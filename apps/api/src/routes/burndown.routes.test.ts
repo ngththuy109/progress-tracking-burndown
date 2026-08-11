@@ -131,6 +131,13 @@ class FakeReads implements BurndownReadPort {
     this.snapshotQueries += 1;
     return this.snapshots.filter((s) => s.snapshotDate >= from && s.snapshotDate <= to);
   }
+  async latestSnapshotDate() {
+    // MAX(snapshot_date) — một lần dò index, KHÔNG tính vào `snapshotQueries` (đó
+    // là bộ đếm cho truy vấn nạp lịch sử nặng của biểu đồ).
+    let latest: string | null = null;
+    for (const s of this.snapshots) if (latest === null || s.snapshotDate > latest) latest = s.snapshotDate;
+    return latest;
+  }
   async loadRollups() {
     return this.rollups;
   }
@@ -189,9 +196,34 @@ describe('ba chế độ xem', () => {
     expect(body.mode).toBe('EPIC');
     expect(body.from).toBe('2026-03-02');
     expect(body.to).toBe('2026-03-13');
-    // Đường Tổng Epic vẫn ở vị trí đầu, đủ 10 điểm trên trục.
+    // Đường Tổng Epic vẫn ở vị trí đầu. Trục vẽ ĐỦ 12 ngày lịch (2026-08):
+    // 10 ngày làm việc + Thứ 7 & CN 07–08/03 mang cờ isOffDay.
     expect(body.series[0]?.key).toBe('EPIC');
-    expect(body.series[0]?.points).toHaveLength(10);
+    expect(body.series[0]?.points).toHaveLength(12);
+    const offDays = body.series[0]?.points.filter((p) => p.isOffDay === true).map((p) => p.date);
+    expect(offDays).toEqual(['2026-03-07', '2026-03-08']);
+  });
+
+  it('cuối tuần có snapshot (team làm Thứ 7) thì điểm mang SỐ THẬT, vẫn cờ isOffDay', async () => {
+    // Quyết định 2026-08: worker chốt sổ mọi ngày lịch. Giờ log cuối tuần phải
+    // hiện đúng hôm làm trên đường Thực tế, không dồn vào sáng Thứ 2.
+    reads.snapshots = [...reads.snapshots, snapshot('2026-03-07', 200_000, 210_000)];
+    const { body } = await get('/api/burndown/epic/PAY-1');
+
+    const sat = body.series[0]?.points.find((p) => p.date === '2026-03-07');
+    expect(sat?.isOffDay).toBe(true);
+    expect(sat?.actualRemainingHours).toBe(toHours(210_000));
+    expect(sat?.plannedRemainingHours).toBe(toHours(200_000));
+  });
+
+  it('cuối tuần KHÔNG có snapshot thì điểm là null — API không bịa số, tầng hiển thị tự kéo phẳng', async () => {
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    const sun = body.series[0]?.points.find((p) => p.date === '2026-03-08');
+
+    expect(sun?.isOffDay).toBe(true);
+    expect(sun?.actualRemainingHours).toBeNull();
+    // Và cuối tuần không bị đếm vào ngày thiếu snapshot — nghỉ không phải lỗi.
+    expect(body.dataHealth.missingSnapshotDays).toEqual([]);
   });
 
   it('Tổng Epic KÈM chuỗi của MỌI Phase để màn hình dựng được ô chọn Phase', async () => {
@@ -206,7 +238,7 @@ describe('ba chế độ xem', () => {
     const design = body.series.find((s) => s.key === 'DESIGN');
     expect(design?.label).toBe('Thiết kế'); // nhãn + màu lấy từ cấu hình hiệu lực
     expect(design?.colorHex).toBe('#4A90D9');
-    expect(design?.points).toHaveLength(10);
+    expect(design?.points).toHaveLength(12); // 10 ngày làm việc + 2 ngày cuối tuần
     // Số của Phase lấy từ per_phase (một nửa số Epic trong fixture), KHÔNG lấy số Epic.
     expect(design?.points[0]?.actualRemainingHours).toBe(toHours(288_000 / 2));
   });
@@ -299,7 +331,38 @@ describe('ngày thiếu snapshot', () => {
   it('vẫn giữ đủ số điểm trên trục, không bỏ hẳn ngày đó đi', async () => {
     // Bỏ hẳn ngày sẽ làm trục thời gian co lại và biểu đồ nhìn như liền mạch.
     const { body } = await get('/api/burndown/epic/PAY-1');
-    expect(body.series[0]?.points).toHaveLength(10);
+    expect(body.series[0]?.points).toHaveLength(12); // 10 ngày làm việc + 2 cuối tuần
+  });
+});
+
+describe('Epic trễ so với kế hoạch — nới trục qua plan_end', () => {
+  it('nới trục tới ngày snapshot mới nhất để không cắt mất hôm qua/hôm nay', async () => {
+    // plan_end của cả Epic là 2026-03-06, nhưng đội vẫn làm tiếp và snapshot chạy
+    // tới 2026-03-13. Trục lấy plan_end làm cận trên sẽ CẮT MẤT 4 ngày làm việc
+    // cuối — đúng lỗi "biểu đồ không vẽ ngày trước hôm nay". Nới tới snapshot cuối.
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-04', 3, 144_000),
+      rollup('DEV', '2026-03-05', '2026-03-06', 2, 144_000),
+    ];
+    // reads.snapshots giữ nguyên: 2026-03-02 .. 2026-03-13
+
+    const { body } = await get('/api/burndown/epic/PAY-1');
+
+    expect(body.to).toBe('2026-03-13');
+    // Ngày SAU plan_end vẫn có số liệu thật, không bị cắt.
+    const late = body.series[0]?.points.find((p) => p.date === '2026-03-13');
+    expect(late?.actualRemainingHours).not.toBeNull();
+  });
+
+  it('KHÔNG nới ở chế độ một Phase — Phase vẫn co về đúng khoảng kế hoạch (PRD §5.1)', async () => {
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-04', 3, 144_000),
+      rollup('DEV', '2026-03-05', '2026-03-06', 2, 144_000),
+    ];
+    const { body } = await get('/api/burndown/epic/PAY-1/phase/DESIGN');
+
+    // Đúng plan_end của DESIGN, KHÔNG nới theo snapshot mức Epic (03-13).
+    expect(body.to).toBe('2026-03-04');
   });
 });
 
@@ -312,6 +375,14 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
       rollup('DEV', '2026-03-09', '2026-03-13', 5, 144_000),
     ];
     reads.snapshots = reads.snapshots.filter((s) => s.snapshotDate <= '2026-03-06');
+  });
+
+  it('KHÔNG kêu thiếu snapshot cho những ngày tương lai sau snapshot cuối', async () => {
+    // 03-09..03-13 trống vì CHƯA TỚI (đường Kế hoạch còn chạy tiếp), không phải
+    // job đêm hỏng. Trước đây chúng bị đếm vào missingSnapshotDays → dải đỏ báo
+    // động giả "5 ngày chưa có snapshot".
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    expect(body.dataHealth.missingSnapshotDays).toEqual([]);
   });
 
   it('sau snapshot cuối, đường Kế hoạch vẫn vẽ tiếp và chạm 0 đúng ngày plan_end', async () => {

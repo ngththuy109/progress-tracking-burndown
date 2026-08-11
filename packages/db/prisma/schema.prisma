@@ -436,6 +436,9 @@ model WorkCalendar {
   timezone   String @db.VarChar(48)
   // Bitmask 7 bit. Bit 0 = Thứ Hai … bit 6 = Chủ nhật (theo luxon: T2=1..CN=7).
   // KHÔNG giống Date.getDay() của JavaScript (CN=0) — nhầm chỗ này lệch cả tuần.
+  // T2–T6 = 31, T2–T7 = 63. Migration 20260811140000 thêm CHECK: 1..127 và bắt
+  // buộc có Thứ Hai — mask 1-indexed (126, 62) từng làm Thứ Hai biến mất khỏi
+  // biểu đồ; Prisma không mô tả được CHECK nên chỉ nhắc ở đây.
   workdaysMask Int      @map("workdays_mask") @db.SmallInt
   hoursPerDay  Decimal  @default(8.0) @map("hours_per_day") @db.Decimal(4, 2)
 

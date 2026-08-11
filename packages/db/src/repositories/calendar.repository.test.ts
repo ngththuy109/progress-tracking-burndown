@@ -57,6 +57,24 @@ describe('đọc lịch làm việc', () => {
     expect([...cal.holidays]).toEqual(['2026-02-17']);
   });
 
+  it('mask thiếu Thứ Hai (vết trượt 1-indexed) sinh cảnh báo, không im lặng', async () => {
+    // Lỗi thật: lịch tạo tay mask 126 làm mọi Thứ Hai biến mất khỏi biểu đồ.
+    // Database mới đã có CHECK chặn, nhưng DB chưa áp migration vẫn phải kêu to.
+    const cal = await getCalendar(
+      fakePrisma({
+        calendarId: 'BAD_MASK',
+        timezone: 'Asia/Ho_Chi_Minh',
+        workdaysMask: 126,
+        hoursPerDay: 8,
+        holidays: [holidayRow('2026-02-17')],
+      }),
+      'BAD_MASK',
+    );
+
+    expect(cal.warnings.some((w) => w.includes('Monday'))).toBe(true);
+    expect(cal.warnings.some((w) => w.includes('63'))).toBe(true);
+  });
+
   it('thiếu dữ liệu lịch thì mặc định T2 tới T6 và ghi cảnh báo', async () => {
     const cal = await getCalendar(fakePrisma(null), 'KHONG_CO');
 

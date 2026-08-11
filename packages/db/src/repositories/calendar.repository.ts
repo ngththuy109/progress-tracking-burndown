@@ -1,6 +1,7 @@
 import {
   DEFAULT_HOURS_PER_DAY,
   DEFAULT_WORKDAYS_MASK,
+  workdaysMaskWarning,
   type WorkCalendar,
 } from '@app/shared';
 import type { PrismaClient } from '../client.js';
@@ -87,12 +88,20 @@ export async function getCalendar(
           // là đúng. Đừng đổi múi giờ ở đây: `2026-02-17` là ngày lễ ở mọi múi
           // giờ dùng lịch này, không phải một khoảnh khắc cụ thể.
           holidays: new Set(row.holidays.map((h) => h.holidayDate.toISOString().slice(0, 10))),
-          warnings: row.holidays.length === 0
-            ? [
-                `Lịch "${calendarId}" chưa khai ngày lễ nào. Nếu Epic vắt qua Tết ` +
-                  `thì đường Kế hoạch sẽ giảm đều trong cả tuần nghỉ (E-14).`,
-              ]
-            : [],
+          warnings: [
+            // Mask sai quy ước bit (thiếu Thứ Hai / ngoài 7 bit) làm cả tuần
+            // trượt một ngày — Thứ Hai lặng lẽ biến mất khỏi biểu đồ. Kêu to
+            // ngay tại nguồn dữ liệu (C-10) thay vì để người xem tự dò.
+            ...(workdaysMaskWarning(row.workdaysMask) === null
+              ? []
+              : [workdaysMaskWarning(row.workdaysMask)!]),
+            ...(row.holidays.length === 0
+              ? [
+                  `Lịch "${calendarId}" chưa khai ngày lễ nào. Nếu Epic vắt qua Tết ` +
+                    `thì đường Kế hoạch sẽ giảm đều trong cả tuần nghỉ (E-14).`,
+                ]
+              : []),
+          ],
         };
 
   cache?.set(calendarId, calendar);

@@ -123,6 +123,7 @@ export {
 
 export {
   loadSnapshotsForChart,
+  latestSnapshotDate,
   loadDataQualityRatios,
 } from './repositories/snapshot-read.repository.js';
 

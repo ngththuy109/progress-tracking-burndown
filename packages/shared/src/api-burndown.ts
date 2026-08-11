@@ -31,6 +31,15 @@ export const chartPointSchema = z.object({
    * đẹp hơn nhưng PM sẽ đọc ra một tiến độ không có thật (E-12).
    */
   plannedRemainingHours: z.number().nullable(),
+  /**
+   * `true` = ngày nghỉ theo lịch của Epic (cuối tuần / ngày lễ).
+   *
+   * Từ 2026-08 trục biểu đồ vẽ ĐỦ ngày lịch: ngày nghỉ được bôi xám, và nếu
+   * team vẫn log giờ vào ngày nghỉ thì snapshot của ngày đó mang số thật —
+   * đường Thực tế giảm đúng hôm làm, không dồn vào sáng hôm sau. Optional để
+   * phản hồi cũ trong cache (chưa có cờ) vẫn đọc được.
+   */
+  isOffDay: z.boolean().optional(),
   actualRemainingHours: z.number().nullable(),
   /** Kế hoạch trừ thực tế. Dương = đang sớm, âm = đang trễ. */
   varianceHours: z.number().nullable(),

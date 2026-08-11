@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_WORKDAYS_MASK, WORKDAY_BIT, type WorkCalendar } from '@app/shared';
 import { endOfDayUtcMs, startOfDayUtcMs, localDateOf, InvalidDateError } from './end-of-day.js';
-import { countWorkdays, listWorkdays, isWorkday, addWorkdays } from './count-workdays.js';
+import { countWorkdays, listWorkdays, listCalendarDays, isWorkday, addWorkdays } from './count-workdays.js';
 
 const cal = (over: Partial<WorkCalendar> = {}): WorkCalendar => ({
   calendarId: 'VN_STANDARD',
@@ -105,6 +105,36 @@ describe('đếm ngày làm việc', () => {
     // Số âm sẽ làm đường Kế hoạch ở T-16 đi LÊN mà không báo lỗi
     expect(countWorkdays('2026-03-13', '2026-03-09', cal())).toBe(0);
     expect(listWorkdays('2026-03-13', '2026-03-09', cal())).toEqual([]);
+  });
+});
+
+describe('liệt kê mọi ngày lịch — listCalendarDays', () => {
+  // Sinh ra cho quyết định 2026-08: snapshot chốt cho CẢ ngày nghỉ để giờ log
+  // Thứ 7/CN hiện đúng ngày trên đường Thực tế.
+  it('bao gồm cả cuối tuần và ngày lễ, hai đầu tính đủ', () => {
+    expect(listCalendarDays('2026-03-13', '2026-03-16', 'Asia/Ho_Chi_Minh')).toEqual([
+      '2026-03-13', // Thứ 6
+      '2026-03-14', // Thứ 7
+      '2026-03-15', // CN
+      '2026-03-16', // Thứ 2
+    ]);
+  });
+
+  it('khoảng một ngày trả đúng một ngày', () => {
+    expect(listCalendarDays('2026-03-14', '2026-03-14', 'Asia/Tokyo')).toEqual(['2026-03-14']);
+  });
+
+  it('khoảng ngược trả mảng rỗng, cùng quy ước với listWorkdays', () => {
+    expect(listCalendarDays('2026-03-16', '2026-03-13', 'Asia/Ho_Chi_Minh')).toEqual([]);
+  });
+
+  it('qua ranh giới tháng không bỏ sót và không lặp ngày', () => {
+    expect(listCalendarDays('2026-02-27', '2026-03-02', 'Asia/Ho_Chi_Minh')).toEqual([
+      '2026-02-27',
+      '2026-02-28',
+      '2026-03-01',
+      '2026-03-02',
+    ]);
   });
 });
 

@@ -75,6 +75,40 @@ export function listWorkdays(
 }
 
 /**
+ * Liệt kê MỌI ngày lịch trong khoảng, bao gồm cả hai đầu — kể cả cuối tuần và
+ * ngày lễ.
+ *
+ * Sinh ra cho quyết định 2026-08: snapshot được chốt cho CẢ ngày nghỉ để giờ
+ * log vào Thứ 7/CN hiện đúng ngày trên đường Thực tế (trước đây dồn hết vào
+ * sáng Thứ 2), và trục biểu đồ vẽ đủ ngày lịch với ngày nghỉ bôi xám.
+ *
+ * `to < from` trả mảng rỗng, cùng quy ước với `listWorkdays`.
+ */
+export function listCalendarDays(from: DateOnly, to: DateOnly, timezone: string): DateOnly[] {
+  const start = parse(from, timezone);
+  const end = parse(to, timezone);
+  if (end < start) return [];
+
+  const out: DateOnly[] = [];
+  let cursor = start;
+  let guard = 0;
+
+  while (cursor <= end) {
+    if (guard++ > MAX_DAYS_IN_RANGE) {
+      throw new InvalidDateError(
+        `Khoảng ${from} → ${to} dài quá ${MAX_DAYS_IN_RANGE} ngày. ` +
+          `Nhiều khả năng là lỗi dữ liệu chứ không phải khoảng thật.`,
+        `${from}..${to}`,
+      );
+    }
+    out.push(cursor.toFormat('yyyy-MM-dd'));
+    cursor = cursor.plus({ days: 1 });
+  }
+
+  return out;
+}
+
+/**
  * Đếm ngày làm việc, bao gồm cả hai đầu.
  *
  * `to < from` trả **0**, không trả số âm. Số âm sẽ khiến đường Kế hoạch ở T-16

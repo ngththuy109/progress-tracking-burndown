@@ -8,6 +8,7 @@ export {
 export {
   isWorkday,
   listWorkdays,
+  listCalendarDays,
   countWorkdays,
   addWorkdays,
   MAX_DAYS_IN_RANGE,

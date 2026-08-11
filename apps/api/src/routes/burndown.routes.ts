@@ -9,7 +9,7 @@ import type {
   SnapshotRow,
   WorkCalendar,
 } from '@app/shared';
-import { listWorkdays } from '@app/engine';
+import { listCalendarDays, listWorkdays } from '@app/engine';
 import { ApiError } from '../services/phase-config.service.js';
 import {
   assertComparablePhases,
@@ -30,6 +30,8 @@ export interface BurndownReadPort {
   /** Epic có tồn tại trong sổ theo dõi không, và thuộc project nào. */
   epicMeta(epicKey: string): Promise<{ projectKey: string; calendar: WorkCalendar } | null>;
   loadSnapshots(epicKey: string, from: DateOnly, to: DateOnly): Promise<readonly SnapshotRow[]>;
+  /** Ngày snapshot mới nhất — nới trục qua `plan_end` khi Epic đã trễ. `null` = chưa có snapshot. */
+  latestSnapshotDate(epicKey: string): Promise<DateOnly | null>;
   loadRollups(epicKey: string): Promise<readonly PhaseRollup[]>;
   loadPlanShifts(epicKey: string): Promise<readonly PlanShiftRecord[]>;
   /** Tỉ lệ dữ liệu bẩn, đếm bằng SQL chứ không duyệt trong bộ nhớ. */
@@ -114,7 +116,20 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
     // Trục ngang: chế độ một Phase CO LẠI đúng khoảng của Phase đó.
     const auto = resolveRange(args.mode, rollups, args.phaseCodes);
     const from = args.from ?? auto.from;
-    const to = args.to ?? auto.to;
+    let to = args.to ?? auto.to;
+
+    // Epic đã TRỄ so với kế hoạch: đội vẫn làm tiếp sau `plan_end` nên snapshot
+    // của hôm qua/hôm nay VẪN được dựng, nhưng trục lấy `plan_end` làm cận trên
+    // đã cắt mất chúng — người xem tưởng biểu đồ ngừng vẽ từ mấy hôm trước. Nới
+    // cận trên tới ngày snapshot mới nhất để phần "vượt kế hoạch" hiện ra.
+    //
+    // CHỈ ở chế độ Tổng Epic. Chế độ một Phase cố ý co về đúng khoảng kế hoạch
+    // của Phase đó (PRD §5.1); nới theo snapshot mức Epic sẽ kéo dài đuôi phẳng
+    // cho những Phase đã xong sớm. Và chỉ nới khi người dùng KHÔNG tự chọn `to`.
+    if (args.mode === 'EPIC' && args.to === null && to !== null) {
+      const latest = await deps.reads.latestSnapshotDate(args.epicKey);
+      if (latest !== null && latest > to) to = latest;
+    }
 
     if (from === null || to === null) {
       throw new ApiError(
@@ -145,6 +160,9 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
       epicKey: args.epicKey,
       mode: args.mode,
       workdays: listWorkdays(from, to, meta.calendar),
+      // Trục vẽ đủ ngày lịch (2026-08): ngày nghỉ bôi xám, và snapshot cuối
+      // tuần (nếu team có làm) hiện đúng ngày trên đường Thực tế.
+      days: listCalendarDays(from, to, meta.calendar.timezone),
       calendar: meta.calendar,
       snapshots,
       rollups,
