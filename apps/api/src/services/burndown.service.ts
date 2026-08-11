@@ -92,6 +92,17 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
           phaseSeries(code, args.workdays, byDate, args.labels, projection),
         );
 
+  // Ngày thiếu snapshot chỉ tính LỖ THỦNG THẬT: ngày nằm trong tầm đã chốt sổ
+  // (≤ ngày snapshot cuối cùng) mà vẫn trống — dấu hiệu job đêm bỏ lỡ (E-12).
+  // Ngày SAU snapshot cuối là tương lai CHƯA TỚI (đường Kế hoạch còn chạy tiếp
+  // tới `plan_end`); kêu "thiếu snapshot" ở đó là báo động giả khiến PM tưởng
+  // job đêm hỏng trong khi mọi thứ vẫn ổn.
+  const lastSnapshotDate = projection.lastSnapshot?.snapshotDate ?? null;
+  const missingSnapshotDays =
+    lastSnapshotDate === null
+      ? []
+      : args.workdays.filter((d) => d <= lastSnapshotDate && !byDate.has(d));
+
   return {
     epicKey: args.epicKey,
     mode: args.mode,
@@ -101,7 +112,7 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
     markers: buildMarkers(args.snapshots, args.planShifts),
     planShiftSummary: summarizeShifts(args.planShifts, args.rollups),
     dataHealth: {
-      missingSnapshotDays: args.workdays.filter((d) => !byDate.has(d)),
+      missingSnapshotDays,
       ...args.ratios,
     },
     planIsFloating: true,

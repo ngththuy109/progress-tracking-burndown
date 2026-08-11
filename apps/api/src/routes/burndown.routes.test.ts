@@ -131,6 +131,13 @@ class FakeReads implements BurndownReadPort {
     this.snapshotQueries += 1;
     return this.snapshots.filter((s) => s.snapshotDate >= from && s.snapshotDate <= to);
   }
+  async latestSnapshotDate() {
+    // MAX(snapshot_date) — một lần dò index, KHÔNG tính vào `snapshotQueries` (đó
+    // là bộ đếm cho truy vấn nạp lịch sử nặng của biểu đồ).
+    let latest: string | null = null;
+    for (const s of this.snapshots) if (latest === null || s.snapshotDate > latest) latest = s.snapshotDate;
+    return latest;
+  }
   async loadRollups() {
     return this.rollups;
   }
@@ -303,6 +310,37 @@ describe('ngày thiếu snapshot', () => {
   });
 });
 
+describe('Epic trễ so với kế hoạch — nới trục qua plan_end', () => {
+  it('nới trục tới ngày snapshot mới nhất để không cắt mất hôm qua/hôm nay', async () => {
+    // plan_end của cả Epic là 2026-03-06, nhưng đội vẫn làm tiếp và snapshot chạy
+    // tới 2026-03-13. Trục lấy plan_end làm cận trên sẽ CẮT MẤT 4 ngày làm việc
+    // cuối — đúng lỗi "biểu đồ không vẽ ngày trước hôm nay". Nới tới snapshot cuối.
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-04', 3, 144_000),
+      rollup('DEV', '2026-03-05', '2026-03-06', 2, 144_000),
+    ];
+    // reads.snapshots giữ nguyên: 2026-03-02 .. 2026-03-13
+
+    const { body } = await get('/api/burndown/epic/PAY-1');
+
+    expect(body.to).toBe('2026-03-13');
+    // Ngày SAU plan_end vẫn có số liệu thật, không bị cắt.
+    const late = body.series[0]?.points.find((p) => p.date === '2026-03-13');
+    expect(late?.actualRemainingHours).not.toBeNull();
+  });
+
+  it('KHÔNG nới ở chế độ một Phase — Phase vẫn co về đúng khoảng kế hoạch (PRD §5.1)', async () => {
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-04', 3, 144_000),
+      rollup('DEV', '2026-03-05', '2026-03-06', 2, 144_000),
+    ];
+    const { body } = await get('/api/burndown/epic/PAY-1/phase/DESIGN');
+
+    // Đúng plan_end của DESIGN, KHÔNG nới theo snapshot mức Epic (03-13).
+    expect(body.to).toBe('2026-03-04');
+  });
+});
+
 describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () => {
   beforeEach(() => {
     // "Hôm nay" là 2026-03-06: snapshot mới chỉ có tới đó, kế hoạch còn chạy
@@ -312,6 +350,14 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
       rollup('DEV', '2026-03-09', '2026-03-13', 5, 144_000),
     ];
     reads.snapshots = reads.snapshots.filter((s) => s.snapshotDate <= '2026-03-06');
+  });
+
+  it('KHÔNG kêu thiếu snapshot cho những ngày tương lai sau snapshot cuối', async () => {
+    // 03-09..03-13 trống vì CHƯA TỚI (đường Kế hoạch còn chạy tiếp), không phải
+    // job đêm hỏng. Trước đây chúng bị đếm vào missingSnapshotDays → dải đỏ báo
+    // động giả "5 ngày chưa có snapshot".
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    expect(body.dataHealth.missingSnapshotDays).toEqual([]);
   });
 
   it('sau snapshot cuối, đường Kế hoạch vẫn vẽ tiếp và chạm 0 đúng ngày plan_end', async () => {

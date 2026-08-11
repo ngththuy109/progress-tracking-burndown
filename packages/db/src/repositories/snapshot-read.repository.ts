@@ -67,6 +67,27 @@ export async function loadSnapshotsForChart(
 }
 
 /**
+ * Ngày snapshot MỚI NHẤT của một Epic, hoặc `null` nếu chưa có snapshot nào.
+ *
+ * Dùng để nới cận trên của trục biểu đồ khi Epic đã TRỄ so với kế hoạch: snapshot
+ * vẫn được dựng cho những ngày sau `plan_end`, nhưng trục lấy `plan_end` làm cận
+ * trên nên chúng bị cắt — hôm qua và hôm nay biến mất dù đã có số liệu thật.
+ *
+ * `MAX(snapshot_date)` chạy trên index `idx_snapshot_chart` `(epic_key,
+ * snapshot_date)` nên chỉ là một lần dò index, không quét bảng.
+ */
+export async function latestSnapshotDate(
+  prisma: PrismaClient,
+  epicKey: string,
+): Promise<DateOnly | null> {
+  const [row] = await prisma.$queryRawUnsafe<{ latest: Date | null }[]>(
+    `SELECT MAX(snapshot_date) AS latest FROM daily_snapshot WHERE epic_key = $1`,
+    epicKey,
+  );
+  return row?.latest ? toDateOnly(row.latest) : null;
+}
+
+/**
  * Đọc cột JSON `per_phase`.
  *
  * Cột JSON là biên giữa hai hệ kiểu — dữ liệu cũ có thể thiếu trường mà không có

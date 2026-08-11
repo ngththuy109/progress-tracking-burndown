@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@app/db';
 import {
+  latestSnapshotDate,
   listPlanShifts,
   loadDataQualityRatios,
   loadPhaseRollups,
@@ -72,6 +73,8 @@ export function createBurndownReadPort(prisma: PrismaClient): BurndownReadPort {
     },
 
     loadSnapshots: (epicKey, from, to) => loadSnapshotsForChart(prisma, epicKey, from, to),
+
+    latestSnapshotDate: (epicKey) => latestSnapshotDate(prisma, epicKey),
 
     // `loadPhaseRollups` trả về Map (T-18 cần tra theo mã Phase); biểu đồ cần mảng.
     loadRollups: async (epicKey): Promise<readonly PhaseRollup[]> => [
