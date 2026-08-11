@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Kế hoạch 02/03 → 03/03 = 2 ngày làm việc, 28800/2 = 14400s mỗi ngày → đường Kế hoạch 14400 rồi 0. Đường Thực tế: đã log 36000s trong khi ước lượng ban đầu chỉ 28800s, quy tắc 3 cho max(0, 28800 − 36000) = 0 — KHÔNG phải −7200. Đã log giờ nhưng chưa Done nên trạng thái là \"đang làm\" cả hai ngày. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` lấy NGÀY WORKLOG CUỐI CÙNG và kèm cờ `actualEndIsProvisional = true` (PRD §2.7.2). Đó là một PHỎNG ĐOÁN có đánh dấu, không phải null — vì đội quên chuyển trạng thái là chuyện thường, và trả null sẽ làm mất luôn cả mốc kết thúc ước chừng.",
+  "_how": "TÍNH TAY. Kế hoạch 02/03 → 03/03 = 2 ngày làm việc, 28800/2 = 14400s mỗi ngày → đường Kế hoạch 14400 rồi 0. Đường Thực tế: đã log 36000s trong khi ước lượng ban đầu chỉ 28800s, quy tắc 3 cho max(0, 28800 − 36000) = 0 — KHÔNG phải −7200. Đã log giờ nhưng chưa Done nên trạng thái là \"đang làm\" cả hai ngày. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` là null — KHÔNG tạm tính từ worklog (PRD §2.7.2). Ngày kết thúc chỉ có khi đã Done: lấy ngày worklog muộn nhất, không có worklog thì lấy đúng ngày Done. Cờ `actualEndIsProvisional = true` nghĩa là chưa Done.",
   "workdays": [
     "2026-03-02",
     "2026-03-03"
@@ -11,7 +11,7 @@
       "planEnd": "2026-03-03",
       "planWorkdays": 2,
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-02",
+      "actualEnd": null,
       "actualEndIsProvisional": true,
       "totalOriginalS": 28800,
       "subtaskCount": 1,
@@ -24,7 +24,7 @@
     {
       "key": "PAY-11",
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-02"
+      "actualEnd": null
     }
   ],
   "snapshots": [

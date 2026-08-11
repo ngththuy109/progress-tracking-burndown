@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@app/db';
 import type { SignboardPhase, SignboardSubtask } from '@app/shared';
-import { normalize } from '@app/engine';
+import { normalize, normalizePreservingCase } from '@app/engine';
 import type { SignboardReadPort } from '../routes/signboard.routes.js';
 import type { ColumnSpec, SubPhaseMetaEntry } from '../services/signboard.service.js';
 import { createBurndownReadPort } from './burndown.adapters.js';
@@ -143,10 +143,10 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
       return [...seen.values()];
     },
 
-    async subPhaseMeta(projectKey): Promise<ReadonlyMap<string, SubPhaseMetaEntry>> {
-      // Cùng nguồn nhãn + thứ tự với `phases()`: định nghĩa Phase đang hiệu lực,
-      // bản project ghi đè bản Mặc định. Khoá theo `normalize(phase_code)` để
-      // khớp với `[Sub-phase]` thô trong tiêu đề (đã chuẩn hoá cùng cách).
+    async subPhaseMeta(projectKey, phaseCode): Promise<ReadonlyMap<string, SubPhaseMetaEntry>> {
+      // Lớp NỀN — cùng nguồn nhãn + thứ tự với `phases()`: định nghĩa Phase đang
+      // hiệu lực, bản project ghi đè bản Mặc định. Khoá theo `normalize(phase_code)`
+      // để khớp với `[Sub-phase]` thô trong tiêu đề (đã chuẩn hoá cùng cách).
       const defs = await prisma.$queryRawUnsafe<
         { phase_code: string; label_vi: string; display_order: number }[]
       >(
@@ -164,6 +164,37 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
         const key = normalize(d.phase_code);
         // Bản project đứng trước → giữ lần gặp ĐẦU (ghi đè bản Mặc định).
         if (!meta.has(key)) meta.set(key, { label: d.label_vi, order: d.display_order });
+      }
+
+      // Lớp ĐÈ — cấu hình Sub-phase order RIÊNG của Phase đang xem (khu ⑤ ở màn
+      // Signboard columns). Entry ở đây `pinned`: đứng trước mọi thứ tự "mượn".
+      const orders = await prisma.$queryRawUnsafe<
+        { phase_code: string; sub_phase_code: string; display_order: number; scope: string }[]
+      >(
+        `SELECT o.phase_code, o.sub_phase_code, o.display_order, s.scope
+           FROM sub_phase_order o
+           JOIN phase_config_set s ON s.id = o.config_set_id
+          WHERE s.is_active = true
+            AND (s.project_key = $1 OR s.scope = 'GLOBAL')
+          ORDER BY o.display_order`,
+        projectKey,
+      );
+
+      // Kế thừa THEO PHẦN, giống mọi phần cấu hình khác (PRD §2.2.6): project có
+      // khai bất kỳ dòng nào thì dùng TRỌN bộ của project, không trộn từng dòng
+      // với bộ Mặc định — trộn là ra một thứ tự không ai từng khai.
+      const hasProjectRows = orders.some((o) => o.scope === 'PROJECT');
+      const phaseKey = normalize(phaseCode);
+      for (const o of orders) {
+        if ((o.scope === 'PROJECT') !== hasProjectRows) continue;
+        if (normalize(o.phase_code) !== phaseKey) continue;
+        const key = normalize(o.sub_phase_code);
+        meta.set(key, {
+          // Nhãn đẹp (nếu Sub-phase trùng mã một Phase) vẫn giữ; chỉ thứ tự bị đè.
+          label: meta.get(key)?.label ?? normalizePreservingCase(o.sub_phase_code),
+          order: o.display_order,
+          pinned: true,
+        });
       }
       return meta;
     },

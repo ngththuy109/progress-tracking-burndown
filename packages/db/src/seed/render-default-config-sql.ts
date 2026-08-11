@@ -60,6 +60,20 @@ export function renderDefaultConfigSql(): string {
     )
     .join(',\n');
 
+  // Bộ Mặc định hiện KHÔNG seed thứ tự Sub-phase (thứ của từng dự án), nhưng
+  // renderer vẫn phải biết phần này — hằng số có dữ liệu mà quên sinh SQL là
+  // đúng loại lệch im lặng file này sinh ra để chặn.
+  const subPhaseRows = c.subPhaseOrders
+    .map((s) => `    (set_id, ${q(s.phaseCode)}, ${q(s.subPhaseCode)}, ${s.displayOrder})`)
+    .join(',\n');
+  const subPhaseInsert =
+    c.subPhaseOrders.length === 0
+      ? ''
+      : `
+  INSERT INTO sub_phase_order (config_set_id, phase_code, sub_phase_code, display_order) VALUES
+${subPhaseRows};
+`;
+
   const calendarRows = DEFAULT_CALENDARS.map(
     (cal) => `  (${q(cal.calendarId)}, ${q(cal.timezone)}, ${cal.workdaysMask}, ${cal.hoursPerDay})`,
   ).join(',\n');
@@ -117,7 +131,7 @@ ${ruleRows};
 
   INSERT INTO signboard_column (config_set_id, task_code, label_vi, label_ja, side, display_order) VALUES
 ${columnRows};
-
+${subPhaseInsert}
   RAISE NOTICE '[seed] Đã tạo bộ Mặc định (GLOBAL) version %.', next_version;
 END $$;
 

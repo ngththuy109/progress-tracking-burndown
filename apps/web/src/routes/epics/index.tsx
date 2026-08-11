@@ -45,13 +45,26 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
+ * Đổi timestamp ISO (UTC) mà API trả về sang giờ địa phương của trình duyệt.
+ *
+ * API giữ nguyên UTC là đúng — quy đổi múi giờ là việc của tầng hiển thị.
+ * Hiện chuỗi UTC thô thì người xem ở múi giờ khác đọc thành "đồng hồ sai".
+ */
+export function formatLocalDateTime(iso: string): string {
+  const parsed = new Date(iso);
+  // Chuỗi không đọc được thì hiện nguyên văn — "Invalid Date" không giúp ai.
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/**
  * Chữ hiển thị ở cột "Last synced".
  *
  * Chưa từng đồng bộ thì NÓI RÕ đang dựng lịch sử lần đầu, không để ô trống —
  * ô trống trông y hệt "hệ thống hỏng".
  */
 export function lastSyncedLabel(epic: Epic): string {
-  if (epic.lastSyncedAt !== null) return epic.lastSyncedAt;
+  if (epic.lastSyncedAt !== null) return formatLocalDateTime(epic.lastSyncedAt);
   if (epic.status === 'BACKFILLING' || epic.status === 'PENDING') {
     return 'building history for the first time';
   }
@@ -148,7 +161,12 @@ export function EpicListScreen() {
     {
       key: 'lastSynced',
       header: 'Last synced',
-      render: (e) => <span className={e.lastSyncedAt === null ? 'muted' : ''}>{lastSyncedLabel(e)}</span>,
+      // `title` giữ chuỗi UTC gốc để đối chiếu được với log server khi cần.
+      render: (e) => (
+        <span className={e.lastSyncedAt === null ? 'muted' : ''} title={e.lastSyncedAt ?? undefined}>
+          {lastSyncedLabel(e)}
+        </span>
+      ),
       // `null` xuống cuối bảng, không lên đầu.
       sortKey: (e) => e.lastSyncedAt,
     },

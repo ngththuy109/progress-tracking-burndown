@@ -43,7 +43,7 @@ const sub = (over: Partial<SubtaskRecord> = {}): SubtaskRecord => ({
 });
 
 describe('ca mở lại — PRD §2.7.2, E-13', () => {
-  /** 未対応 → 対応中 → 完了 → 対応中 → 完了 */
+  /** 未対応 → 対応中 → 完了 → 対応中 → 完了, không log giờ. */
   const REOPENED = sub({
     changelog: [
       status('3', '2026-03-09T02:00:00Z'),
@@ -51,10 +51,9 @@ describe('ca mở lại — PRD §2.7.2, E-13', () => {
       status('3', '2026-03-13T02:00:00Z'),
       status('10001', '2026-03-16T02:00:00Z'),
     ],
-    worklogs: [wl('2026-03-10T02:00:00Z')],
   });
 
-  it('tái hiện đúng bảng ví dụ PRD: start 09/03, end 16/03', () => {
+  it('không có worklog thì start = lần đầu In Progress, end = lần Done cuối', () => {
     const r = resolveSubtaskActualDates(REOPENED, STATUS, VN);
     expect(r.actualStart).toBe('2026-03-09');
     expect(r.actualEnd).toBe('2026-03-16');
@@ -67,13 +66,13 @@ describe('ca mở lại — PRD §2.7.2, E-13', () => {
   });
 });
 
-describe('kết hợp hai nguồn cho actual_start', () => {
-  it('chuyển In Progress 09/03 và log giờ đầu 10/03 thì actual_start = 09/03', () => {
+describe('actual_start — worklog là nguồn ưu tiên', () => {
+  it('đã có worklog thì actual_start = ngày worklog SỚM NHẤT, kể cả khi chuyển In Progress sớm hơn', () => {
     const s = sub({
       changelog: [status('3', '2026-03-09T02:00:00Z')],
-      worklogs: [wl('2026-03-10T02:00:00Z')],
+      worklogs: [wl('2026-03-10T02:00:00Z'), wl('2026-03-12T02:00:00Z')],
     });
-    expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-09');
+    expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-10');
   });
 
   it('log giờ 08/03 nhưng chuyển In Progress 09/03 thì actual_start = 08/03', () => {
@@ -89,7 +88,7 @@ describe('kết hợp hai nguồn cho actual_start', () => {
     expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-10');
   });
 
-  it('chỉ chuyển In Progress, chưa log giờ nào thì vẫn có actual_start', () => {
+  it('chỉ chuyển In Progress, chưa log giờ nào thì actual_start lấy từ changelog', () => {
     const s = sub({ changelog: [status('3', '2026-03-09T02:00:00Z')] });
     expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-09');
   });
@@ -106,59 +105,72 @@ describe('kết hợp hai nguồn cho actual_start', () => {
   });
 });
 
-describe('tạm tính', () => {
-  it('Sub-task chưa Done thì actual_end lấy worklog cuối và đánh dấu tạm tính', () => {
+describe('actual_end — chưa Done thì KHÔNG tạm tính', () => {
+  it('Sub-task chưa Done thì actual_end = null dù đã có worklog', () => {
+    // Trước đây lấy tạm ngày worklog cuối — PM đọc nhầm thành việc đã xong.
     const s = sub({
       changelog: [status('3', '2026-03-09T02:00:00Z')],
       worklogs: [wl('2026-03-10T02:00:00Z'), wl('2026-03-14T02:00:00Z')],
     });
     const r = resolveSubtaskActualDates(s, STATUS, VN);
-    expect(r.actualEnd).toBe('2026-03-14');
+    expect(r.actualEnd).toBeNull();
     expect(r.actualEndIsProvisional).toBe(true);
   });
 
-  it('Sub-task đã Done thì KHÔNG tạm tính', () => {
+  it('Sub-task đã Done thì actualEndIsProvisional = false', () => {
     const s = sub({ changelog: [status('10001', '2026-03-16T02:00:00Z')] });
     expect(resolveSubtaskActualDates(s, STATUS, VN).actualEndIsProvisional).toBe(false);
   });
 
-  it('Sub-task chưa Done và chưa log giờ thì actual_end = null, vẫn là tạm tính', () => {
+  it('Sub-task chưa Done và chưa log giờ thì actual_end = null', () => {
     const s = sub({ changelog: [status('3', '2026-03-09T02:00:00Z')] });
     const r = resolveSubtaskActualDates(s, STATUS, VN);
     expect(r.actualEnd).toBeNull();
     expect(r.actualEndIsProvisional).toBe(true);
   });
 
-  it('đã Done ngày 16/03 nhưng worklog cuối 14/03 thì actual_end vẫn là 16/03', () => {
+  it('đã Done ngày 16/03 nhưng worklog cuối 14/03 thì actual_end = 14/03 (tin worklog)', () => {
     const s = sub({
       changelog: [status('10001', '2026-03-16T02:00:00Z')],
       worklogs: [wl('2026-03-14T02:00:00Z')],
     });
-    expect(resolveSubtaskActualDates(s, STATUS, VN).actualEnd).toBe('2026-03-16');
+    expect(resolveSubtaskActualDates(s, STATUS, VN).actualEnd).toBe('2026-03-14');
   });
 });
 
-describe('chưa bắt đầu', () => {
+describe('Done mà không có worklog', () => {
   it('Sub-task chưa động vào thì actual_start và actual_end đều null', () => {
     const r = resolveSubtaskActualDates(sub(), STATUS, VN);
     expect(r.actualStart).toBeNull();
     expect(r.actualEnd).toBeNull();
   });
 
-  it('chuyển thẳng To Do sang Done không qua In Progress thì actual_start = null', () => {
-    // Chuyện có thật. KHÔNG được lấy tạm ngày Done làm ngày bắt đầu.
+  it('chuyển thẳng To Do sang Done, không log giờ thì start = end = ngày Done', () => {
+    // Task xong mà không để lại dấu vết nào khác — coi như làm xong trong đúng
+    // ngày Done, còn hơn là một task Done không có ngày bắt đầu.
     const s = sub({ changelog: [status('10001', '2026-03-16T02:00:00Z')] });
     const r = resolveSubtaskActualDates(s, STATUS, VN);
-    expect(r.actualStart).toBeNull();
+    expect(r.actualStart).toBe('2026-03-16');
     expect(r.actualEnd).toBe('2026-03-16');
   });
 
-  it('chuyển thẳng sang Done nhưng CÓ worklog thì actual_start lấy từ worklog', () => {
+  it('Done không worklog nhưng CÓ qua In Progress thì start vẫn lấy từ changelog', () => {
+    const s = sub({
+      changelog: [status('3', '2026-03-09T02:00:00Z'), status('10001', '2026-03-16T02:00:00Z')],
+    });
+    const r = resolveSubtaskActualDates(s, STATUS, VN);
+    expect(r.actualStart).toBe('2026-03-09');
+    expect(r.actualEnd).toBe('2026-03-16');
+  });
+
+  it('chuyển thẳng sang Done nhưng CÓ worklog thì start và end lấy từ worklog', () => {
     const s = sub({
       changelog: [status('10001', '2026-03-16T02:00:00Z')],
       worklogs: [wl('2026-03-12T02:00:00Z')],
     });
-    expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-12');
+    const r = resolveSubtaskActualDates(s, STATUS, VN);
+    expect(r.actualStart).toBe('2026-03-12');
+    expect(r.actualEnd).toBe('2026-03-12');
   });
 });
 
@@ -185,7 +197,10 @@ describe('worklog bị xoá', () => {
   });
 
   it('worklog đã bị xoá không được tính vào actual_end', () => {
-    const s = sub({ worklogs: [wl('2026-03-10T02:00:00Z'), wl('2026-03-14T02:00:00Z', true)] });
+    const s = sub({
+      changelog: [status('10001', '2026-03-16T02:00:00Z')],
+      worklogs: [wl('2026-03-10T02:00:00Z'), wl('2026-03-14T02:00:00Z', true)],
+    });
     expect(resolveSubtaskActualDates(s, STATUS, VN).actualEnd).toBe('2026-03-10');
   });
 

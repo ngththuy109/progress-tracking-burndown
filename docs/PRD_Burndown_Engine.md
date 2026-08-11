@@ -651,19 +651,18 @@ Kết quả tổng hợp cho Phase "Thiết kế":
 
 #### 2.7.2. Ngày thực tế của một Sub-task
 
-Jira **không có sẵn** hai trường này. Hệ thống suy ra từ lịch sử, kết hợp cả trạng thái lẫn worklog:
+Jira **không có sẵn** hai trường này. Hệ thống suy ra từ lịch sử. Worklog là nguồn đáng tin nhất (giờ được log là việc đã thật sự làm); changelog trạng thái chỉ dùng khi không có worklog nào:
 
 | Mốc | Cách tính |
 |---|---|
-| `actual_start` | **Ngày sớm hơn** giữa: lần đầu chuyển sang `In Progress` (đọc từ changelog) và ngày worklog đầu tiên (theo trường `started`) |
-| `actual_end` | Lần **CUỐI CÙNG** chuyển sang `Done`. Nếu chưa bao giờ Done → lấy ngày worklog cuối cùng, đánh dấu **tạm tính** |
+| `actual_start` | Ngày worklog **sớm nhất** (theo trường `started`). Không có worklog → lần đầu chuyển sang `In Progress` (đọc từ changelog). Vẫn không có mà task đã Done → lấy đúng **ngày Done** (task xong nhưng không log giờ, không qua In Progress — coi như bắt đầu và kết thúc cùng ngày) |
+| `actual_end` | Chưa Done → **chưa tính** (`null`) — KHÔNG tạm tính từ worklog. Đã Done → ngày worklog **muộn nhất**; không có worklog → lần **CUỐI CÙNG** chuyển sang `Done` |
 
-**Vì sao lấy "lần cuối cùng" chuyển sang Done?** Vì có ca mở lại (reopen):
+**Vì sao lấy "lần cuối cùng" chuyển sang Done?** Vì có ca mở lại (reopen). Ví dụ một task không log giờ nào:
 
 | Ngày | Sự kiện | Ghi chú |
 |---|---|---|
 | 09/03 | `未対応` → `対応中` | ← `actual_start` = 09/03 |
-| 10/03 | Log 8 giờ | |
 | 12/03 | `対応中` → `完了` | Lần Done thứ nhất |
 | 13/03 | `完了` → `対応中` | Mở lại vì phát hiện lỗi |
 | 16/03 | `対応中` → `完了` | ← `actual_end` = **16/03** (lần Done cuối) |
@@ -2690,7 +2689,7 @@ Nếu cùng một `TaskName` lạ xuất hiện **≥ 3 lần**, hiện gợi ý
 | `GD-12` | Epic vắt qua ngày đổi giờ mùa hè (múi Nhật) | Không lệch mất 1 giờ |
 | `GD-13` | Cấu hình Phase phức tạp: 3 mẫu tiêu đề, tiêu đề toàn giác/bán giác lẫn lộn, `[Phase] Design Review` khớp 2 từ khoá | Chuẩn hoá NFKC đúng; luật ưu tiên chọn đúng từ khoá dài hơn; ghi cảnh báo `AMBIGUOUS_PHASE_RULE` khi thật sự nhập nhằng |
 | `GD-14` | Project ghi đè mẫu tiêu đề `【{name}】`, kế thừa Phase và từ khoá từ bộ Mặc định | Kế thừa từng phần đúng; project khác không bị ảnh hưởng |
-| `GD-15` | Tổng hợp ngày Phase: 3 Sub-task, 1 cái thiếu `wbs_end_date`, 1 cái có ca reopen `Done→In Progress→Done` | MIN/MAX đúng; `missing_date_count` = 1; `actual_end` lấy lần Done **cuối cùng**; `actual_end_is_provisional` đúng |
+| `GD-15` | Tổng hợp ngày Phase: 3 Sub-task, 1 cái thiếu `wbs_end_date`, 1 cái có ca reopen `Done→In Progress→Done` | MIN/MAX đúng; `missing_date_count` = 1; Sub-task đã Done có worklog thì `actual_end` lấy ngày worklog **muộn nhất**; chưa Done thì `actual_end` = null; `actual_end_is_provisional` đúng |
 | `GD-16` | Thêm Sub-task có `wbs_end_date` muộn hơn `plan_end` hiện tại | `plan_end` dịch đúng; đường Kế hoạch vẽ lại toàn bộ; sinh đúng 1 bản ghi `plan_shift_history` với `shifted_workdays` chính xác |
 | `GD-17` | Phase có **toàn bộ** Sub-task thiếu `wbs_start_date` và `wbs_end_date` | Không vẽ đường Kế hoạch, **không đoán bừa ngày**; đường Thực tế vẫn vẽ bình thường |
 | `GD-18` | Sub-task chuyển từ Phase Design sang Phase Development | `phase_rollup` của **cả hai** Phase được tính lại; ngày của Phase cũ co lại đúng |

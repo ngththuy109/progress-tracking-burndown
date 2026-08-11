@@ -39,12 +39,14 @@ export interface SignboardReadPort {
   /** Cột đang hiệu lực, đã gộp kế thừa, sắp theo `display_order`. */
   columns(projectKey: string): Promise<readonly ColumnSpec[]>;
   /**
-   * Nhãn + thứ tự cho nhóm Sub-phase, khoá = `normalize(phaseCode)` của cấu hình.
+   * Nhãn + thứ tự cho nhóm Sub-phase khi mở `phaseCode`, khoá đã chuẩn hoá.
    *
-   * Sub-phase (`[…]` trước Function) thường trùng mã một Phase; khớp được thì lấy
-   * nhãn + `display_order` của Phase đó để xếp cột theo đúng thứ tự quy trình.
+   * Nguồn thứ tự, mạnh trước yếu: (1) cấu hình **Sub-phase order** của chính
+   * `phaseCode` (bảng `sub_phase_order`, bản project ghi đè bản Mặc định) —
+   * entry `pinned`; (2) Sub-phase trùng mã một Phase thì "mượn" nhãn +
+   * `display_order` của Phase đó.
    */
-  subPhaseMeta(projectKey: string): Promise<ReadonlyMap<string, SubPhaseMetaEntry>>;
+  subPhaseMeta(projectKey: string, phaseCode: string): Promise<ReadonlyMap<string, SubPhaseMetaEntry>>;
   /** `TaskName` thô bóc từ tiêu đề — chỉ dùng để gợi ý cột mới. */
   rawTaskTypes(epicKey: string, phaseCode: string): Promise<Readonly<Record<string, string | null>>>;
 }
@@ -131,7 +133,7 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
       const [subtasks, columns, subPhaseMeta] = await Promise.all([
         deps.reads.subtasks(epicKey, phaseCode),
         deps.reads.columns(meta.projectKey),
-        deps.reads.subPhaseMeta(meta.projectKey),
+        deps.reads.subPhaseMeta(meta.projectKey, phaseCode),
       ]);
 
       return buildSignboard({

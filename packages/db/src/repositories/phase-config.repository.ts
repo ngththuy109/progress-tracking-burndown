@@ -32,6 +32,7 @@ export async function findActiveConfigSet(
       phaseDefinitions: { orderBy: { displayOrder: 'asc' } },
       matchRules: { orderBy: { matchPriority: 'asc' } },
       signboardColumns: { orderBy: { displayOrder: 'asc' } },
+      subPhaseOrders: { orderBy: [{ phaseCode: 'asc' }, { displayOrder: 'asc' }] },
     },
   });
   if (!row) return null;
@@ -74,6 +75,11 @@ export async function findActiveConfigSet(
       labelJa: c.labelJa,
       side: c.side as 'VN' | 'JP',
       displayOrder: c.displayOrder,
+    })),
+    subPhaseOrders: row.subPhaseOrders.map((s) => ({
+      phaseCode: s.phaseCode,
+      subPhaseCode: s.subPhaseCode,
+      displayOrder: s.displayOrder,
     })),
   };
 }
@@ -164,6 +170,13 @@ export async function saveNewVersion(
             displayOrder: c.displayOrder,
           })),
         },
+        subPhaseOrders: {
+          create: payload.subPhaseOrders.map((s) => ({
+            phaseCode: s.phaseCode,
+            subPhaseCode: s.subPhaseCode,
+            displayOrder: s.displayOrder,
+          })),
+        },
       },
     });
 
@@ -198,6 +211,7 @@ export async function rollbackToVersion(
       phaseDefinitions: { orderBy: { displayOrder: 'asc' } },
       matchRules: { orderBy: { matchPriority: 'asc' } },
       signboardColumns: { orderBy: { displayOrder: 'asc' } },
+      subPhaseOrders: { orderBy: [{ phaseCode: 'asc' }, { displayOrder: 'asc' }] },
     },
   });
 
@@ -244,6 +258,11 @@ export async function rollbackToVersion(
           labelJa: c.labelJa,
           side: c.side as 'VN' | 'JP',
           displayOrder: c.displayOrder,
+        })),
+        subPhaseOrders: old.subPhaseOrders.map((s) => ({
+          phaseCode: s.phaseCode,
+          subPhaseCode: s.subPhaseCode,
+          displayOrder: s.displayOrder,
         })),
       },
     },

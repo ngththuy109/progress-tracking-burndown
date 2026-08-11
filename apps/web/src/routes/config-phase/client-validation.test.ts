@@ -9,6 +9,7 @@ const VALID: ConfigPayload = {
   phaseDefinitions: [{ phaseCode: 'DESIGN', labelVi: 'Thiết kế', displayOrder: 1 }],
   matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 }],
   signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
+  subPhaseOrders: [],
 };
 
 describe('validateDraftClient', () => {

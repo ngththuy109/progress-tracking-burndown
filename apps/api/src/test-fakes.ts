@@ -124,6 +124,7 @@ export class FakeConfigStore implements PhaseConfigStore {
         phaseDefinitions: old.phaseDefinitions,
         matchRules: old.matchRules,
         signboardColumns: old.signboardColumns,
+        subPhaseOrders: old.subPhaseOrders,
       },
       createdBy: args.createdBy,
       note: `Quay lại nội dung của version ${args.version}`,

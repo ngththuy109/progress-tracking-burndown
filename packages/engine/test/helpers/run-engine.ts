@@ -203,6 +203,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
       side: 'VN' as const,
       displayOrder: i + 1,
     })),
+    subPhaseOrders: [],
     projectKey: null,
     globalVersion: 1,
     projectVersion: null,
@@ -212,6 +213,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
       phaseDefinitions: false,
       matchRules: false,
       signboardColumns: false,
+      subPhaseOrders: false,
     },
   };
 }
@@ -292,6 +294,7 @@ export function runInherit(fixture: InheritFixture): {
       side: 'VN' as const,
       displayOrder: i + 1,
     })),
+    subPhaseOrders: [],
   });
 
   const merged = mergeInheritance(

@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Kế hoạch 02/03 → 04/03 = 3 ngày, 28800/3 = 9600s/ngày → Kế hoạch 19200, 9600, 0. Đường Thực tế: ngày 02/03 có changelog timeestimate = 18000 nên quy tắc 2 cho 18000. Ngày 03/03 giá trị MỚI NHẤT của timeestimate là null (bị xoá trắng), nên KHÔNG còn quy tắc 2 để áp dụng và rơi xuống quy tắc 3 = 28800 − 7200 = 21600. Ngày 04/03 không có gì mới, vẫn 21600. Con số TĂNG từ 18000 lên 21600 là đúng: người ta vừa rút lại lời khai của mình. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` lấy NGÀY WORKLOG CUỐI CÙNG và kèm cờ `actualEndIsProvisional = true` (PRD §2.7.2). Đó là một PHỎNG ĐOÁN có đánh dấu, không phải null — vì đội quên chuyển trạng thái là chuyện thường, và trả null sẽ làm mất luôn cả mốc kết thúc ước chừng.",
+  "_how": "TÍNH TAY. Kế hoạch 02/03 → 04/03 = 3 ngày, 28800/3 = 9600s/ngày → Kế hoạch 19200, 9600, 0. Đường Thực tế: ngày 02/03 có changelog timeestimate = 18000 nên quy tắc 2 cho 18000. Ngày 03/03 giá trị MỚI NHẤT của timeestimate là null (bị xoá trắng), nên KHÔNG còn quy tắc 2 để áp dụng và rơi xuống quy tắc 3 = 28800 − 7200 = 21600. Ngày 04/03 không có gì mới, vẫn 21600. Con số TĂNG từ 18000 lên 21600 là đúng: người ta vừa rút lại lời khai của mình. GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` là null — KHÔNG tạm tính từ worklog (PRD §2.7.2). Ngày kết thúc chỉ có khi đã Done: lấy ngày worklog muộn nhất, không có worklog thì lấy đúng ngày Done. Cờ `actualEndIsProvisional = true` nghĩa là chưa Done.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -12,7 +12,7 @@
       "planEnd": "2026-03-04",
       "planWorkdays": 3,
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-02",
+      "actualEnd": null,
       "actualEndIsProvisional": true,
       "totalOriginalS": 28800,
       "subtaskCount": 1,
@@ -25,7 +25,7 @@
     {
       "key": "PAY-11",
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-02"
+      "actualEnd": null
     }
   ],
   "snapshots": [

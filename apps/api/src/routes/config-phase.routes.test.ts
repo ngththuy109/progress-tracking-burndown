@@ -17,6 +17,7 @@ const GLOBAL_PAYLOAD: ConfigPayload = {
   ],
   matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 }],
   signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
+  subPhaseOrders: [],
 };
 
 const TASKS: PreviewTask[] = [

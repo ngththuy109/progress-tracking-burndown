@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Phase DESIGN kế hoạch 02/03 → 04/03 = 3 ngày làm việc, tổng 28800s nên nhịp cháy 9600s/ngày → đường Kế hoạch 19200, 9600, 0. Đường Thực tế: ngày 02/03 chưa có sự kiện timeestimate nào nên rơi xuống quy tắc 3 = 28800 − 7200 (đã log) = 21600. Từ 03/03, changelog timeestimate = 18000 có mặt nên QUY TẮC 2 THẮNG: còn lại đúng 18000, KHÔNG phải 28800 − 14400 = 14400. Ngày 04/03 không có sự kiện mới nên vẫn 18000. Không có changelog status nào nên trạng thái luôn là nhóm \"chưa làm\". GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` lấy NGÀY WORKLOG CUỐI CÙNG và kèm cờ `actualEndIsProvisional = true` (PRD §2.7.2). Đó là một PHỎNG ĐOÁN có đánh dấu, không phải null — vì đội quên chuyển trạng thái là chuyện thường, và trả null sẽ làm mất luôn cả mốc kết thúc ước chừng.",
+  "_how": "TÍNH TAY. Phase DESIGN kế hoạch 02/03 → 04/03 = 3 ngày làm việc, tổng 28800s nên nhịp cháy 9600s/ngày → đường Kế hoạch 19200, 9600, 0. Đường Thực tế: ngày 02/03 chưa có sự kiện timeestimate nào nên rơi xuống quy tắc 3 = 28800 − 7200 (đã log) = 21600. Từ 03/03, changelog timeestimate = 18000 có mặt nên QUY TẮC 2 THẮNG: còn lại đúng 18000, KHÔNG phải 28800 − 14400 = 14400. Ngày 04/03 không có sự kiện mới nên vẫn 18000. Không có changelog status nào nên trạng thái luôn là nhóm \"chưa làm\". GHI CHÚ VỀ NGÀY KẾT THÚC THỰC TẾ: Sub-task chưa bao giờ chuyển sang Done thì `actualEnd` là null — KHÔNG tạm tính từ worklog (PRD §2.7.2). Ngày kết thúc chỉ có khi đã Done: lấy ngày worklog muộn nhất, không có worklog thì lấy đúng ngày Done. Cờ `actualEndIsProvisional = true` nghĩa là chưa Done.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -12,7 +12,7 @@
       "planEnd": "2026-03-04",
       "planWorkdays": 3,
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-03",
+      "actualEnd": null,
       "actualEndIsProvisional": true,
       "totalOriginalS": 28800,
       "subtaskCount": 1,
@@ -25,7 +25,7 @@
     {
       "key": "PAY-11",
       "actualStart": "2026-03-02",
-      "actualEnd": "2026-03-03"
+      "actualEnd": null
     }
   ],
   "snapshots": [

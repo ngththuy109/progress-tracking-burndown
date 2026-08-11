@@ -6,6 +6,7 @@ import {
   type MatchRule,
   type PhaseDefinition,
   type SignboardColumn,
+  type SubPhaseOrder,
   type TitlePattern,
 } from '@app/shared';
 
@@ -62,6 +63,19 @@ export type DraftAction =
   | { readonly type: 'UPDATE_COLUMN'; readonly index: number; readonly patch: Partial<SignboardColumn> }
   | { readonly type: 'REMOVE_COLUMN'; readonly index: number }
   | { readonly type: 'MOVE_COLUMN'; readonly index: number; readonly delta: -1 | 1 }
+  /** Thêm cả một nhóm thứ tự Sub-phase cho một Phase (dùng cho cả prefill). */
+  | {
+      readonly type: 'ADD_SUB_PHASE_GROUP';
+      readonly phaseCode: string;
+      readonly subPhaseCodes: readonly string[];
+    }
+  | { readonly type: 'ADD_SUB_PHASE'; readonly phaseCode: string }
+  | { readonly type: 'UPDATE_SUB_PHASE'; readonly index: number; readonly subPhaseCode: string }
+  /** Đổi mã Phase của CẢ nhóm — mã Phase là khoá nhóm, không sửa từng dòng được. */
+  | { readonly type: 'RENAME_SUB_PHASE_GROUP'; readonly phaseCode: string; readonly value: string }
+  /** Đổi chỗ trong PHẠM VI nhóm cùng Phase — không nhảy sang nhóm khác. */
+  | { readonly type: 'MOVE_SUB_PHASE'; readonly index: number; readonly delta: -1 | 1 }
+  | { readonly type: 'REMOVE_SUB_PHASE'; readonly index: number }
   | { readonly type: 'OVERRIDE_PART'; readonly part: InheritablePartKey }
   /** Lưu thành công: bản nháp giờ CHÍNH LÀ bản đang có trên máy chủ. */
   | { readonly type: 'COMMIT' };
@@ -77,6 +91,7 @@ const EMPTY_PAYLOAD: ConfigPayload = {
   phaseDefinitions: [],
   matchRules: [],
   signboardColumns: [],
+  subPhaseOrders: [],
 };
 
 export const EMPTY_DRAFT: DraftState = {
@@ -89,6 +104,7 @@ export const EMPTY_DRAFT: DraftState = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    subPhaseOrders: false,
   },
 };
 
@@ -100,6 +116,7 @@ function payloadOf(config: EffectiveConfigResponse): ConfigPayload {
     phaseDefinitions: config.phaseDefinitions,
     matchRules: config.matchRules,
     signboardColumns: config.signboardColumns,
+    subPhaseOrders: config.subPhaseOrders,
   };
 }
 
@@ -150,6 +167,35 @@ function renumber<T extends { readonly sortOrder?: number; readonly displayOrder
   key: 'sortOrder' | 'displayOrder',
 ): T[] {
   return list.map((item, i) => ({ ...item, [key]: i + 1 }));
+}
+
+/**
+ * Đánh số lại `displayOrder` 1..n TRONG TỪNG NHÓM cùng `phaseCode`.
+ *
+ * Khác `renumber`: thứ tự Sub-phase chỉ có nghĩa trong phạm vi một Phase; đánh
+ * số xuyên nhóm thì Phase thứ hai bắt đầu từ giữa chừng và số hiện ra vô nghĩa.
+ */
+function renumberSubPhases(list: readonly SubPhaseOrder[]): SubPhaseOrder[] {
+  const counters = new Map<string, number>();
+  return list.map((row) => {
+    const next = (counters.get(row.phaseCode) ?? 0) + 1;
+    counters.set(row.phaseCode, next);
+    return { ...row, displayOrder: next };
+  });
+}
+
+/** Vị trí (trong mảng PHẲNG) của dòng liền kề CÙNG NHÓM, hoặc `null` nếu ở biên. */
+function adjacentInGroup(
+  list: readonly SubPhaseOrder[],
+  index: number,
+  delta: -1 | 1,
+): number | null {
+  const row = list[index];
+  if (row === undefined) return null;
+  for (let i = index + delta; i >= 0 && i < list.length; i += delta) {
+    if (list[i]?.phaseCode === row.phaseCode) return i;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +339,67 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
       });
     }
 
+    case 'ADD_SUB_PHASE_GROUP': {
+      const added = action.subPhaseCodes.map((code, i) => ({
+        phaseCode: action.phaseCode,
+        subPhaseCode: code,
+        displayOrder: i + 1,
+      }));
+      return edit({
+        subPhaseOrders: renumberSubPhases([...state.draft.subPhaseOrders, ...added]),
+      });
+    }
+
+    case 'ADD_SUB_PHASE': {
+      const list = state.draft.subPhaseOrders;
+      // Chèn NGAY SAU dòng cuối của nhóm để các dòng cùng Phase đứng liền nhau;
+      // nhóm chưa có dòng nào thì thêm vào cuối danh sách.
+      let insertAt = list.length;
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (list[i]?.phaseCode === action.phaseCode) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+      const next = [...list];
+      next.splice(insertAt, 0, { phaseCode: action.phaseCode, subPhaseCode: '', displayOrder: 0 });
+      return edit({ subPhaseOrders: renumberSubPhases(next) });
+    }
+
+    case 'UPDATE_SUB_PHASE': {
+      const current = state.draft.subPhaseOrders[action.index];
+      if (current === undefined) return state;
+      return edit({
+        subPhaseOrders: replaceAt(state.draft.subPhaseOrders, action.index, {
+          ...current,
+          subPhaseCode: action.subPhaseCode,
+        }),
+      });
+    }
+
+    case 'RENAME_SUB_PHASE_GROUP':
+      return edit({
+        subPhaseOrders: state.draft.subPhaseOrders.map((row) =>
+          row.phaseCode === action.phaseCode ? { ...row, phaseCode: action.value } : row,
+        ),
+      });
+
+    case 'MOVE_SUB_PHASE': {
+      const list = state.draft.subPhaseOrders;
+      const target = adjacentInGroup(list, action.index, action.delta);
+      if (target === null) return state;
+      const next = [...list];
+      const a = next[action.index] as SubPhaseOrder;
+      next[action.index] = next[target] as SubPhaseOrder;
+      next[target] = a;
+      return edit({ subPhaseOrders: renumberSubPhases(next) });
+    }
+
+    case 'REMOVE_SUB_PHASE':
+      return edit({
+        subPhaseOrders: renumberSubPhases(removeAt(state.draft.subPhaseOrders, action.index)),
+      });
+
     case 'OVERRIDE_PART':
       // Chỉ đổi cờ kế thừa. Nội dung giữ nguyên bản đang thấy, để PM sửa tiếp
       // từ đó chứ không phải bắt đầu lại từ danh sách trống.
@@ -356,4 +463,25 @@ export function payloadToPreview(state: DraftState): ConfigPayload {
 /** Mã Phase đang có, để ô chọn Phase của luật khớp không cho gõ tay mã sai. */
 export function phaseCodeOptions(state: DraftState): readonly string[] {
   return state.draft.phaseDefinitions.map((p) => p.phaseCode).filter((code) => code !== '');
+}
+
+/** Một nhóm thứ tự Sub-phase của một Phase, kèm chỉ số PHẲNG để dispatch action. */
+export interface SubPhaseGroup {
+  readonly phaseCode: string;
+  readonly rows: readonly { readonly row: SubPhaseOrder; readonly index: number }[];
+}
+
+/**
+ * Gom `subPhaseOrders` (mảng phẳng — đúng hình dạng lưu) thành nhóm theo Phase
+ * để vẽ. Nhóm xếp theo lần xuất hiện ĐẦU TIÊN — reducer đã giữ các dòng cùng
+ * Phase đứng liền nhau nên thứ tự này ổn định.
+ */
+export function subPhaseGroups(state: DraftState): readonly SubPhaseGroup[] {
+  const groups = new Map<string, { row: SubPhaseOrder; index: number }[]>();
+  state.draft.subPhaseOrders.forEach((row, index) => {
+    const list = groups.get(row.phaseCode);
+    if (list) list.push({ row, index });
+    else groups.set(row.phaseCode, [{ row, index }]);
+  });
+  return [...groups.entries()].map(([phaseCode, rows]) => ({ phaseCode, rows }));
 }

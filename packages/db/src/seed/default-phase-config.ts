@@ -77,6 +77,15 @@ export const DEFAULT_PHASE_CONFIG: ConfigPayload = {
   ],
 
   /**
+   * Thứ tự Sub-phase trong từng Phase trên Signboard — Mặc định RỖNG.
+   *
+   * Sub-phase là thứ của từng dự án (ví dụ `FUT_ConfirmPoint` trước
+   * `FUT_TestCase`), không có bộ "chuẩn" nào để seed. Chưa khai thì bảng tự xếp:
+   * khớp Phase → theo `display_order`, lạ → A→Z, "(No sub-phase)" cuối.
+   */
+  subPhaseOrders: [],
+
+  /**
    * `side` — phía làm loại task đó (T-37): VN = người làm, JP = khách hàng
    * review. Quyết định ngày kế hoạch của Sub-task được kiểm tra với lịch nghỉ
    * nào. Mặc định ở đây chỉ là điểm xuất phát hợp lý (JM = phía khách hàng

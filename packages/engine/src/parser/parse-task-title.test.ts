@@ -25,6 +25,7 @@ const BASE: ConfigPayload = {
     { keyword: 'Dev', matchMode: 'CONTAINS', phaseCode: 'DEVELOPMENT', matchPriority: 70 },
   ],
   signboardColumns: [],
+  subPhaseOrders: [],
 };
 
 const cfg = (over: Partial<ConfigPayload> = {}): EffectiveConfig => ({
@@ -39,6 +40,7 @@ const cfg = (over: Partial<ConfigPayload> = {}): EffectiveConfig => ({
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 });
 
