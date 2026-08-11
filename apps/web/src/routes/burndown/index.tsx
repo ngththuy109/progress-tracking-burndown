@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import type { ChartMode, ChartSeries, ExplainRow } from '@app/shared';
 import { useBurndown, useExplainDay } from '../../api/use-burndown.js';
 import { BurndownChart } from '../../components/chart/burndown-chart.js';
+import { EpicPicker } from '../../components/epic-picker/index.js';
 import {
   Badge,
   DataTable,
@@ -41,10 +42,11 @@ export function BurndownScreen() {
 
   if (epicKey === null || epicKey === '') {
     return (
-      <EmptyState
+      <EpicPicker
         icon="📉"
-        title="No Epic selected"
-        description="Open the Epics screen and click Chart on the Epic you want to see."
+        title="Pick an Epic to chart"
+        description="Choose an active Epic below to load its burndown chart."
+        onSelect={(key) => setParams({ epic: key })}
       />
     );
   }
