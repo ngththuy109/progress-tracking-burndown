@@ -39,7 +39,7 @@
 
 | # | User story | Thao tác | Đạt khi thấy | ☐ |
 |---|---|---|---|---|
-| 15 | **US-03** Xem tổng Epic | Mở biểu đồ của một Epic | Hai đường Kế hoạch và Thực tế; trục ngang **không có** thứ Bảy, Chủ nhật | ☐ |
+| 15 | **US-03** Xem tổng Epic | Mở biểu đồ của một Epic | Hai đường Kế hoạch và Thực tế; trục ngang hiện **đủ ngày lịch**, thứ Bảy/Chủ nhật/ngày lễ nằm trong **dải xám**; team có log giờ ngày nghỉ thì đường Thực tế giảm đúng ngày đó (có chấm dữ liệu), nghỉ thật thì đường đi ngang qua dải xám | ☐ |
 | 16 | **US-04** Xem một Phase | Bấm tab *Single Phase*, chọn một Phase | Biểu đồ đổi ngay, **không có màn hình chờ tải** | ☐ |
 | 17 | **US-05** So sánh các Phase | Bấm tab *Compare Phases*, chọn 2–3 Phase | Mỗi Phase một đường màu riêng | ☐ |
 | 18 | **US-11** Giải thích số liệu | Bấm vào một điểm trên biểu đồ | Bảng hiện từng Sub-task, **quy tắc nào** (cột *Rule*) đã áp dụng, và câu giải thích đọc được | ☐ |

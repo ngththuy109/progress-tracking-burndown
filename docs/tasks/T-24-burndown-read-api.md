@@ -218,3 +218,18 @@ Lý do: cộng cả hai chiều thì một Phase về sớm 4 ngày sẽ triệt
 ### Chưa kiểm được ở đây
 
 Mốc **p95 ≤ 800ms** cần PostgreSQL thật với vài chục nghìn dòng `daily_snapshot`. Phần kiểm được bằng máy ngay bây giờ là *"đúng một truy vấn"* — điều kiện cần để đạt mốc đó. Bài đo thật thuộc về T-27.
+
+---
+
+## Cập nhật sau bàn giao — 2026-08 (nhánh `claude/burndown-chart-missing-day`)
+
+- Trục của phản hồi nay là **mọi ngày lịch** trong khoảng; mỗi điểm kèm cờ
+  `isOffDay` (optional trong schema để cache cũ vẫn đọc được). Ngày nghỉ có
+  snapshot mang số thật; chưa có thì `null` — API không bịa số, tầng hiển thị
+  tự kéo phẳng.
+- `missingSnapshotDays` chỉ đếm **ngày làm việc** và chỉ những ngày ≤ snapshot
+  cuối cùng (ngày tương lai chưa tới không phải "thiếu").
+- Chế độ Tổng Epic nới cận trên của trục tới `max(plan_end, ngày snapshot mới
+  nhất)` — Epic trễ hạn không còn bị cắt mất những ngày gần nhất. Chế độ một
+  Phase vẫn co đúng khoảng kế hoạch của Phase; `?from/?to` người gọi chỉ định
+  luôn được tôn trọng.

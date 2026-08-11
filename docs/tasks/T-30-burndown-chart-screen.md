@@ -160,3 +160,24 @@ Card không nói, nhưng bốn Phase × hai đường là **tám đường chồ
 `useExplainDay` có `enabled: date !== null`. Nạp sẵn cho cả 10 ngày là gọi thừa 10 request cho một thứ hiếm khi mở. Có test khẳng định số lần gọi bằng 0 trước khi bấm.
 
 Phần `mismatch` (snapshot lệch số tính lại) hiện thành khối đỏ kèm câu *"bấm Đồng bộ lại ở màn hình Epic"* — đúng thứ runbook cần.
+
+---
+
+## Cập nhật sau bàn giao — 2026-08 (nhánh `claude/burndown-chart-missing-day`)
+
+Ba điểm trong card này **không còn đúng** sau loạt chỉnh sửa theo yêu cầu người
+dùng thực tế (PRD US-01 đã cập nhật kèm ghi chú cùng ngày):
+
+- ~~"Trục thời gian chỉ có ngày làm việc"~~ → trục vẽ **đủ ngày lịch**; Thứ
+  7/CN/ngày lễ nằm trong **dải xám** (`ReferenceArea`). Ngày nghỉ team có log
+  giờ thì vẽ số thật y như ngày thường (worker nay chốt snapshot cho mọi ngày
+  lịch); nghỉ thật thì kéo phẳng từ ngày liền trước, không chấm dữ liệu.
+- Test cũ `trục thời gian không chứa thứ Bảy và Chủ nhật` đã thay bằng bộ test
+  mới trong `burndown-chart.test.ts` (chèn ngày nghỉ, kéo phẳng, gom dải xám)
+  và `burndown-chart.render.test.tsx` (đo hình học SVG của cầu nối).
+- Cạm bẫy "trục theo ngày lịch tạo bậc thang giả" được giải bằng dải xám: đoạn
+  nằm ngang qua ngày nghỉ giờ là **chủ đích có chú giải**, không phải hiểu nhầm.
+
+Thêm mới cùng đợt: ngày làm việc thiếu snapshot được nối bằng **nét đứt mờ**
+(đường chính vẫn đứt — nét liền chỉ dành cho số đo thật, E-12), và trục Tổng
+Epic kéo tới ngày snapshot mới nhất khi Epic trễ hạn qua `plan_end`.

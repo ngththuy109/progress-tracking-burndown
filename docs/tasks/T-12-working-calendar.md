@@ -152,3 +152,16 @@ Ba hàm thời gian trả kết quả đúng cho cả múi giờ Việt Nam và 
 ### Một chỗ card cảnh báo và tôi kiểm chứng riêng
 
 Bitmask: bit 0 = thứ Hai theo luxon (`weekday`: T2 = 1 … CN = 7), **không** giống `Date.getDay()` (CN = 0). Có hai test riêng khẳng định bit 0 là thứ Hai và bit 6 là Chủ nhật — nếu ai đó đổi sang `getDay()` thì cả hai đỏ ngay.
+
+---
+
+## Cập nhật sau bàn giao — 2026-08 (nhánh `claude/burndown-chart-missing-day`)
+
+Quy ước bit của `workdays_mask` (bit 0 = T2 … bit 6 = CN) nay được **cưỡng chế
+ở tầng database**: migration `20260811140000_workdays_mask_guard` tự chữa các
+giá trị 1-indexed đã gặp thật (62→31, 126→63, 254→127) và thêm hai CHECK
+constraint (khoảng 1..127, bắt buộc có Thứ 2 — mask 1-indexed luôn mất Thứ 2,
+đó chính là chữ ký của lỗi). Kèm cảnh báo runtime `workdaysMaskWarning()` ở cả
+hai đường đọc lịch và phần hiển thị ngày làm việc đã giải mã trên màn Days off.
+Bối cảnh: một bản ghi lịch tạo tay mang mask 126 từng làm mọi Thứ 2 biến mất
+khỏi biểu đồ Burndown — xem RUNBOOK mục "Lịch sai quy ước bit".
