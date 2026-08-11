@@ -8,7 +8,7 @@ const VALID: ConfigPayload = {
   subtaskPatterns: [{ patternText: '[{function}]_{task}', sortOrder: 1 }],
   phaseDefinitions: [{ phaseCode: 'DESIGN', labelVi: 'Thiết kế', displayOrder: 1 }],
   matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 }],
-  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
 };
 
 describe('validateDraftClient', () => {
@@ -51,7 +51,7 @@ describe('validateDraftClient', () => {
       ...VALID,
       signboardColumns: [
         ...VALID.signboardColumns,
-        { taskCode: '', labelVi: '', displayOrder: 2 },
+        { taskCode: '', labelVi: '', side: 'VN', displayOrder: 2 },
       ],
     };
     const paths = validateDraftClient(draft).map((i) => i.path);

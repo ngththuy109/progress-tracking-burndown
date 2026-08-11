@@ -29,7 +29,7 @@ const CONFIG: EffectiveConfig = {
   matchRules: [
     { keyword: 'Development', matchMode: 'CONTAINS', phaseCode: 'DEVELOPMENT', matchPriority: 40 },
   ],
-  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
   projectKey: null,
   globalVersion: 1,
   projectVersion: null,

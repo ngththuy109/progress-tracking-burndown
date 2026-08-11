@@ -256,6 +256,9 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
       const added: SignboardColumn = {
         taskCode: action.taskCode ?? '',
         labelVi: action.taskCode ?? '',
+        // Mặc định phía VN — phần lớn loại task do người VN làm; cột review
+        // của khách hàng thì PM đổi sang JP ngay trên dòng đó.
+        side: 'VN',
         displayOrder: state.draft.signboardColumns.length + 1,
       };
       return edit({ signboardColumns: [...state.draft.signboardColumns, added] });

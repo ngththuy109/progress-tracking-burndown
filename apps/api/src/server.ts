@@ -8,6 +8,8 @@ import { registerHttpMetrics } from './observability/http-metrics.js';
 import { createOpsHealthPort } from './adapters/ops.adapters.js';
 import { registerEpicRoutes } from './routes/epics.routes.js';
 import { registerBurndownRoutes } from './routes/burndown.routes.js';
+import { registerCalendarRoutes } from './routes/calendars.routes.js';
+import { createCalendarStore } from './adapters/calendars.adapters.js';
 import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
 import { registerSignboardRoutes } from './routes/signboard.routes.js';
 import { registerPhaseSubtaskRoutes } from './routes/phase-subtasks.routes.js';
@@ -139,15 +141,27 @@ export function createServer(deps: ServerDeps): FastifyInstance {
     resolvePrincipal: getPrincipal,
   });
 
+  const chartCache = createChartCache({
+    redis: deps.redis as unknown as CacheRedis,
+    // Cache trượt hay Redis chết đều chỉ là cảnh báo — biểu đồ vẫn phải vẽ
+    // được từ database. Coi Redis chết là lỗi 500 sẽ biến một tối ưu thành
+    // phụ thuộc cứng.
+    onWarning: (code, detail) => app.log.warn({ event: code, detail }, 'Cache biểu đồ trượt'),
+  });
+
   registerBurndownRoutes(app, {
     reads: createBurndownReadPort(deps.prisma),
-    cache: createChartCache({
-      redis: deps.redis as unknown as CacheRedis,
-      // Cache trượt hay Redis chết đều chỉ là cảnh báo — biểu đồ vẫn phải vẽ
-      // được từ database. Coi Redis chết là lỗi 500 sẽ biến một tối ưu thành
-      // phụ thuộc cứng.
-      onWarning: (code, detail) => app.log.warn({ event: code, detail }, 'Cache biểu đồ trượt'),
-    }),
+    cache: chartCache,
+    resolvePrincipal: getPrincipal,
+  });
+
+  // Lịch làm việc & ngày nghỉ (T-36). Dùng CHUNG cache biểu đồ và hàng đợi
+  // dirty:epics: sửa ngày lễ phải xoá cache chart và đánh dấu Epic tính lại,
+  // y như sửa cấu hình Phase.
+  registerCalendarRoutes(app, {
+    store: createCalendarStore(deps.prisma),
+    dirty: createDirtyEpicQueue(deps.redis),
+    invalidateChart: (epicKey) => chartCache.invalidateEpic(epicKey),
     resolvePrincipal: getPrincipal,
   });
 

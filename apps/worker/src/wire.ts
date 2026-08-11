@@ -383,6 +383,12 @@ async function loadEpicContext(
     throw new Error(`Epic ${epicKey} không có trong sổ theo dõi — không xử lý được.`);
   }
   const config = await loadEffectiveConfig(ctx.prisma, epic.projectKey);
+  // Đọc lại lịch ở ĐẦU MỖI JOB thay vì cache vĩnh viễn trong RAM: admin vừa
+  // import ngày lễ (T-36) mà worker chạy suốt vài tuần không restart thì lịch
+  // cũ vẫn được dùng — và đường Kế hoạch sẽ giảm đều trong cả tuần nghỉ Tết
+  // (đúng cảnh báo trong T-12). Cache vẫn giữ để các lần gọi TRONG CÙNG một
+  // job dùng chung; query lịch rất nhẹ nên đọc lại mỗi job không đáng kể.
+  ctx.calendarCache.invalidate(epic.calendarId);
   const calendar = await getCalendar(ctx.prisma, epic.calendarId, ctx.calendarCache);
   return { config, calendar };
 }

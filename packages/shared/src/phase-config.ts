@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CONFIG_SCOPE, MATCH_MODE } from './enums.js';
+import { WORK_SIDE } from './api-calendar.js';
 
 /**
  * Cấu hình nhận diện Phase — PRD §2.2.
@@ -47,6 +48,11 @@ export const signboardColumnSchema = z.object({
   taskCode: z.string().min(1, 'Column code is required.').max(32, 'Column code is at most 32 characters.'),
   labelVi: z.string().min(1, 'Column name is required.'),
   labelJa: z.string().nullable().optional(),
+  /**
+   * Phía làm loại task này — VN (người làm) hay JP (khách hàng review), T-37.
+   * `default('VN')` để payload cũ (trước khi có trường này) vẫn parse được.
+   */
+  side: z.enum(WORK_SIDE).default('VN'),
   displayOrder: z.number().int(),
 });
 

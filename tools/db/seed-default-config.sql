@@ -81,12 +81,12 @@ BEGIN
     (set_id, '本番', 'CONTAINS', 'RELEASE', 50),
     (set_id, 'Triển khai', 'CONTAINS', 'RELEASE', 50);
 
-  INSERT INTO signboard_column (config_set_id, task_code, label_vi, label_ja, display_order) VALUES
-    (set_id, 'Create', 'Tạo mới', '作成', 1),
-    (set_id, 'BALReview', 'BAL review', 'BALレビュー', 2),
-    (set_id, 'FixCommentBAL', 'Sửa comment BAL', 'BAL指摘対応', 3),
-    (set_id, 'JMReview', 'JM review', 'JMレビュー', 4),
-    (set_id, 'FixCommentJM', 'Sửa comment JM', 'JM指摘対応', 5);
+  INSERT INTO signboard_column (config_set_id, task_code, label_vi, label_ja, side, display_order) VALUES
+    (set_id, 'Create', 'Tạo mới', '作成', 'VN', 1),
+    (set_id, 'BALReview', 'BAL review', 'BALレビュー', 'VN', 2),
+    (set_id, 'FixCommentBAL', 'Sửa comment BAL', 'BAL指摘対応', 'VN', 3),
+    (set_id, 'JMReview', 'JM review', 'JMレビュー', 'JP', 4),
+    (set_id, 'FixCommentJM', 'Sửa comment JM', 'JM指摘対応', 'VN', 5);
 
   RAISE NOTICE '[seed] Đã tạo bộ Mặc định (GLOBAL) version %.', next_version;
 END $$;

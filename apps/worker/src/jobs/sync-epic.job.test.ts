@@ -27,8 +27,8 @@ const PAYLOAD: ConfigPayload = {
     { keyword: 'Test', matchMode: 'CONTAINS', phaseCode: 'TESTING', matchPriority: 50 },
   ],
   signboardColumns: [
-    { taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 },
-    { taskCode: 'BALReview', labelVi: 'BAL review', displayOrder: 2 },
+    { taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 },
+    { taskCode: 'BALReview', labelVi: 'BAL review', side: 'VN', displayOrder: 2 },
   ],
 };
 

@@ -72,6 +72,7 @@ export async function findActiveConfigSet(
       taskCode: c.taskCode,
       labelVi: c.labelVi,
       labelJa: c.labelJa,
+      side: c.side as 'VN' | 'JP',
       displayOrder: c.displayOrder,
     })),
   };
@@ -159,6 +160,7 @@ export async function saveNewVersion(
             taskCode: c.taskCode,
             labelVi: c.labelVi,
             labelJa: c.labelJa ?? null,
+            side: c.side,
             displayOrder: c.displayOrder,
           })),
         },
@@ -240,6 +242,7 @@ export async function rollbackToVersion(
           taskCode: c.taskCode,
           labelVi: c.labelVi,
           labelJa: c.labelJa,
+          side: c.side as 'VN' | 'JP',
           displayOrder: c.displayOrder,
         })),
       },
