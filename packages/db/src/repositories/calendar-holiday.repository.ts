@@ -28,14 +28,19 @@ export interface CalendarWithHolidayMeta {
   readonly hoursPerDay: number;
   readonly holidayCount: number;
   readonly years: number[];
+  readonly makeupWorkdayCount: number;
+  readonly makeupYears: number[];
 }
 
-/** Danh sách lịch kèm số ngày lễ đã khai — cho `GET /api/calendars`. */
+/** Danh sách lịch kèm số ngày lễ & ngày làm bù đã khai — cho `GET /api/calendars`. */
 export async function listCalendarsWithHolidayMeta(
   prisma: PrismaClient,
 ): Promise<CalendarWithHolidayMeta[]> {
   const rows = await prisma.workCalendar.findMany({
-    include: { holidays: { select: { holidayDate: true } } },
+    include: {
+      holidays: { select: { holidayDate: true } },
+      makeupWorkdays: { select: { workDate: true } },
+    },
     orderBy: { calendarId: 'asc' },
   });
 
@@ -46,6 +51,10 @@ export async function listCalendarsWithHolidayMeta(
     hoursPerDay: Number(r.hoursPerDay),
     holidayCount: r.holidays.length,
     years: [...new Set(r.holidays.map((h) => h.holidayDate.getUTCFullYear()))].sort(
+      (a, b) => a - b,
+    ),
+    makeupWorkdayCount: r.makeupWorkdays.length,
+    makeupYears: [...new Set(r.makeupWorkdays.map((m) => m.workDate.getUTCFullYear()))].sort(
       (a, b) => a - b,
     ),
   }));

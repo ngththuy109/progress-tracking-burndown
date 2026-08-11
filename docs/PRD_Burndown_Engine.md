@@ -3261,7 +3261,7 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 
 ---
 
-## Phụ lục C — Bổ sung 2026-08: Ngày nghỉ hai phía & kiểm tra plan (T-36 → T-38)
+## Phụ lục C — Bổ sung 2026-08: Ngày nghỉ hai phía, kiểm tra plan & ngày làm bù (T-36 → T-39)
 
 > Phần này bổ sung SAU bàn giao v1.0, không viết lại lịch sử các mục trên.
 > Nguồn gốc: đường Kế hoạch bị "chia đều cho tất cả các ngày" vì hai lỗ hổng —
@@ -3318,6 +3318,66 @@ nghỉ khác ngày nhau (Tết ↔ Golden Week…), vì vậy:
 - `BurndownResponse.calendarWarnings[]`: lịch không tồn tại / chưa khai ngày
   lễ nào → cảnh báo hiện thẳng trên màn Burndown.
 - Data-fix một lần: `tools/db/fix-epic-calendar.sql`.
+
+### C.5 Ngày làm bù (T-39)
+
+NGƯỢC nghĩa với ngày lễ: một ngày cuối tuần (theo `workdays_mask`) được xếp
+**làm việc** để bù cho một ngày nghỉ khác — rất phổ biến quanh Tết ở VN, khi công
+ty đổi lịch để có kỳ nghỉ dài liền mạch. Trước T-39 không có cách nào khai điều
+này, nên đường Kế hoạch đứng yên qua ngày làm bù và biểu đồ bôi xám nó như ngày
+nghỉ dù cả team đang làm.
+
+- **Mô hình dữ liệu:** bảng RIÊNG `calendar_makeup_workday(calendar_id,
+  work_date, label)` — song song `calendar_holiday`, cố ý KHÔNG thêm cột `kind`
+  để giữ nguyên ngữ nghĩa "bảng holiday chỉ chứa ngày nghỉ" và toàn bộ logic/test
+  ngày lễ hiện có (rủi ro hồi quy thấp).
+- **Engine (`isWorkday`):** thứ tự ưu tiên **ngày lễ → nghỉ (luôn thắng) → ngày
+  làm bù → làm → còn lại theo mask**. Nhờ đó `listWorkdays`/`countWorkdays` và
+  đường Kế hoạch (§4.4, T-16) tự tính ngày làm bù như ngày làm việc bình thường,
+  và cờ `isOffDay` trên biểu đồ tự thành `false` → tầng vẽ KHÔNG bôi xám.
+- **Hai chỗ dựng lịch đều nạp make-up:** `getCalendar` (worker + kiểm tra plan)
+  và adapter đọc biểu đồ (đường vẽ chart dựng lịch riêng bằng SQL thô, không đi
+  qua `getCalendar`).
+- **API** (cùng phân quyền & lan truyền như ngày lễ — chỉ ADMIN ghi; sửa xong
+  xoá cache biểu đồ + đánh dấu Epic ACTIVE tính lại):
+  - `GET /api/calendars/{id}/makeup-workdays?year=`.
+  - `POST /api/calendars/{id}/makeup-workdays/import` — thân
+    `{mode: MERGE | REPLACE_YEAR, year?, makeupWorkdays: [{date, label?}]}`.
+  - `DELETE /api/calendars/{id}/makeup-workdays/{date}`.
+- **UI:** màn **Days off** thêm mục *Make-up workdays (làm bù)* cho từng lịch —
+  xem theo năm, dán import, xoá; cùng khuôn với ngày lễ.
+- **Xung đột:** nếu một ngày vừa khai lễ vừa khai làm bù thì **ngày lễ THẮNG**
+  (không có ràng buộc DB; quyết định ở `isWorkday`, có test khoá).
+
+DDL bổ sung Bảng 8 (migration `20260811150000_makeup_workday`):
+
+```sql
+CREATE TABLE calendar_makeup_workday (
+    calendar_id  VARCHAR(32) NOT NULL REFERENCES work_calendar(calendar_id) ON DELETE CASCADE,
+    work_date    DATE        NOT NULL,
+    label        TEXT,
+    PRIMARY KEY (calendar_id, work_date)
+);
+```
+
+### C.6 Chỉnh trang biểu đồ Burndown (2026-08)
+
+Điều chỉnh giao diện màn Burndown, **thay cho phần mô tả gốc §5.1** ở trên:
+
+1. **Vạch lưới theo NGÀY:** trục X vẽ một vạch dọc cho MỖI ngày lịch
+   (`interval={0}`), nhãn ngày giãn thưa cho khỏi chồng chữ — trước đây Recharts
+   tự bỏ bớt vạch nên phân định ngày lúc có lúc không, nhìn không đều.
+2. **Đường Kế hoạch đậm & rõ:** đổi từ pha-trắng-nét-mảnh (gần như vô hình) sang
+   màu ĐẬM hơn màu Thực tế + nét dày + nét đứt to, cho dễ nhìn.
+3. **Gỡ chế độ *Compare Phases*:** màn hình chỉ còn *Whole Epic* và *Single
+   Phase*; ô chọn Phase thành chọn ĐƠN. `ChartMode` trong hợp đồng API vẫn còn
+   `COMPARE` (backend không đổi), chỉ GIAO DIỆN gỡ. → thay Scenario "So sánh
+   nhiều Phase" và ô `☐ So sánh nhiều Phase` trong mockup §5.1.
+4. **Ngày nghỉ LẺ giữa tuần hiện rõ:** dải xám vẽ theo PIXEL (mỗi ngày một ô, nới
+   nửa ô mỗi bên) thay cho `ReferenceArea` từ-điểm-tới-điểm — dải một ngày (ngày
+   lễ lẻ giữa tuần) trước đây rộng 0px nên mất hút, nay có ô xám đầy đủ.
+5. **Ngày làm bù KHÔNG bôi xám** (C.5): là ngày làm việc nên nằm ngoài dải xám,
+   và đường Kế hoạch/Thực tế giảm bình thường trên ngày đó.
 
 ---
 

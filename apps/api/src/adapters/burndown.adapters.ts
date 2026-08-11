@@ -43,6 +43,17 @@ export function createBurndownReadPort(prisma: PrismaClient): BurndownReadPort {
         epicKey,
       );
 
+      // Ngày LÀM BÙ: cuối tuần được xếp làm việc. Phải nạp ở ĐÂY (đường đọc biểu
+      // đồ dựng lịch riêng, không đi qua getCalendar) để đường Kế hoạch giảm trên
+      // ngày làm bù và trục biểu đồ KHÔNG bôi xám ngày đó.
+      const makeup = await prisma.$queryRawUnsafe<{ work_date: Date }[]>(
+        `SELECT m.work_date
+           FROM calendar_makeup_workday m
+           JOIN tracked_epic e ON e.calendar_id = m.calendar_id
+          WHERE e.epic_key = $1`,
+        epicKey,
+      );
+
       const warnings: string[] = [];
       // Thiếu lịch thì dùng mặc định và NÓI RA, không im lặng — sai múi giờ
       // làm lệch mọi mốc chốt sổ mà nhìn số vẫn thấy hợp lý.
@@ -73,6 +84,7 @@ export function createBurndownReadPort(prisma: PrismaClient): BurndownReadPort {
         workdaysMask: row.workdays_mask ?? DEFAULT_WORKDAYS_MASK,
         hoursPerDay: row.hours_per_day ?? DEFAULT_HOURS_PER_DAY,
         holidays: new Set(holidays.map((h) => h.holiday_date.toISOString().slice(0, 10))),
+        makeupWorkdays: new Set(makeup.map((m) => m.work_date.toISOString().slice(0, 10))),
         warnings,
       };
 

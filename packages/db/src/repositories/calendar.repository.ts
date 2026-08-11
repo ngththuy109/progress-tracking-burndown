@@ -62,7 +62,10 @@ export async function getCalendar(
 
   const row = await prisma.workCalendar.findUnique({
     where: { calendarId },
-    include: { holidays: { select: { holidayDate: true } } },
+    include: {
+      holidays: { select: { holidayDate: true } },
+      makeupWorkdays: { select: { workDate: true } },
+    },
   });
 
   const calendar: WorkCalendar =
@@ -73,6 +76,7 @@ export async function getCalendar(
           workdaysMask: DEFAULT_WORKDAYS_MASK,
           hoursPerDay: DEFAULT_HOURS_PER_DAY,
           holidays: new Set<string>(),
+          makeupWorkdays: new Set<string>(),
           warnings: [
             `Không tìm thấy lịch làm việc "${calendarId}". Đang dùng mặc định ` +
               `Thứ Hai–Thứ Sáu, múi giờ ${FALLBACK_TIMEZONE}, không có ngày lễ. ` +
@@ -88,6 +92,12 @@ export async function getCalendar(
           // là đúng. Đừng đổi múi giờ ở đây: `2026-02-17` là ngày lễ ở mọi múi
           // giờ dùng lịch này, không phải một khoảnh khắc cụ thể.
           holidays: new Set(row.holidays.map((h) => h.holidayDate.toISOString().slice(0, 10))),
+          // Ngày làm bù: cùng quy ước ngày dương lịch như holidays — cắt lấy
+          // phần ngày, không đổi múi giờ. `?? []` phòng bản ghi cũ chưa có quan
+          // hệ này (makeupWorkdays là trường THÊM SAU, optional trên WorkCalendar).
+          makeupWorkdays: new Set(
+            (row.makeupWorkdays ?? []).map((m) => m.workDate.toISOString().slice(0, 10)),
+          ),
           warnings: [
             // Mask sai quy ước bit (thiếu Thứ Hai / ngoài 7 bit) làm cả tuần
             // trượt một ngày — Thứ Hai lặng lẽ biến mất khỏi biểu đồ. Kêu to

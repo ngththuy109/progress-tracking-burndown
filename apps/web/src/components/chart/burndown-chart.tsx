@@ -1,10 +1,10 @@
 import { useMemo, type ReactElement } from 'react';
 import {
   CartesianGrid,
+  Customized,
   Legend,
   Line,
   LineChart,
-  ReferenceArea,
   ReferenceLine,
   Tooltip,
   XAxis,
@@ -29,19 +29,23 @@ const PLANNED_FALLBACK = '#9ca3af';
 const OFF_DAY_FILL = '#9ca3af';
 const OFF_DAY_FILL_OPACITY = 0.18;
 
+/** Đường Kế hoạch làm ĐẬM hơn màu Thực tế bao nhiêu — pha 40% về phía đen. */
+const PLANNED_DARKEN = 0.4;
+
 /**
  * Màu của đường Kế hoạch, suy ra từ màu đường Thực tế cùng Phase.
  *
- * Pha 55% về phía trắng: hai đường RÕ RÀNG khác màu (PM từng nhầm vì trước đây
- * chỉ khác mỗi nét đứt), nhưng vẫn cùng tông để mắt gom được cặp Kế hoạch /
- * Thực tế của cùng một Phase khi có nhiều Phase trên biểu đồ.
+ * Pha 40% về phía ĐEN: đường Kế hoạch trước đây pha về trắng nên quá nhạt, gần
+ * như chìm vào nền (PM báo khó nhìn). Nay làm ĐẬM hơn hẳn màu Thực tế — vẫn
+ * cùng tông để mắt gom được cặp Kế hoạch / Thực tế của cùng một Phase, nhưng
+ * nổi rõ; nét đứt đậm bên dưới lo phần phân biệt với đường Thực tế.
  */
 export function plannedColorOf(actualHex: string): string {
   const hex = /^#([0-9a-fA-F]{6})$/.exec(actualHex.trim())?.[1];
   if (hex === undefined) return PLANNED_FALLBACK;
 
   const rgb = parseInt(hex, 16);
-  const toward = (channel: number): number => Math.round(channel + (255 - channel) * 0.55);
+  const toward = (channel: number): number => Math.round(channel * (1 - PLANNED_DARKEN));
   const r = toward((rgb >> 16) & 0xff);
   const g = toward((rgb >> 8) & 0xff);
   const b = toward(rgb & 0xff);
@@ -163,9 +167,9 @@ export function toChartRows(series: readonly ChartSeries[]): Row[] {
  * Gom các ngày nghỉ LIỀN NHAU thành từng dải để tô một khối xám cho cả dải
  * (T7+CN là một dải, tuần nghỉ Tết là một dải dài).
  *
- * Hạn chế đã biết: trục category của Recharts đặt mỗi ngày ở MỘT ĐIỂM, nên dải
- * chỉ có một ngày (ngày lễ lẻ giữa tuần) rộng 0px — không nhìn thấy khối xám,
- * nhưng vẫn còn nhãn tooltip "day off" và điểm dữ liệu bị ẩn.
+ * Dải MỘT ngày (ngày lễ lẻ giữa tuần) vẫn hợp lệ: `OffDayBands` tô theo pixel,
+ * nới nửa ô mỗi bên nên dải một ngày rộng đúng một ô và NHÌN THẤY được — trước
+ * đây tô bằng `ReferenceArea` từ điểm-tới-điểm thì dải một ngày rộng 0px, mất hút.
  */
 export function offDayRuns(rows: readonly Row[]): { from: string; to: string }[] {
   const runs: { from: string; to: string }[] = [];
@@ -214,6 +218,130 @@ export function measuredOnlyDot(props: {
   return <circle key={props.key} cx={cx} cy={cy} r={3} stroke={stroke} strokeWidth={1} fill="#fff" />;
 }
 
+/**
+ * Bề rộng gần đúng một nhãn ngày `YYYY-MM-DD` cần để không chồng lên nhau (px).
+ * Dùng để giãn nhãn cho thưa; VẠCH LƯỚI vẫn một vạch mỗi ngày.
+ */
+const DAY_LABEL_WIDTH_PX = 78;
+
+/**
+ * Chọn tập ngày ĐƯỢC GHI NHÃN sao cho nhãn không chồng nhau, giãn đều.
+ *
+ * Trục vẫn có MỘT tick mỗi ngày (`interval={0}` bên dưới) nên lưới phân định đều
+ * từng ngày; chỉ nhãn là thưa bớt. Ẩn nhãn KHÔNG làm mất vạch lưới vì lưới bám
+ * theo vị trí tick, không theo việc có vẽ chữ hay không.
+ */
+export function labelledDates(dates: readonly string[], plotWidthPx: number): Set<string> {
+  const maxLabels = Math.max(2, Math.floor(plotWidthPx / DAY_LABEL_WIDTH_PX));
+  const step = Math.max(1, Math.ceil(dates.length / maxLabels));
+  return new Set(dates.filter((_, i) => i % step === 0));
+}
+
+/**
+ * Nhãn trục ngày: chỉ vẽ chữ cho ngày nằm trong `shown`, còn lại trả về nhóm
+ * rỗng. Tick (và vạch lưới) của mọi ngày vẫn do Recharts vẽ như thường.
+ */
+export function dayAxisTick(
+  props: { x?: number; y?: number; payload?: { value?: string | number } },
+  shown: ReadonlySet<string>,
+): ReactElement {
+  const { x, y, payload } = props;
+  const value = String(payload?.value ?? '');
+  if (!shown.has(value) || typeof x !== 'number' || typeof y !== 'number') return <g />;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text dy={12} textAnchor="middle" fontSize={11} fill="#4b5563">
+        {value}
+      </text>
+    </g>
+  );
+}
+
+/** Trục X mà Recharts bơm vào `<Customized>` — chỉ khai phần dải ngày nghỉ dùng. */
+interface InjectedAxis {
+  readonly scale?: (value: string) => number | undefined;
+}
+
+interface OffDayBandsProps {
+  readonly runs: readonly { from: string; to: string }[];
+  readonly rows: readonly Row[];
+  // Recharts tự bơm hai prop dưới đây vào con của `<Customized>` lúc chạy.
+  readonly xAxisMap?: Record<string, InjectedAxis>;
+  readonly offset?: {
+    readonly top?: number;
+    readonly left?: number;
+    readonly width?: number;
+    readonly height?: number;
+  };
+}
+
+/**
+ * Tô xám ngày nghỉ theo PIXEL — mỗi ngày đúng MỘT ô, kể cả ngày lễ LẺ giữa tuần.
+ *
+ * `ReferenceArea` cũ tô từ điểm ngày đầu đến điểm ngày cuối của dải, nên dải chỉ
+ * một ngày (ngày lễ lẻ, hai bên là ngày làm việc) rộng 0px và biến mất. Ở đây lấy
+ * hàm `scale` của trục để biết bề rộng một ô rồi nới mỗi dải NỬA Ô ra hai bên:
+ * cuối tuần phủ trọn hai ô T7+CN, còn ngày lễ lẻ vẫn được một ô đầy đủ — nhìn rõ.
+ *
+ * Là con của `<Customized>` nên Recharts tự bơm `xAxisMap` và `offset`; hai prop
+ * `runs`/`rows` thì màn hình truyền thẳng vào.
+ */
+export function OffDayBands({ runs, rows, xAxisMap, offset }: OffDayBandsProps): ReactElement | null {
+  const axisId = xAxisMap === undefined ? undefined : Object.keys(xAxisMap)[0];
+  const scale = axisId === undefined ? undefined : xAxisMap?.[axisId]?.scale;
+  const { top, left, width: plotWidth, height: plotHeight } = offset ?? {};
+
+  if (
+    typeof scale !== 'function' ||
+    typeof top !== 'number' ||
+    typeof left !== 'number' ||
+    typeof plotWidth !== 'number' ||
+    typeof plotHeight !== 'number' ||
+    rows.length === 0
+  ) {
+    // Chưa đo được trục (lần vẽ đầu / môi trường không có layout): bỏ qua, để
+    // biểu đồ vẫn chạy — chỉ là chưa có dải xám.
+    return null;
+  }
+
+  // Bề rộng một ô suy TỪ CHÍNH scale (khoảng cách hai ngày liền nhau) nên đúng
+  // với mọi kiểu trục và mọi lề. Chỉ có đúng một ngày thì lấy cả vùng vẽ.
+  const firstX = scale(rows[0]!.date);
+  const secondX = rows.length >= 2 ? scale(rows[1]!.date) : undefined;
+  const slot =
+    typeof firstX === 'number' && typeof secondX === 'number' ? Math.abs(secondX - firstX) : plotWidth;
+  const plotRight = left + plotWidth;
+
+  return (
+    // `pointerEvents="none"`: dải chỉ để trang trí, không được nuốt cú bấm/rê
+    // chuột — Recharts vẫn nhận đúng sự kiện để mở bảng giải thích và tooltip.
+    <g className="recharts-offday-bands" pointerEvents="none">
+      {runs.map((run) => {
+        const a = scale(run.from);
+        const b = scale(run.to);
+        if (typeof a !== 'number' || typeof b !== 'number') return null;
+        // Nới nửa ô ra hai đầu để một ngày cũng có bề rộng bằng một ô; kẹp trong
+        // vùng vẽ để ngày nghỉ ở sát mép không tràn ra ngoài.
+        const x1 = Math.max(left, Math.min(a, b) - slot / 2);
+        const x2 = Math.min(plotRight, Math.max(a, b) + slot / 2);
+        if (x2 <= x1) return null;
+        return (
+          <rect
+            key={`off-${run.from}`}
+            className="offday-band"
+            x={x1}
+            y={top}
+            width={x2 - x1}
+            height={plotHeight}
+            fill={OFF_DAY_FILL}
+            fillOpacity={OFF_DAY_FILL_OPACITY}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 export function BurndownChart({
   series,
   markers,
@@ -236,6 +364,12 @@ export function BurndownChart({
     () => new Set(rows.filter((r) => r.offDay === true && r.hasData !== true).map((r) => r.date)),
     [rows],
   );
+  // Nhãn ngày giãn theo bề rộng vẽ được (trừ hao trục Y + lề) để khỏi chồng chữ;
+  // vạch lưới thì vẫn một vạch mỗi ngày nhờ `interval={0}` trên XAxis.
+  const labelDates = useMemo(
+    () => labelledDates(rows.map((r) => r.date), Math.max(120, width - 90)),
+    [rows, width],
+  );
 
   return (
     // Kích thước cố định thay vì `ResponsiveContainer`: container đo kích thước
@@ -252,19 +386,25 @@ export function BurndownChart({
     >
       <CartesianGrid strokeDasharray="3 3" />
 
-      {/* Dải xám cho ngày nghỉ — vẽ TRƯỚC các đường để nằm dưới chúng. */}
-      {offRuns.map((r) => (
-        <ReferenceArea
-          key={`off-${r.from}`}
-          x1={r.from}
-          x2={r.to}
-          fill={OFF_DAY_FILL}
-          fillOpacity={OFF_DAY_FILL_OPACITY}
-          stroke="none"
-        />
-      ))}
+      {/*
+        Dải xám ngày nghỉ — khai TRƯỚC các đường để nằm DƯỚI chúng. Tô theo PIXEL
+        qua `<Customized>` (mỗi ngày một ô) thay cho `<ReferenceArea>` cũ vốn làm
+        ngày lễ lẻ giữa tuần rộng 0px và biến mất.
+      */}
+      <Customized component={OffDayBands} runs={offRuns} rows={rows} />
 
-      <XAxis dataKey="date" />
+      {/*
+        `interval={0}`: MỘT tick — và do đó MỘT vạch lưới — cho MỖI ngày, để các
+        đường phân định ngày đều nhau (trước đây Recharts tự bỏ bớt tick nên chỗ
+        có chỗ không). Nhãn ngày vẫn thưa qua `dayAxisTick` cho khỏi chồng chữ.
+      */}
+      <XAxis
+        dataKey="date"
+        interval={0}
+        tick={(props: { x?: number; y?: number; payload?: { value?: string | number } }) =>
+          dayAxisTick(props, labelDates)
+        }
+      />
       <YAxis label={{ value: 'Hours remaining', angle: -90, position: 'insideLeft' }} />
       <Tooltip
         labelFormatter={(label) =>
@@ -325,10 +465,12 @@ export function BurndownChart({
             type="monotone"
             dataKey={`${s.key}__planned`}
             name={`${s.label} · Planned`}
-            // Màu khác đường Thực tế — chỉ khác nét đứt thôi thì hai đường dính
-            // nhau vẫn không phân biệt nổi.
+            // Màu ĐẬM hơn đường Thực tế + nét ĐẬM + nét đứt to: đường Kế hoạch cũ
+            // pha trắng mảnh nên gần như vô hình (PM báo khó nhìn). Nay dày và tối
+            // để đọc rõ, nét đứt to vẫn phân biệt được với đường Thực tế nét liền.
             stroke={plannedColorOf(s.colorHex ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length] ?? FALLBACK_COLORS[0])}
-            strokeDasharray="6 4"
+            strokeWidth={2.5}
+            strokeDasharray="8 4"
             connectNulls={false}
             dot={false}
           />

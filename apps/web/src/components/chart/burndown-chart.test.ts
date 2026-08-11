@@ -184,16 +184,17 @@ describe('plannedColorOf', () => {
     }
   });
 
-  it('vẫn cùng tông với màu gốc — pha về phía trắng, không đổi sắc', () => {
-    // #b45309 (nâu cam) → mỗi kênh chỉ được sáng lên, thứ tự đậm nhạt giữa các
-    // kênh giữ nguyên để mắt vẫn gom được cặp Kế hoạch / Thực tế cùng Phase.
-    expect(plannedColorOf('#b45309')).toBe('#ddb290');
+  it('vẫn cùng tông với màu gốc — pha về phía đen, không đổi sắc', () => {
+    // #b45309 (nâu cam) → mỗi kênh chỉ tối đi cùng tỉ lệ, thứ tự đậm nhạt giữa
+    // các kênh giữ nguyên để mắt vẫn gom được cặp Kế hoạch / Thực tế cùng Phase,
+    // nhưng ĐẬM hơn hẳn màu Thực tế cho dễ nhìn.
+    expect(plannedColorOf('#b45309')).toBe('#6c3205');
   });
 
   it('trả về mã hex hợp lệ đủ 6 chữ số, kể cả khi kênh màu nhỏ', () => {
     // Kênh nhỏ mà thiếu padStart sẽ ra chuỗi 5 ký tự và trình duyệt bỏ màu.
     expect(plannedColorOf('#000000')).toMatch(/^#[0-9a-f]{6}$/);
-    expect(plannedColorOf('#ffffff')).toBe('#ffffff');
+    expect(plannedColorOf('#ffffff')).toBe('#999999');
   });
 
   it('màu cấu hình không đọc được thì dùng xám trung tính, không ném lỗi', () => {

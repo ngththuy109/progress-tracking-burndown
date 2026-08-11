@@ -442,8 +442,9 @@ model WorkCalendar {
   workdaysMask Int      @map("workdays_mask") @db.SmallInt
   hoursPerDay  Decimal  @default(8.0) @map("hours_per_day") @db.Decimal(4, 2)
 
-  holidays     CalendarHoliday[]
-  trackedEpics TrackedEpic[]
+  holidays       CalendarHoliday[]
+  makeupWorkdays CalendarMakeupWorkday[]
+  trackedEpics   TrackedEpic[]
 
   @@map("work_calendar")
 }
@@ -457,6 +458,20 @@ model CalendarHoliday {
 
   @@id([calendarId, holidayDate])
   @@map("calendar_holiday")
+}
+
+// Ngày LÀM BÙ — cuối tuần (theo mask) được xếp làm việc để bù cho một ngày nghỉ
+// khác. Ngược nghĩa với calendar_holiday: engine tính đường Kế hoạch trên ngày
+// này NHƯ ngày làm việc bình thường, và biểu đồ Burndown KHÔNG bôi xám nó.
+model CalendarMakeupWorkday {
+  calendarId String   @map("calendar_id") @db.VarChar(32)
+  workDate   DateTime @map("work_date") @db.Date
+  label      String?
+
+  calendar WorkCalendar @relation(fields: [calendarId], references: [calendarId], onDelete: Cascade)
+
+  @@id([calendarId, workDate])
+  @@map("calendar_makeup_workday")
 }
 
 // ============================================================================

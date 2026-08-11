@@ -43,6 +43,10 @@ export const calendarSummarySchema = z.object({
   holidayCount: z.number().int().nonnegative(),
   /** Các năm đã có ít nhất một ngày lễ — để màn hình cảnh báo năm còn trống. */
   years: z.array(z.number().int()),
+  /** Số ngày LÀM BÙ đã khai. `default(0)` để phản hồi cũ trong cache vẫn parse. */
+  makeupWorkdayCount: z.number().int().nonnegative().default(0),
+  /** Các năm đã có ít nhất một ngày làm bù — cho ô chọn năm gộp đủ cả hai loại. */
+  makeupYears: z.array(z.number().int()).default([]),
 });
 export type CalendarSummary = z.infer<typeof calendarSummarySchema>;
 
@@ -139,3 +143,74 @@ export const deleteHolidayResponseSchema = z.object({
   epicsMarkedForRecompute: z.number().int().nonnegative(),
 });
 export type DeleteHolidayResponse = z.infer<typeof deleteHolidayResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Ngày LÀM BÙ — cùng khuôn với ngày lễ, nhưng NGƯỢC nghĩa (biến ngày nghỉ theo
+// mask thành ngày làm việc). Engine tính đường Kế hoạch trên ngày làm bù như
+// ngày thường; biểu đồ KHÔNG bôi xám. Bảng riêng `calendar_makeup_workday`.
+// ---------------------------------------------------------------------------
+
+export const makeupWorkdaySchema = z.object({
+  /** `'YYYY-MM-DD'` — ngày dương lịch thuần, không kèm múi giờ (C-1). */
+  date: z.string().regex(DATE_ONLY_PATTERN, 'Ngày phải có dạng YYYY-MM-DD.'),
+  label: z.string().max(200).nullable(),
+});
+export type MakeupWorkday = z.infer<typeof makeupWorkdaySchema>;
+
+export const listMakeupWorkdaysResponseSchema = z.object({
+  calendarId: z.string(),
+  /** `null` = trả về toàn bộ, không lọc theo năm. */
+  year: z.number().int().nullable(),
+  makeupWorkdays: z.array(makeupWorkdaySchema),
+});
+export type ListMakeupWorkdaysResponse = z.infer<typeof listMakeupWorkdaysResponseSchema>;
+
+/** Dùng lại `HOLIDAY_IMPORT_MODE` (MERGE / REPLACE_YEAR) — logic import y hệt. */
+export const importMakeupWorkdaysRequestSchema = z
+  .object({
+    mode: z.enum(HOLIDAY_IMPORT_MODE),
+    /** Bắt buộc với `REPLACE_YEAR`; `MERGE` không dùng tới. */
+    year: z.number().int().min(2000).max(2100).nullable().default(null),
+    makeupWorkdays: z
+      .array(makeupWorkdaySchema.extend({ label: z.string().max(200).nullable().default(null) }))
+      .max(MAX_HOLIDAYS_PER_IMPORT, `Mỗi lần import tối đa ${MAX_HOLIDAYS_PER_IMPORT} ngày.`),
+  })
+  .superRefine((body, ctx) => {
+    if (body.mode === 'REPLACE_YEAR') {
+      if (body.year === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['year'],
+          message: 'Chế độ thay cả năm cần chỉ rõ năm.',
+        });
+        return;
+      }
+      body.makeupWorkdays.forEach((m, i) => {
+        if (!m.date.startsWith(`${body.year}-`)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['makeupWorkdays', i, 'date'],
+            message: `Ngày ${m.date} không thuộc năm ${body.year} đang được thay thế.`,
+          });
+        }
+      });
+    }
+  });
+export type ImportMakeupWorkdaysRequest = z.infer<typeof importMakeupWorkdaysRequestSchema>;
+
+export const importMakeupWorkdaysResponseSchema = z.object({
+  calendarId: z.string(),
+  inserted: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  deleted: z.number().int().nonnegative(),
+  epicsMarkedForRecompute: z.number().int().nonnegative(),
+});
+export type ImportMakeupWorkdaysResponse = z.infer<typeof importMakeupWorkdaysResponseSchema>;
+
+/** DELETE /api/calendars/:id/makeup-workdays/:date dùng lại cùng hình dạng phản hồi. */
+export const deleteMakeupWorkdayResponseSchema = z.object({
+  calendarId: z.string(),
+  deleted: z.number().int().nonnegative(),
+  epicsMarkedForRecompute: z.number().int().nonnegative(),
+});
+export type DeleteMakeupWorkdayResponse = z.infer<typeof deleteMakeupWorkdayResponseSchema>;
