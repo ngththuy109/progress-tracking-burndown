@@ -82,6 +82,14 @@ Kiểm chứng: `redis-cli -u "$REDIS_URL" ping` trả `PONG`, rồi `curl -s lo
 
 **Môi trường khởi động chậm:** nới `REDIS_READY_TIMEOUT_MS` / `BOOTSTRAP_TIMEOUT_MS` — xem `.env.example`.
 
+**Deploy xong một màn hình cấu hình (Signboard columns / Phase settings) nổ `INTERNAL_ERROR`, hoặc `api.fatal` / `worker.fatal` ngay lúc khởi động với `PendingMigrationsError`.** Gần như luôn là **quên `pnpm db:migrate`**: mã mới truy vấn cột/bảng mà database chưa có (ví dụ thiếu cột `signboard_column.side`) → Postgres `42703` (undefined_column) / `42P01` (undefined_table) → route đổi thành 500 trên **từng** request. Message lỗi gốc có thể là **tiếng Nhật bị mojibake** nếu Postgres đặt `lc_messages=ja_JP` — dễ chẩn nhầm thành "lỗi encoding"; cứ nhìn **mã 42703/42P01** là biết thiếu schema. Từ nay khởi động **tự chặn** ca này: còn migration chưa áp thì API và worker **thoát ngay (exit 1)** kèm log nêu **đúng tên migration thiếu** và lệnh phải chạy. Sửa:
+
+```bash
+pnpm db:migrate    # áp mọi migration đang thiếu trên ĐÚNG DATABASE_URL của môi trường này
+```
+
+Kiểm chứng: khởi động lại, log có `api.ready`; mở lại màn hình là hết 500.
+
 **Màn hình Phase settings / Signboard columns mở nhưng TRỐNG (chưa có bộ Mặc định).** Không còn lỗi 500: hai màn hình vẫn mở với bộ **RỖNG** để admin tự định nghĩa Phase và cột rồi Lưu (tạo bản Mặc định v1) — đó là **cách 3**. Muốn có sẵn bộ **khuyến nghị** (6 Phase + 29 luật + 5 cột), nạp bộ Mặc định theo thứ tự ưu tiên (cả hai idempotent):
 
 ```bash

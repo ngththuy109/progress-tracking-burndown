@@ -52,6 +52,15 @@ export {
 } from './repositories/phase-config.repository.js';
 
 export {
+  assertMigrationsApplied,
+  fetchAppliedMigrationNames,
+  listMigrationDirNames,
+  findPendingMigrations,
+  defaultMigrationsDir,
+  PendingMigrationsError,
+} from './migration-status.js';
+
+export {
   insertIfAbsent,
   findByKey,
   findManyByKeys,

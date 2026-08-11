@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { Redis } from 'ioredis';
 import { Queue, type JobsOptions } from 'bullmq';
-import { disconnectPrisma, getPrisma } from '@app/db';
+import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
 import {
   JiraClient,
   fieldMappingConfigSchema,
@@ -173,6 +173,16 @@ async function bootstrap(): Promise<void> {
   });
 
   const prisma = getPrisma();
+
+  // CHẶN khởi động nếu database còn lạc hậu so với mã. Deploy quên `pnpm db:migrate`
+  // thì mọi truy vấn chạm cột/bảng mới nổ `500 INTERNAL_ERROR` mờ mịt trên TỪNG
+  // request (đúng ca màn hình "Signboard columns" thiếu cột signboard_column.side).
+  // Kiểm một lần ở đây → một lỗi rõ kèm đúng lệnh phải chạy, thay vì hàng loạt 500
+  // khó truy. Cũng là lượt chạm DB đầu tiên nên bắt luôn ca database không tới được.
+  await assertMigrationsApplied(prisma, {
+    onSkip: (reason, dir) => log({ event: 'migrations.check.skipped', reason, dir }),
+  });
+
   // BullMQ BẮT BUỘC `maxRetriesPerRequest: null` trên kết nối nó dùng; kết nối
   // này vừa cho hàng đợi backfill vừa cho cache nên đặt luôn ở đây.
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
