@@ -5,12 +5,13 @@ import type {
   DateOnly,
   PhaseRollup,
   PlanShiftRecord,
-  Principal,
   SnapshotRow,
   WorkCalendar,
 } from '@app/shared';
 import { listCalendarDays, listWorkdays } from '@app/engine';
 import { ApiError } from '../services/phase-config.service.js';
+import { resolveEpicInProject } from '../services/epic-scope.js';
+import { projectCtxOf, type AuthzGuards } from '../adapters/project-scope.js';
 import {
   assertComparablePhases,
   assertPhasesExist,
@@ -20,7 +21,12 @@ import {
 import { chartCacheKey, type ChartCache } from '../adapters/chart-cache.js';
 
 /**
- * Ba endpoint biểu đồ Burndown — PRD Phụ lục B.
+ * Ba endpoint biểu đồ Burndown, mount theo tenant:
+ * `/api/projects/:projectKey/epics/:epicKey/burndown[...]`.
+ *
+ * Quyền: thành viên dự án (VIEWER trở lên) qua guard `requireProject('VIEWER')`
+ * — không còn kiểu "VIEWER toàn cục xem tất cả". Epic phải thuộc đúng tenant
+ * của URL (`resolveEpicInProject`), sai là 404 EPIC_NOT_FOUND.
  *
  * Tầng này CHỈ điều phối: đọc tham số, gọi cổng, gọi hàm thuần, đổi lỗi thành
  * mã HTTP. Không một dòng logic tính toán nào ở đây.
@@ -47,24 +53,7 @@ export interface BurndownReadPort {
 export interface BurndownRouteDeps {
   readonly reads: BurndownReadPort;
   readonly cache: ChartCache;
-  resolvePrincipal(req: FastifyRequest): Principal | null;
-}
-
-/**
- * Ai được xem Epic nào — PRD §9.3.
- *
- * VIEWER xem được tất cả (đây là dữ liệu báo cáo, không phải dữ liệu nhạy cảm);
- * PM chỉ xem project mình phụ trách; Admin xem tất cả.
- */
-export function assertCanRead(principal: Principal, projectKey: string): void {
-  if (principal.role === 'ADMIN' || principal.role === 'VIEWER') return;
-  if (principal.projects.includes(projectKey)) return;
-  throw new ApiError(
-    403,
-    'FORBIDDEN',
-    `You are not assigned to project ${projectKey}, so you cannot view this Epic\u2019s chart. ` +
-      'Ask an admin if you need access.',
-  );
+  readonly guards: AuthzGuards;
 }
 
 interface ChartRequest {
@@ -89,24 +78,15 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
     }
   };
 
-  const requirePrincipal = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-    return p;
-  };
+  const asViewer = { preHandler: deps.guards.requireProject('VIEWER') };
 
   async function buildResponse(req: FastifyRequest, args: ChartRequest): Promise<BurndownResponse> {
-    const principal = requirePrincipal(req);
-
-    const meta = await deps.reads.epicMeta(args.epicKey);
-    if (meta === null) {
-      throw new ApiError(
-        404,
-        'EPIC_NOT_FOUND',
-        `Epic ${args.epicKey} is not tracked. Add it on the Epics screen first.`,
-      );
-    }
-    assertCanRead(principal, meta.projectKey);
+    // Guard đã kiểm quyền; ở đây chỉ còn kiểm Epic thuộc đúng tenant của URL.
+    const meta = await resolveEpicInProject(
+      (k) => deps.reads.epicMeta(k),
+      args.epicKey,
+      projectCtxOf(req).projectKey,
+    );
 
     const rollups = await deps.reads.loadRollups(args.epicKey);
 
@@ -176,7 +156,7 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
     return response;
   }
 
-  app.get('/api/burndown/epic/:epicKey', async (req, reply) =>
+  app.get('/api/projects/:projectKey/epics/:epicKey/burndown', asViewer, async (req, reply) =>
     handle(reply, () =>
       buildResponse(req, {
         epicKey: paramEpicKey(req),
@@ -188,34 +168,40 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
     ),
   );
 
-  app.get('/api/burndown/epic/:epicKey/phase/:phaseCode', async (req, reply) =>
-    handle(reply, () => {
-      const phaseCode = (req.params as { phaseCode?: string }).phaseCode ?? '';
-      return buildResponse(req, {
-        epicKey: paramEpicKey(req),
-        mode: 'PHASE',
-        phaseCodes: [phaseCode],
-        from: dateQuery(req, 'from'),
-        to: dateQuery(req, 'to'),
-      });
-    }),
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/burndown/phase/:phaseCode',
+    asViewer,
+    async (req, reply) =>
+      handle(reply, () => {
+        const phaseCode = (req.params as { phaseCode?: string }).phaseCode ?? '';
+        return buildResponse(req, {
+          epicKey: paramEpicKey(req),
+          mode: 'PHASE',
+          phaseCodes: [phaseCode],
+          from: dateQuery(req, 'from'),
+          to: dateQuery(req, 'to'),
+        });
+      }),
   );
 
-  app.get('/api/burndown/epic/:epicKey/phases/compare', async (req, reply) =>
-    handle(reply, () => {
-      const raw = (req.query as { codes?: string }).codes ?? '';
-      const codes = raw
-        .split(',')
-        .map((c) => c.trim())
-        .filter((c) => c !== '');
-      return buildResponse(req, {
-        epicKey: paramEpicKey(req),
-        mode: 'COMPARE',
-        phaseCodes: codes,
-        from: dateQuery(req, 'from'),
-        to: dateQuery(req, 'to'),
-      });
-    }),
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/burndown/phases/compare',
+    asViewer,
+    async (req, reply) =>
+      handle(reply, () => {
+        const raw = (req.query as { codes?: string }).codes ?? '';
+        const codes = raw
+          .split(',')
+          .map((c) => c.trim())
+          .filter((c) => c !== '');
+        return buildResponse(req, {
+          epicKey: paramEpicKey(req),
+          mode: 'COMPARE',
+          phaseCodes: codes,
+          from: dateQuery(req, 'from'),
+          to: dateQuery(req, 'to'),
+        });
+      }),
   );
 }
 

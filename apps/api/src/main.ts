@@ -7,39 +7,48 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { Redis } from 'ioredis';
 import { Queue, type JobsOptions } from 'bullmq';
-import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
 import {
-  JiraClient,
+  assertEncryptionKeyUsable,
+  assertMigrationsApplied,
+  disconnectPrisma,
+  getPrisma,
+  findProjectConnection,
+  open as openSecret,
+  parseEncryptionKey,
+  seal as sealSecret,
+} from '@app/db';
+import {
+  createJiraRegistry,
   fieldMappingConfigSchema,
-  getFields,
-  loadStatusIdMap,
-  resolveFieldMapping,
+  InMemoryTokenBucketStore,
+  TokenBucketRateLimiter,
   type FieldMappingConfig,
   type StatusMapCache,
 } from '@app/jira';
-import { withTimeout, TimeoutError, type StatusIdMap } from '@app/shared';
+import { withTimeout, TimeoutError } from '@app/shared';
 import { createServer, DEFAULT_PORT, type ServerDeps } from './server.js';
 import { authConfigFromEnv } from './adapters/principal.js';
+import { createJiraConnectionTester } from './adapters/jira-test.adapters.js';
+import type { TokenBox } from './routes/projects.routes.js';
 
 /**
  * Điểm vào tiến trình API.
  *
  * `server.ts` chỉ DỰNG app (thuần, test được mà không cần hạ tầng). File này là
- * ĐIỂM LẮP RÁP thật: đọc env, mở Prisma/Redis/Jira thật, nạp field mapping và
- * status map một lần lúc khởi động (PRD §2.8, T-04) rồi cho Fastify lắng nghe.
+ * ĐIỂM LẮP RÁP thật: đọc env, mở Prisma/Redis thật rồi cho Fastify lắng nghe.
+ *
+ * KHÁC TRƯỚC (Phase B, multi-tenant): KHÔNG còn bước "nạp field mapping + status
+ * map + kiểm Jira" lúc boot. Kết nối Jira giờ THEO TENANT — registry
+ * (@app/jira `createJiraRegistry`) dựng client theo yêu cầu từ bảng `project`,
+ * dự án legacy rơi về env JIRA_* (giờ là biến TUỲ CHỌN). Admin kiểm kết nối
+ * bằng endpoint "Test connection" thay vì bằng việc boot thành công.
  *
  * Tách khỏi `server.ts` có chủ đích: test import `createServer` mà KHÔNG mở một
  * kết nối hạ tầng nào. Vì vậy dev script trỏ vào `main.ts`, còn test dùng
  * `server.ts`.
  */
 
-const REQUIRED_ENV = [
-  'DATABASE_URL',
-  'REDIS_URL',
-  'JIRA_BASE_URL',
-  'JIRA_EMAIL',
-  'JIRA_API_TOKEN',
-] as const;
+const REQUIRED_ENV = ['DATABASE_URL', 'REDIS_URL'] as const;
 type EnvName = (typeof REQUIRED_ENV)[number];
 
 class MissingEnvError extends Error {
@@ -91,8 +100,8 @@ const DEFAULT_JOB_OPTIONS: JobsOptions = {
  *
  * `REDIS_READY_TIMEOUT_MS` bắt riêng ca Redis treo (accept TCP nhưng không trả
  * lời) → cho thông báo CHÍNH XÁC và thoát nhanh. `BOOTSTRAP_TIMEOUT_MS` là lưới
- * chặn cuối cho MỌI bước treo khác (Jira `/field`, DB…). Chỉnh qua env để hợp
- * môi trường khởi động chậm.
+ * chặn cuối cho MỌI bước treo khác (DB…). Chỉnh qua env để hợp môi trường khởi
+ * động chậm.
  */
 function readTimeoutMs(name: string, fallback: number): number {
   const raw = Number(process.env[name]);
@@ -149,18 +158,26 @@ function createConfigCache(redis: Redis): { del(pattern: string): Promise<void> 
 }
 
 /**
- * Nạp cấu hình ánh xạ field từ `config/jira-fields.yaml`.
- *
- * Mã custom field khác nhau ở mỗi Jira nên KHÔNG viết cứng (PRD §2.8). Cho phép
- * trỏ file khác qua `JIRA_FIELDS_CONFIG` để dựng nhiều môi trường.
+ * Nạp cấu hình ánh xạ field từ `config/jira-fields.yaml` — giờ chỉ còn là
+ * FALLBACK cho tenant chưa khai `jiraFieldsJson` riêng. Không có file cũng
+ * không chặn boot nữa: tenant tự khai qua màn hình quản trị.
  */
-function loadFieldMappingConfig(): FieldMappingConfig {
+function loadFieldMappingConfig(): FieldMappingConfig | null {
   const override = process.env['JIRA_FIELDS_CONFIG'];
   const path = override
     ? resolve(override)
     : resolve(dirname(fileURLToPath(import.meta.url)), '../../../config/jira-fields.yaml');
-  const raw = parseYaml(readFileSync(path, 'utf8'));
-  return fieldMappingConfigSchema.parse(raw);
+  try {
+    const raw = parseYaml(readFileSync(path, 'utf8'));
+    return fieldMappingConfigSchema.parse(raw);
+  } catch (err) {
+    log({
+      event: 'jira.fieldsconfig.skipped',
+      path,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -169,7 +186,6 @@ async function bootstrap(): Promise<void> {
     event: 'api.starting',
     databaseHost: safeHost(env.DATABASE_URL),
     redisHost: safeHost(env.REDIS_URL),
-    jiraBaseUrl: env.JIRA_BASE_URL,
   });
 
   const prisma = getPrisma();
@@ -183,32 +199,81 @@ async function bootstrap(): Promise<void> {
     onSkip: (reason, dir) => log({ event: 'migrations.check.skipped', reason, dir }),
   });
 
+  // CHẶN khởi động nếu DB đã có token Jira mã hóa mà APP_ENCRYPTION_KEY thiếu
+  // hoặc sai — thà không chạy còn hơn để một nửa số tenant chết im lặng lúc sync.
+  await assertEncryptionKeyUsable(prisma, process.env['APP_ENCRYPTION_KEY']);
+
+  // Hộp mã hóa token tenant. Chưa đặt khóa cũng chạy được (chế độ 1 site cũ
+  // dùng env JIRA_*) — nhưng lưu token riêng cho tenant sẽ bị chặn với lỗi rõ.
+  const rawKey = process.env['APP_ENCRYPTION_KEY']?.trim();
+  const tokenBox: TokenBox | null = rawKey
+    ? (() => {
+        const key = parseEncryptionKey(rawKey); // ném lỗi rõ nếu sai độ dài
+        return {
+          seal: (plaintext: string) => sealSecret(plaintext, key),
+          open: (sealed: string) => openSecret(sealed, key),
+        };
+      })()
+    : null;
+
   // BullMQ BẮT BUỘC `maxRetriesPerRequest: null` trên kết nối nó dùng; kết nối
   // này vừa cho hàng đợi backfill vừa cho cache nên đặt luôn ở đây.
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   redis.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
 
   // CHẶN ca Redis "treo": instance accept TCP nhưng không trả lời lệnh nào. Không
-  // có hạn chót thì `redis.get()` trong `loadStatusIdMap` (và mọi lệnh sau) chờ
-  // MÃI — `maxRetriesPerRequest: null` khiến lệnh không bao giờ bị bỏ, mà treo
-  // kiểu này KHÔNG phát ra event `error` nên `.catch` bên dưới chẳng bao giờ chạy.
-  // Ping có hạn chót biến "treo im lặng" thành lỗi rõ, để bootstrap thoát hẳn.
+  // có hạn chót thì mọi lệnh sau chờ MÃI — `maxRetriesPerRequest: null` khiến
+  // lệnh không bao giờ bị bỏ, mà treo kiểu này KHÔNG phát ra event `error` nên
+  // `.catch` bên dưới chẳng bao giờ chạy. Ping có hạn chót biến "treo im lặng"
+  // thành lỗi rõ, để bootstrap thoát hẳn.
   await withTimeout(redis.ping(), REDIS_READY_TIMEOUT_MS, 'Redis (ping lúc khởi động)');
 
-  // JiraClient dùng bộ giới hạn tốc độ IN-MEMORY mặc định. Đủ cho API vì nó chỉ
-  // tra cứu tương tác lượng nhỏ (kiểm key Epic, duyệt danh sách); ngân sách Redis
-  // 40 req/s toàn hệ thống (C-7) tồn tại để ghìm lượt đồng bộ HÀNG LOẠT của
-  // worker (R-04), không phải mấy lookup này. Thông tin xác thực đọc từ
-  // JIRA_* env qua BasicAuthProvider mặc định.
-  const jira = new JiraClient({ logger: (e) => log(e) });
+  // env JIRA_* giờ là FALLBACK TUỲ CHỌN cho tenant chưa khai kết nối riêng.
+  // Thiếu cũng không chặn boot — tenant nào thiếu kết nối sẽ nhận lỗi rõ ràng
+  // đúng lúc nó cần Jira (JiraConnectionError), không phải 500 mờ mịt lúc boot.
+  const jiraBaseUrl = process.env['JIRA_BASE_URL']?.trim();
+  const jiraEmail = process.env['JIRA_EMAIL']?.trim();
+  const jiraApiToken = process.env['JIRA_API_TOKEN']?.trim();
+  const fallbackFieldsConfig = loadFieldMappingConfig();
+  const envJira =
+    jiraBaseUrl && jiraEmail && jiraApiToken
+      ? {
+          baseUrl: jiraBaseUrl,
+          email: jiraEmail,
+          apiToken: jiraApiToken,
+          fieldsConfig: fallbackFieldsConfig,
+        }
+      : null;
+  log({ event: 'jira.mode', envFallback: envJira !== null });
 
-  // Field mapping: nạp MỘT lần, CHẶN khởi động nếu field sai/thiếu (PRD §2.8,
-  // E-23) — thà không chạy còn hơn để mọi Phase mất đường Kế hoạch trong im lặng.
-  const fieldMapping = resolveFieldMapping(loadFieldMappingConfig(), await getFields(jira));
-
-  // Status map: id trạng thái → nhóm, cache 24h ở Redis (T-04). Changelog Jira
-  // chỉ ghi id số nên không có bảng này thì không dựng lại trạng thái quá khứ.
-  const statusIdMap: StatusIdMap = await loadStatusIdMap(jira, createStatusMapCache(redis));
+  // Registry client Jira THEO TENANT. Rate limiter in-memory là ĐỦ cho API: nó
+  // chỉ tra cứu tương tác lượng nhỏ (kiểm key Epic, duyệt danh sách); ngân sách
+  // Redis 40 req/s toàn hệ thống (C-7) tồn tại để ghìm lượt đồng bộ HÀNG LOẠT
+  // của worker (R-04), không phải mấy lookup này. Registry tự bảo đảm N dự án
+  // cùng site chia nhau MỘT bucket + một trần song song.
+  const jiraRegistry = createJiraRegistry({
+    async loadConnection(projectKey) {
+      const row = await findProjectConnection(prisma, projectKey);
+      if (row === null) return null;
+      return {
+        projectKey: row.projectKey,
+        baseUrl: row.jiraBaseUrl,
+        email: row.jiraEmail,
+        // Giải mã Ở ĐÂY (tầng lắp ráp giữ khóa); registry chỉ nhận plaintext
+        // trong RAM. Token mã hóa mà thiếu khóa thì assertEncryptionKeyUsable đã
+        // chặn boot ở trên rồi.
+        apiTokenPlain:
+          row.jiraTokenEnc === null || tokenBox === null ? null : tokenBox.open(row.jiraTokenEnc),
+        fieldsConfig: row.jiraFieldsJson,
+        resolvedFields: row.jiraResolvedJson,
+      };
+    },
+    envFallback: envJira,
+    createRateLimiter: () =>
+      new TokenBucketRateLimiter({ store: new InMemoryTokenBucketStore(() => Date.now()) }),
+    statusCache: createStatusMapCache(redis),
+    logger: (e) => log(e),
+  });
 
   const backfillQueue = new Queue(BACKFILL_QUEUE_NAME, {
     connection: redis,
@@ -219,14 +284,23 @@ async function bootstrap(): Promise<void> {
   const deps: ServerDeps = {
     prisma,
     redis,
-    jira,
-    fieldMapping,
+    jiraRegistry,
     backfillQueue,
-    statusIdMap,
     cache: createConfigCache(redis),
-    // Danh tính do cổng SSO đặt vào header; vai trò tra `app_user`. Cấu hình
+    // Danh tính do cổng SSO đặt vào header; quyền tra `app_user`. Cấu hình
     // qua AUTH_* (xem adapters/principal.ts và config/auth-proxy/).
     auth: authConfigFromEnv(process.env),
+    tokenBox,
+    // "Test connection" dựng JiraClient theo yêu cầu — không đụng registry để
+    // giá trị đang thử (chưa lưu) không lẫn vào cache kết nối thật.
+    jiraTester: createJiraConnectionTester({ logger: (e) => log(e) }),
+    envJira,
+    validateFieldsConfig: (v) => {
+      const parsed = fieldMappingConfigSchema.safeParse(v);
+      return parsed.success
+        ? { ok: true }
+        : { ok: false, message: parsed.error.issues.map((i) => i.message).join('; ') };
+    },
   };
 
   const app = createServer(deps);

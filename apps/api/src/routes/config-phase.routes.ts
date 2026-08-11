@@ -1,10 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import {
-  fieldPath,
-  previewRequestSchema,
-  saveConfigRequestSchema,
-  type Principal,
-} from '@app/shared';
+import { fieldPath, previewRequestSchema, saveConfigRequestSchema, type Principal } from '@app/shared';
 import {
   ApiError,
   getEffective,
@@ -15,37 +10,26 @@ import {
   save,
   type PhaseConfigDeps,
 } from '../services/phase-config.service.js';
+import { projectCtxOf, type AuthzGuard, type AuthzGuards } from '../adapters/project-scope.js';
 
 /**
- * Nhóm API cấu hình nhận diện Phase — PRD Phụ lục B.
+ * Nhóm API cấu hình nhận diện Phase — PRD Phụ lục B — mount HAI nơi:
+ *
+ *   - `/api/projects/:projectKey/config/phase...` — bản ghi đè của MỘT tenant.
+ *     Đọc (GET effective/versions/unmatched) → VIEWER của dự án;
+ *     preview/lưu/rollback → PM của dự án. `projectKey` luôn lấy từ URL —
+ *     client không tự chọn được tenant qua query/body nữa.
+ *   - `/api/admin/config/phase...` — bộ Mặc định (GLOBAL, `projectKey = null`),
+ *     CHỈ ADMIN: nó ảnh hưởng tới MỌI dự án đang kế thừa.
  *
  * Tầng này CHỈ điều phối: đọc tham số, gọi service, đổi lỗi thành mã HTTP.
- * Không có một dòng logic nghiệp vụ nào ở đây.
+ * Quyền nằm ở guard tập trung (adapters/project-scope), không còn
+ * `assertCanWrite` trong service.
  */
 
 export interface ConfigPhaseRouteDeps extends PhaseConfigDeps {
-  /**
-   * Xác định người gọi.
-   *
-   * Là một CỔNG chứ không phải cách xác thực cố định: GĐ 1 chưa chốt dùng SSO
-   * hay JWT. Bộ chuyển đổi mặc định đọc header do gateway đặt; đổi sang cách
-   * khác chỉ cần thay hàm này, không đụng tới route.
-   */
   resolvePrincipal(req: FastifyRequest): Principal | null;
-}
-
-/** `?project=KEY` vắng mặt hoặc rỗng nghĩa là đang thao tác trên bộ Mặc định. */
-function projectFromQuery(req: FastifyRequest): string | null {
-  const raw = (req.query as Record<string, unknown> | undefined)?.['project'];
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  return trimmed === '' ? null : trimmed;
-}
-
-function requirePrincipal(deps: ConfigPhaseRouteDeps, req: FastifyRequest): Principal {
-  const p = deps.resolvePrincipal(req);
-  if (!p) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-  return p;
+  readonly guards: AuthzGuards;
 }
 
 export function registerConfigPhaseRoutes(app: FastifyInstance, deps: ConfigPhaseRouteDeps): void {
@@ -69,50 +53,87 @@ export function registerConfigPhaseRoutes(app: FastifyInstance, deps: ConfigPhas
     }
   };
 
-  app.get('/api/config/phase', async (req, reply) =>
-    handle(reply, () => getEffective(deps, projectFromQuery(req))),
-  );
+  const userIdOf = (req: FastifyRequest): string => deps.resolvePrincipal(req)?.userId ?? '';
 
-  app.post('/api/config/phase/preview', async (req, reply) =>
-    handle(reply, async () => {
-      const parsed = previewRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw badRequest(parsed.error);
-      return preview(deps, parsed.data);
-    }),
-  );
+  /**
+   * Đăng ký trọn bộ endpoint cho MỘT phạm vi. `scopeKey(req)` trả `null` với bộ
+   * Mặc định (admin) và trả key tenant với bản project — phần còn lại giống hệt
+   * nhau nên viết một lần.
+   */
+  const registerScope = (args: {
+    prefix: string;
+    scopeKey(req: FastifyRequest): string | null;
+    read: { preHandler: AuthzGuard };
+    write: { preHandler: AuthzGuard };
+  }): void => {
+    const { prefix, scopeKey, read, write } = args;
 
-  app.put('/api/config/phase', async (req, reply) =>
-    handle(reply, async () => {
-      const principal = requirePrincipal(deps, req);
-      const parsed = saveConfigRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw badRequest(parsed.error);
-      return save(deps, principal, {
-        projectKey: parsed.data.projectKey,
-        payload: parsed.data.payload,
-        note: parsed.data.note,
-      });
-    }),
-  );
+    app.get(`${prefix}/config/phase`, read, async (req, reply) =>
+      handle(reply, () => getEffective(deps, scopeKey(req))),
+    );
 
-  app.get('/api/config/phase/versions', async (req, reply) =>
-    handle(reply, async () => ({ versions: await listVersions(deps, projectFromQuery(req)) })),
-  );
+    app.post(`${prefix}/config/phase/preview`, write, async (req, reply) =>
+      handle(reply, async () => {
+        // `projectKey` trong body bị BỎ QUA có chủ đích — phạm vi là của URL.
+        const parsed = previewRequestSchema.safeParse({
+          ...(req.body as Record<string, unknown>),
+          projectKey: scopeKey(req),
+        });
+        if (!parsed.success) throw badRequest(parsed.error);
+        return preview(deps, parsed.data);
+      }),
+    );
 
-  app.post('/api/config/phase/rollback/:version', async (req, reply) =>
-    handle(reply, async () => {
-      const principal = requirePrincipal(deps, req);
-      const raw = (req.params as { version?: string }).version;
-      const version = Number(raw);
-      if (!Number.isInteger(version) || version < 1) {
-        throw new ApiError(400, 'BAD_REQUEST', `Invalid version number: "${raw}".`);
-      }
-      return rollback(deps, principal, { projectKey: projectFromQuery(req), version });
-    }),
-  );
+    app.put(`${prefix}/config/phase`, write, async (req, reply) =>
+      handle(reply, async () => {
+        const parsed = saveConfigRequestSchema.safeParse({
+          ...(req.body as Record<string, unknown>),
+          projectKey: scopeKey(req),
+        });
+        if (!parsed.success) throw badRequest(parsed.error);
+        return save(deps, userIdOf(req), {
+          projectKey: parsed.data.projectKey,
+          payload: parsed.data.payload,
+          note: parsed.data.note,
+        });
+      }),
+    );
 
-  app.get('/api/config/phase/unmatched', async (req, reply) =>
-    handle(reply, async () => ({ labels: await listUnmatched(deps, projectFromQuery(req)) })),
-  );
+    app.get(`${prefix}/config/phase/versions`, read, async (req, reply) =>
+      handle(reply, async () => ({ versions: await listVersions(deps, scopeKey(req)) })),
+    );
+
+    app.post(`${prefix}/config/phase/rollback/:version`, write, async (req, reply) =>
+      handle(reply, async () => {
+        const raw = (req.params as { version?: string }).version;
+        const version = Number(raw);
+        if (!Number.isInteger(version) || version < 1) {
+          throw new ApiError(400, 'BAD_REQUEST', `Invalid version number: "${raw}".`);
+        }
+        return rollback(deps, userIdOf(req), { projectKey: scopeKey(req), version });
+      }),
+    );
+
+    app.get(`${prefix}/config/phase/unmatched`, read, async (req, reply) =>
+      handle(reply, async () => ({ labels: await listUnmatched(deps, scopeKey(req)) })),
+    );
+  };
+
+  // Bản ghi đè theo tenant.
+  registerScope({
+    prefix: '/api/projects/:projectKey',
+    scopeKey: (req) => projectCtxOf(req).projectKey,
+    read: { preHandler: deps.guards.requireProject('VIEWER') },
+    write: { preHandler: deps.guards.requireProject('PM') },
+  });
+
+  // Bộ Mặc định (GLOBAL) — chỉ ADMIN, kể cả đọc: đây là màn hình quản trị.
+  registerScope({
+    prefix: '/api/admin',
+    scopeKey: () => null,
+    read: { preHandler: deps.guards.requireAdmin },
+    write: { preHandler: deps.guards.requireAdmin },
+  });
 }
 
 function badRequest(error: { issues: ReadonlyArray<{ path: PropertyKey[]; message: string }> }) {

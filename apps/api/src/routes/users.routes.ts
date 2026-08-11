@@ -1,20 +1,17 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import {
-  upsertUserRequestSchema,
-  type AppUserView,
-  type Principal,
-  type UserRole,
-} from '@app/shared';
+import { upsertUserRequestSchema, type AppUserView, type Principal } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
 import { normalizeIdentity } from '../adapters/principal.js';
+import type { AuthzGuards } from '../adapters/project-scope.js';
 import type { AppUserAdminStore } from '../adapters/app-user.adapters.js';
 
 /**
- * Quản lý người dùng — `/api/users`, CHỈ ADMIN.
+ * Quản lý người dùng — `/api/admin/users`, CHỈ ADMIN (guard `requireAdmin`).
  *
- * Đây là nơi Admin tự cấp quyền cho Admin/PM/Viewer trên giao diện thay vì phải
- * chạy `pnpm auth:grant` hay SQL. Vai trò vẫn nằm ở bảng `app_user` (nguồn sự
- * thật) — màn hình chỉ là lối vào có kiểm soát.
+ * Từ multi-tenant, ở đây chỉ quản ROLE TOÀN CỤC (`ADMIN` | `MEMBER`) và tên
+ * hiển thị. Membership theo dự án (PM/VIEWER của từng project) quản ở
+ * `/api/admin/projects/:projectKey/members` — user phải được cấp ở đây TRƯỚC
+ * rồi mới thêm được vào dự án (FK `project_member.user_id`).
  *
  * Hai lớp bảo vệ chống tự khoá:
  *   - KHÔNG cho sửa/xoá chính mình (nhờ Admin khác làm) — tránh lỡ tay hạ quyền
@@ -25,13 +22,12 @@ import type { AppUserAdminStore } from '../adapters/app-user.adapters.js';
 export interface UsersRouteDeps {
   resolvePrincipal(req: FastifyRequest): Principal | null;
   readonly store: AppUserAdminStore;
+  readonly guards: AuthzGuards;
   /** Email admin mồi từ env — hiện dưới dạng chỉ-đọc, không sửa được ở đây. */
   readonly bootstrapAdmins: ReadonlySet<string>;
-  /** Tập project đã đăng ký — PM chỉ được gán vào các project trong tập này. */
-  knownProjectKeys(): Promise<ReadonlySet<string>>;
 }
 
-const ROLE_RANK: Record<UserRole, number> = { ADMIN: 0, PM: 1, VIEWER: 2 };
+const ROLE_RANK: Record<AppUserView['role'], number> = { ADMIN: 0, MEMBER: 1 };
 
 export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps): void {
   const handle = async (reply: FastifyReply, fn: () => Promise<unknown>): Promise<void> => {
@@ -51,28 +47,18 @@ export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps):
     }
   };
 
-  const requireAdmin = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) {
-      throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-    }
-    if (p.role !== 'ADMIN') {
-      throw new ApiError(403, 'FORBIDDEN', 'Only Admins can manage users.');
-    }
-    return p;
-  };
+  const admin = { preHandler: deps.guards.requireAdmin };
 
-  app.get('/api/users', async (req, reply) =>
+  app.get('/api/admin/users', admin, async (_req, reply) =>
     handle(reply, async () => {
-      requireAdmin(req);
       const rows = await deps.store.list();
 
       const views: AppUserView[] = rows.map((r) => ({
         userId: r.userId,
         role: r.role,
-        projects: [...r.projects],
         displayName: r.displayName,
         source: 'DB' as const,
+        membershipCount: r.membershipCount,
       }));
 
       // Thêm admin mồi từ env chưa có trong DB, đánh dấu chỉ-đọc, để Admin thấy
@@ -80,7 +66,13 @@ export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps):
       const known = new Set(views.map((v) => v.userId));
       for (const email of deps.bootstrapAdmins) {
         if (!known.has(email)) {
-          views.push({ userId: email, role: 'ADMIN', projects: [], displayName: null, source: 'ENV' });
+          views.push({
+            userId: email,
+            role: 'ADMIN',
+            displayName: null,
+            source: 'ENV',
+            membershipCount: 0,
+          });
         }
       }
 
@@ -89,9 +81,9 @@ export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps):
     }),
   );
 
-  app.post('/api/users', async (req, reply) =>
+  app.post('/api/admin/users', admin, async (req, reply) =>
     handle(reply, async () => {
-      const admin = requireAdmin(req);
+      const adminPrincipal = deps.resolvePrincipal(req)!;
 
       const parsed = upsertUserRequestSchema.safeParse(req.body);
       if (!parsed.success) throw badRequest(parsed.error);
@@ -100,55 +92,39 @@ export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps):
       if (userId === null) {
         throw new ApiError(400, 'BAD_REQUEST', 'The user email is empty.');
       }
-      assertNotSelf(admin, userId);
+      assertNotSelf(adminPrincipal, userId);
       assertNotBootstrap(deps, userId);
 
-      const { role } = parsed.data;
-      // `projects` chỉ có nghĩa với PM. Gán cho ADMIN/VIEWER là hiểu nhầm mô hình
-      // — chặn thẳng thay vì âm thầm bỏ đi.
-      if (role !== 'PM' && parsed.data.projects.length > 0) {
-        throw new ApiError(400, 'BAD_REQUEST', 'Only PMs are scoped to projects. Clear the projects field for Admin/Viewer.');
-      }
+      await deps.store.upsert({
+        userId,
+        role: parsed.data.role,
+        displayName: parsed.data.displayName,
+      });
 
-      let projects: string[] = [];
-      if (role === 'PM') {
-        // Chuẩn hoá về chữ HOA (khớp danh mục) và khử trùng lặp.
-        projects = [...new Set(parsed.data.projects.map((p) => p.trim().toUpperCase()).filter((p) => p !== ''))];
-        // PM chỉ được gán vào project ĐÃ ĐĂNG KÝ — chặn gõ nhầm key gây mất quyền
-        // xem trong im lặng.
-        const known = await deps.knownProjectKeys();
-        const unknown = projects.filter((p) => !known.has(p));
-        if (unknown.length > 0) {
-          throw new ApiError(
-            400,
-            'UNKNOWN_PROJECT',
-            `These projects are not registered: ${unknown.join(', ')}. An Admin must add them on the Projects screen first.`,
-          );
-        }
-      }
-
-      await deps.store.upsert({ userId, role, projects, displayName: parsed.data.displayName });
+      // Đếm membership sau upsert: user mới là 0, user sửa role giữ nguyên số cũ.
+      const membershipCount =
+        (await deps.store.list()).find((r) => r.userId === userId)?.membershipCount ?? 0;
 
       const view: AppUserView = {
         userId,
-        role,
-        projects,
+        role: parsed.data.role,
         displayName: parsed.data.displayName,
         source: 'DB',
+        membershipCount,
       };
       return view;
     }),
   );
 
-  app.delete('/api/users/:userId', async (req, reply) =>
+  app.delete('/api/admin/users/:userId', admin, async (req, reply) =>
     handle(reply, async () => {
-      const admin = requireAdmin(req);
+      const adminPrincipal = deps.resolvePrincipal(req)!;
 
       const userId = normalizeIdentity((req.params as { userId?: string }).userId);
       if (userId === null) {
         throw new ApiError(400, 'BAD_REQUEST', 'The URL is missing the user email.');
       }
-      assertNotSelf(admin, userId);
+      assertNotSelf(adminPrincipal, userId);
       assertNotBootstrap(deps, userId);
 
       const removed = await deps.store.remove(userId);

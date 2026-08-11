@@ -13,26 +13,38 @@ import {
   type ListHolidaysResponse,
   type ListMakeupWorkdaysResponse,
   type MakeupWorkday,
-  type Principal,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
 import type { DirtyEpicQueue } from '../services/phase-config.service.js';
+import { projectCtxOf, type AuthzGuard, type AuthzGuards } from '../adapters/project-scope.js';
 
 /**
- * Nhóm API lịch làm việc & ngày nghỉ — T-36.
+ * Nhóm API lịch làm việc, ngày nghỉ & ngày LÀM BÙ — T-36/T-39 — mount BA nơi
+ * theo mô hình multi-tenant:
  *
- * Đây là đường NẠP DỮ LIỆU duy nhất của bảng `calendar_holiday`. Trước card này
- * bảng đó không có cách nào nhận dữ liệu (T-02/T-12 để lại "cho card vận hành
- * sau"), nên đường Kế hoạch cháy đều qua cả tuần nghỉ lễ — E-14 thành hiện thực.
+ *   - `GET /api/calendars` (+ đọc holidays/makeup-workdays của lịch BUILT-IN):
+ *     mọi người đã đăng nhập. Lịch built-in (`project_key IS NULL`, ví dụ
+ *     VN_STANDARD/JP_STANDARD) dùng chung toàn hệ thống.
+ *   - `/api/projects/:projectKey/calendars...`: lịch mà tenant đó nhìn thấy
+ *     (built-in + lịch riêng của dự án). Đọc → VIEWER; GHI (import/xoá ngày lễ
+ *     và ngày làm bù) → PM, và CHỈ trên lịch riêng của chính dự án — lịch
+ *     built-in ảnh hưởng mọi tenant nên PM không sửa được (403).
+ *   - `/api/admin/calendars/:calendarId/...`: ADMIN sửa lịch built-in (và mọi
+ *     lịch khác khi cần cứu hộ).
  *
- * Đọc: mọi người đã đăng nhập (màn hình Ngày nghỉ và ô chọn lịch ở màn Epics).
- * Ghi: CHỈ ADMIN — ngày lễ ảnh hưởng đường Kế hoạch của MỌI Epic dùng lịch đó,
- * không phải thứ từng PM tự sửa theo dự án của mình.
+ * Lịch của dự án KHÁC bị đối xử như không tồn tại (404) — cùng luật chống dò
+ * tenant với project/Epic.
  */
 
 export interface CalendarStore {
-  list(): Promise<readonly CalendarSummary[]>;
-  exists(calendarId: string): Promise<boolean>;
+  /**
+   * Danh sách lịch kèm số ngày lễ/làm bù. `forProject`:
+   *   null  → chỉ lịch built-in;
+   *   'PAY' → built-in + lịch riêng của PAY.
+   */
+  list(forProject: string | null): Promise<readonly CalendarSummary[]>;
+  /** Chủ của lịch: `{projectKey: null}` = built-in; `null` = lịch không tồn tại. */
+  owner(calendarId: string): Promise<{ projectKey: string | null } | null>;
   holidays(calendarId: string, year: number | null): Promise<readonly Holiday[]>;
   importHolidays(args: {
     calendarId: string;
@@ -59,7 +71,7 @@ export interface CalendarRouteDeps {
   readonly dirty: DirtyEpicQueue;
   /** Xoá cache biểu đồ của một Epic — số cũ tính bằng lịch cũ không dùng được nữa. */
   invalidateChart(epicKey: string): Promise<unknown>;
-  resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
 }
 
 export function registerCalendarRoutes(app: FastifyInstance, deps: CalendarRouteDeps): void {
@@ -80,23 +92,10 @@ export function registerCalendarRoutes(app: FastifyInstance, deps: CalendarRoute
     }
   };
 
-  const requirePrincipal = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-    return p;
-  };
-
-  const requireAdmin = (req: FastifyRequest): Principal => {
-    const p = requirePrincipal(req);
-    if (p.role !== 'ADMIN') {
-      throw new ApiError(
-        403,
-        'FORBIDDEN',
-        'Only Admins can edit the work calendar. Holidays and make-up workdays change the Planned line of every Epic using the calendar.',
-      );
-    }
-    return p;
-  };
+  const authed = { preHandler: deps.guards.requireAuthenticated };
+  const admin = { preHandler: deps.guards.requireAdmin };
+  const asViewer = { preHandler: deps.guards.requireProject('VIEWER') };
+  const asPm = { preHandler: deps.guards.requireProject('PM') };
 
   /**
    * Lịch vừa đổi → số liệu suy ra từ lịch cũ phải bị vứt bỏ, ngay lập tức:
@@ -111,163 +110,244 @@ export function registerCalendarRoutes(app: FastifyInstance, deps: CalendarRoute
     return epics.active.length;
   };
 
-  app.get('/api/calendars', async (req, reply) =>
-    handle(reply, async (): Promise<ListCalendarsResponse> => {
-      requirePrincipal(req);
-      return { calendars: [...(await deps.store.list())] };
-    }),
-  );
-
-  app.get('/api/calendars/:calendarId/holidays', async (req, reply) =>
-    handle(reply, async (): Promise<ListHolidaysResponse> => {
-      requirePrincipal(req);
-      const calendarId = calendarIdParam(req);
-      await assertCalendarExists(deps, calendarId);
-      const year = yearQuery(req);
-      return {
-        calendarId,
-        year,
-        holidays: [...(await deps.store.holidays(calendarId, year))],
-      };
-    }),
-  );
-
-  app.post('/api/calendars/:calendarId/holidays/import', async (req, reply) =>
-    handle(reply, async (): Promise<ImportHolidaysResponse> => {
-      requireAdmin(req);
-      const calendarId = calendarIdParam(req);
-      await assertCalendarExists(deps, calendarId);
-
-      const parsed = importHolidaysRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        // Trả lỗi TỪNG DÒNG và không ghi gì cả — người dán 50 ngày cần biết cả
-        // 3 dòng sai ở đâu trong một lượt, không phải sửa một dòng rồi gửi lại.
-        throw new ApiError(
-          400,
-          'BAD_REQUEST',
-          'The holiday list is not valid. Nothing was imported — fix the listed lines and send again.',
-          parsed.error.issues.map((i) => ({
-            level: 'ERROR' as const,
-            code: 'SCHEMA_INVALID',
-            message: i.message,
-            path: i.path.join('.'),
-          })),
-        );
-      }
-
-      const result = await deps.store.importHolidays({
-        calendarId,
-        mode: parsed.data.mode,
-        year: parsed.data.year,
-        holidays: parsed.data.holidays,
-      });
-      const epicsMarkedForRecompute = await propagateCalendarChange(calendarId);
-      return { calendarId, ...result, epicsMarkedForRecompute };
-    }),
-  );
-
-  app.delete('/api/calendars/:calendarId/holidays/:date', async (req, reply) =>
-    handle(reply, async (): Promise<DeleteHolidayResponse> => {
-      requireAdmin(req);
-      const calendarId = calendarIdParam(req);
-      await assertCalendarExists(deps, calendarId);
-
-      const date = (req.params as { date?: string }).date ?? '';
-      if (!isDateOnly(date)) {
-        throw new ApiError(400, 'BAD_REQUEST', `The date must look like YYYY-MM-DD, got "${date}".`);
-      }
-
-      const deleted = await deps.store.deleteHoliday(calendarId, date);
-      // Xoá một ngày không tồn tại là no-op: không lan truyền, không báo lỗi —
-      // hai người cùng xoá một dòng thì người bấm sau vẫn thấy kết quả đúng.
-      const epicsMarkedForRecompute = deleted > 0 ? await propagateCalendarChange(calendarId) : 0;
-      return { calendarId, deleted, epicsMarkedForRecompute };
-    }),
-  );
-
-  // -------------------------------------------------------------------------
-  // Ngày LÀM BÙ — cùng khuôn phân quyền/lan truyền với ngày lễ. Đổi lịch làm bù
-  // cũng làm đường Kế hoạch đổi nên phải xoá cache biểu đồ + đánh dấu tính lại.
-  // -------------------------------------------------------------------------
-
-  app.get('/api/calendars/:calendarId/makeup-workdays', async (req, reply) =>
-    handle(reply, async (): Promise<ListMakeupWorkdaysResponse> => {
-      requirePrincipal(req);
-      const calendarId = calendarIdParam(req);
-      await assertCalendarExists(deps, calendarId);
-      const year = yearQuery(req);
-      return {
-        calendarId,
-        year,
-        makeupWorkdays: [...(await deps.store.makeupWorkdays(calendarId, year))],
-      };
-    }),
-  );
-
-  app.post('/api/calendars/:calendarId/makeup-workdays/import', async (req, reply) =>
-    handle(reply, async (): Promise<ImportMakeupWorkdaysResponse> => {
-      requireAdmin(req);
-      const calendarId = calendarIdParam(req);
-      await assertCalendarExists(deps, calendarId);
-
-      const parsed = importMakeupWorkdaysRequestSchema.safeParse(req.body);
-      if (!parsed.success) {
-        throw new ApiError(
-          400,
-          'BAD_REQUEST',
-          'The make-up workday list is not valid. Nothing was imported — fix the listed lines and send again.',
-          parsed.error.issues.map((i) => ({
-            level: 'ERROR' as const,
-            code: 'SCHEMA_INVALID',
-            message: i.message,
-            path: i.path.join('.'),
-          })),
-        );
-      }
-
-      const result = await deps.store.importMakeupWorkdays({
-        calendarId,
-        mode: parsed.data.mode,
-        year: parsed.data.year,
-        makeupWorkdays: parsed.data.makeupWorkdays,
-      });
-      const epicsMarkedForRecompute = await propagateCalendarChange(calendarId);
-      return { calendarId, ...result, epicsMarkedForRecompute };
-    }),
-  );
-
-  app.delete('/api/calendars/:calendarId/makeup-workdays/:date', async (req, reply) =>
-    handle(reply, async (): Promise<DeleteMakeupWorkdayResponse> => {
-      requireAdmin(req);
-      const calendarId = calendarIdParam(req);
-      await assertCalendarExists(deps, calendarId);
-
-      const date = (req.params as { date?: string }).date ?? '';
-      if (!isDateOnly(date)) {
-        throw new ApiError(400, 'BAD_REQUEST', `The date must look like YYYY-MM-DD, got "${date}".`);
-      }
-
-      const deleted = await deps.store.deleteMakeupWorkday(calendarId, date);
-      const epicsMarkedForRecompute = deleted > 0 ? await propagateCalendarChange(calendarId) : 0;
-      return { calendarId, deleted, epicsMarkedForRecompute };
-    }),
-  );
-}
-
-async function assertCalendarExists(deps: CalendarRouteDeps, calendarId: string): Promise<void> {
-  if (!(await deps.store.exists(calendarId))) {
-    throw new ApiError(
+  const calendarNotFound = (calendarId: string): ApiError =>
+    new ApiError(
       404,
       'CALENDAR_NOT_FOUND',
       `Calendar "${calendarId}" does not exist. Known calendars are listed at GET /api/calendars.`,
     );
+
+  /**
+   * Quy tắc nhìn/sửa lịch theo phạm vi của route:
+   *   - scope null (route built-in / admin): thấy mọi lịch tồn tại; route
+   *     built-in tự siết thêm "chỉ built-in" qua `builtinOnly`.
+   *   - scope 'PAY': thấy built-in + lịch của PAY; lịch dự án khác → 404.
+   */
+  const visibleOwner = async (
+    calendarId: string,
+    scope: string | null,
+    builtinOnly: boolean,
+  ): Promise<{ projectKey: string | null }> => {
+    const owner = await deps.store.owner(calendarId);
+    if (owner === null) throw calendarNotFound(calendarId);
+    if (builtinOnly && owner.projectKey !== null) throw calendarNotFound(calendarId);
+    if (scope !== null && owner.projectKey !== null && owner.projectKey !== scope) {
+      // Lịch của tenant khác: trả đúng 404 như không tồn tại — không dò được.
+      throw calendarNotFound(calendarId);
+    }
+    return owner;
+  };
+
+  // -------------------------------------------------------------------------
+  // Đăng ký MỘT bộ endpoint đọc/ghi cho một phạm vi. Ngày lễ và ngày LÀM BÙ đi
+  // cùng khuôn phân quyền/lan truyền — đổi bên nào cũng làm đường Kế hoạch đổi
+  // nên đều phải xoá cache biểu đồ + đánh dấu tính lại.
+  // -------------------------------------------------------------------------
+  interface ScopeArgs {
+    readonly prefix: string;
+    /** Phạm vi tenant của request; null = không giới hạn theo tenant. */
+    scopeOf(req: FastifyRequest): string | null;
+    /** true = route chỉ nhìn thấy lịch built-in. */
+    readonly builtinOnly: boolean;
+    readonly read: { preHandler: AuthzGuard };
+    /** Không có `write` = phạm vi đó không mở endpoint ghi. */
+    readonly write?: {
+      readonly opts: { preHandler: AuthzGuard };
+      /** Kiểm quyền GHI trên lịch cụ thể (sau khi đã thấy được nó). */
+      assertWritable(owner: { projectKey: string | null }, calendarId: string): void;
+    };
   }
+
+  const registerScope = ({ prefix, scopeOf, builtinOnly, read, write }: ScopeArgs): void => {
+    app.get(`${prefix}/:calendarId/holidays`, read, async (req, reply) =>
+      handle(reply, async (): Promise<ListHolidaysResponse> => {
+        const calendarId = calendarIdParam(req);
+        await visibleOwner(calendarId, scopeOf(req), builtinOnly);
+        const year = yearQuery(req);
+        return { calendarId, year, holidays: [...(await deps.store.holidays(calendarId, year))] };
+      }),
+    );
+
+    app.get(`${prefix}/:calendarId/makeup-workdays`, read, async (req, reply) =>
+      handle(reply, async (): Promise<ListMakeupWorkdaysResponse> => {
+        const calendarId = calendarIdParam(req);
+        await visibleOwner(calendarId, scopeOf(req), builtinOnly);
+        const year = yearQuery(req);
+        return {
+          calendarId,
+          year,
+          makeupWorkdays: [...(await deps.store.makeupWorkdays(calendarId, year))],
+        };
+      }),
+    );
+
+    if (write === undefined) return;
+    const { opts, assertWritable } = write;
+
+    app.post(`${prefix}/:calendarId/holidays/import`, opts, async (req, reply) =>
+      handle(reply, async (): Promise<ImportHolidaysResponse> => {
+        const calendarId = calendarIdParam(req);
+        assertWritable(await visibleOwner(calendarId, scopeOf(req), builtinOnly), calendarId);
+
+        const parsed = importHolidaysRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+          // Trả lỗi TỪNG DÒNG và không ghi gì cả — người dán 50 ngày cần biết cả
+          // 3 dòng sai ở đâu trong một lượt, không phải sửa một dòng rồi gửi lại.
+          throw importInvalid(
+            'The holiday list is not valid. Nothing was imported — fix the listed lines and send again.',
+            parsed.error,
+          );
+        }
+
+        const result = await deps.store.importHolidays({
+          calendarId,
+          mode: parsed.data.mode,
+          year: parsed.data.year,
+          holidays: parsed.data.holidays,
+        });
+        const epicsMarkedForRecompute = await propagateCalendarChange(calendarId);
+        return { calendarId, ...result, epicsMarkedForRecompute };
+      }),
+    );
+
+    app.delete(`${prefix}/:calendarId/holidays/:date`, opts, async (req, reply) =>
+      handle(reply, async (): Promise<DeleteHolidayResponse> => {
+        const calendarId = calendarIdParam(req);
+        assertWritable(await visibleOwner(calendarId, scopeOf(req), builtinOnly), calendarId);
+        const date = dateParam(req);
+
+        const deleted = await deps.store.deleteHoliday(calendarId, date);
+        // Xoá một ngày không tồn tại là no-op: không lan truyền, không báo lỗi —
+        // hai người cùng xoá một dòng thì người bấm sau vẫn thấy kết quả đúng.
+        const epicsMarkedForRecompute = deleted > 0 ? await propagateCalendarChange(calendarId) : 0;
+        return { calendarId, deleted, epicsMarkedForRecompute };
+      }),
+    );
+
+    app.post(`${prefix}/:calendarId/makeup-workdays/import`, opts, async (req, reply) =>
+      handle(reply, async (): Promise<ImportMakeupWorkdaysResponse> => {
+        const calendarId = calendarIdParam(req);
+        assertWritable(await visibleOwner(calendarId, scopeOf(req), builtinOnly), calendarId);
+
+        const parsed = importMakeupWorkdaysRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+          throw importInvalid(
+            'The make-up workday list is not valid. Nothing was imported — fix the listed lines and send again.',
+            parsed.error,
+          );
+        }
+
+        const result = await deps.store.importMakeupWorkdays({
+          calendarId,
+          mode: parsed.data.mode,
+          year: parsed.data.year,
+          makeupWorkdays: parsed.data.makeupWorkdays,
+        });
+        const epicsMarkedForRecompute = await propagateCalendarChange(calendarId);
+        return { calendarId, ...result, epicsMarkedForRecompute };
+      }),
+    );
+
+    app.delete(`${prefix}/:calendarId/makeup-workdays/:date`, opts, async (req, reply) =>
+      handle(reply, async (): Promise<DeleteMakeupWorkdayResponse> => {
+        const calendarId = calendarIdParam(req);
+        assertWritable(await visibleOwner(calendarId, scopeOf(req), builtinOnly), calendarId);
+        const date = dateParam(req);
+
+        const deleted = await deps.store.deleteMakeupWorkday(calendarId, date);
+        const epicsMarkedForRecompute = deleted > 0 ? await propagateCalendarChange(calendarId) : 0;
+        return { calendarId, deleted, epicsMarkedForRecompute };
+      }),
+    );
+  };
+
+  // ---- Danh sách lịch ------------------------------------------------------
+
+  // Built-in cho mọi người đã đăng nhập (ô chọn lịch, màn hình Ngày nghỉ).
+  app.get('/api/calendars', authed, async (_req, reply) =>
+    handle(reply, async (): Promise<ListCalendarsResponse> => ({
+      calendars: [...(await deps.store.list(null))],
+    })),
+  );
+
+  // Built-in + lịch riêng của tenant — cho các màn hình trong một dự án.
+  app.get('/api/projects/:projectKey/calendars', asViewer, async (req, reply) =>
+    handle(reply, async (): Promise<ListCalendarsResponse> => ({
+      calendars: [...(await deps.store.list(projectCtxOf(req).projectKey))],
+    })),
+  );
+
+  // ---- Đọc lịch built-in (mọi người đã đăng nhập) --------------------------
+  registerScope({
+    prefix: '/api/calendars',
+    scopeOf: () => null,
+    builtinOnly: true,
+    read: authed,
+    // Không có write: sửa built-in đi qua /api/admin/calendars.
+  });
+
+  // ---- Lịch trong một dự án ------------------------------------------------
+  registerScope({
+    prefix: '/api/projects/:projectKey/calendars',
+    scopeOf: (req) => projectCtxOf(req).projectKey,
+    builtinOnly: false,
+    read: asViewer,
+    write: {
+      opts: asPm,
+      assertWritable: (owner, calendarId) => {
+        if (owner.projectKey === null) {
+          // PM thấy được lịch built-in nhưng KHÔNG sửa được: ngày lễ/làm bù của
+          // nó đổi đường Kế hoạch của MỌI tenant đang dùng chung.
+          throw new ApiError(
+            403,
+            'FORBIDDEN',
+            `Calendar "${calendarId}" is a built-in shared calendar. Only Admins can edit it — ` +
+              'its holidays and make-up workdays change the Planned line of every project using it.',
+          );
+        }
+      },
+    },
+  });
+
+  // ---- Quản trị (ADMIN) ----------------------------------------------------
+  registerScope({
+    prefix: '/api/admin/calendars',
+    scopeOf: () => null,
+    builtinOnly: false,
+    read: admin,
+    write: { opts: admin, assertWritable: () => undefined },
+  });
+}
+
+function importInvalid(
+  message: string,
+  error: { issues: ReadonlyArray<{ path: PropertyKey[]; message: string }> },
+): ApiError {
+  return new ApiError(
+    400,
+    'BAD_REQUEST',
+    message,
+    error.issues.map((i) => ({
+      level: 'ERROR' as const,
+      code: 'SCHEMA_INVALID',
+      message: i.message,
+      path: i.path.join('.'),
+    })),
+  );
 }
 
 function calendarIdParam(req: FastifyRequest): string {
   const id = (req.params as { calendarId?: string }).calendarId?.trim();
   if (!id) throw new ApiError(400, 'BAD_REQUEST', 'The URL is missing the calendar id.');
   return id;
+}
+
+function dateParam(req: FastifyRequest): string {
+  const date = (req.params as { date?: string }).date ?? '';
+  if (!isDateOnly(date)) {
+    throw new ApiError(400, 'BAD_REQUEST', `The date must look like YYYY-MM-DD, got "${date}".`);
+  }
+  return date;
 }
 
 /** `?year=` tuỳ chọn; sai định dạng báo ngay chứ không im lặng bỏ lọc. */
