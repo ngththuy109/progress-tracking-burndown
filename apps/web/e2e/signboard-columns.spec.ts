@@ -21,6 +21,7 @@ const CONFIG = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    subPhaseOrders: false,
   },
 };
 
@@ -33,11 +34,18 @@ const PROJECT_CONFIG = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 };
 
 interface Calls {
-  readonly saves: { payload: { signboardColumns: { taskCode: string }[]; matchRules: unknown[] } }[];
+  readonly saves: {
+    payload: {
+      signboardColumns: { taskCode: string }[];
+      matchRules: unknown[];
+      subPhaseOrders: { phaseCode: string; subPhaseCode: string; displayOrder: number }[];
+    };
+  }[];
 }
 
 async function installApi(page: Page, options: { project?: boolean; duplicate?: boolean } = {}): Promise<Calls> {
@@ -154,8 +162,10 @@ test('project ghi đè cột thì các phần khác VẪN kế thừa', async ({
   await installApi(page, { project: true });
   await page.goto(`${PAGE}?project=SHOP`);
 
-  await expect(page.getByText(/inherited from the Default set/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Override for project SHOP' })).toBeVisible();
+  // Cả khu ④ (cột) lẫn khu ⑤ (Sub-phase order) đều có nhãn kế thừa riêng —
+  // kiểm cả hai để chắc phần MỚI cũng đi đúng luật kế thừa theo phần.
+  await expect(page.getByText(/inherited from the Default set/)).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Override for project SHOP' }).first()).toBeVisible();
 });
 
 test('xem thử cho biết tiêu đề mẫu rơi vào cột nào hay rơi ra ngoài', async ({ page }) => {
@@ -174,4 +184,34 @@ test('mở từ gợi ý của bảng Signboard thì mã cột được điền 
   await page.goto(`${PAGE}?add=Deploy`);
 
   await expect(page.getByLabel('Column code, row 3')).toHaveValue('Deploy');
+});
+
+test('mở từ link "Set sub-phase order" thì nhóm được điền sẵn; xếp lại rồi lưu gửi đúng thứ tự', async ({
+  page,
+}) => {
+  const calls = await installApi(page);
+  await page.goto(`${PAGE}?orderPhase=FUT_TestCase&subs=fut_confirmpoint%2Cfut_testcase`);
+
+  // Nhóm điền sẵn đúng Phase và đúng các Sub-phase đang có trên bảng.
+  await expect(page.getByLabel('Phase of sub-phase group 1')).toHaveValue('FUT_TestCase');
+  await expect(page.getByLabel('Sub-phase code, FUT_TestCase row 1')).toHaveValue('fut_confirmpoint');
+  await expect(page.getByLabel('Sub-phase code, FUT_TestCase row 2')).toHaveValue('fut_testcase');
+
+  // Đảo thứ tự bằng nút mũi tên rồi lưu — payload mang displayOrder MỚI.
+  await page.getByRole('button', { name: 'Move fut_confirmpoint down' }).click();
+  await page.getByRole('button', { name: /Save columns/ }).click();
+
+  await expect.poll(() => calls.saves.length).toBe(1);
+  expect(calls.saves[0]?.payload.subPhaseOrders).toEqual([
+    { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_testcase', displayOrder: 1 },
+    { phaseCode: 'FUT_TestCase', subPhaseCode: 'fut_confirmpoint', displayOrder: 2 },
+  ]);
+});
+
+test('Phase không có Sub-phase thì khu ⑤ chỉ là ghi chú, không bắt khai gì', async ({ page }) => {
+  await installApi(page);
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('heading', { name: /Sub-phase order/ })).toBeVisible();
+  await expect(page.getByText('No sub-phase order declared yet')).toBeVisible();
 });

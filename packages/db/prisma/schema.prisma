@@ -276,6 +276,7 @@ model PhaseConfigSet {
   phaseDefinitions     PhaseDefinition[]
   matchRules           PhaseMatchRule[]
   signboardColumns     SignboardColumn[]
+  subPhaseOrders       SubPhaseOrder[]
 
   @@unique([scope, projectKey, version], map: "uq_config_version")
   @@map("phase_config_set")
@@ -384,6 +385,31 @@ model SignboardColumn {
   @@unique([configSetId, taskCode], map: "uq_task_code")
   @@index([configSetId, displayOrder], map: "idx_sbcolumn_set")
   @@map("signboard_column")
+}
+
+// ============================================================================
+// Bảng 7G: Thứ tự Sub-phase TRONG TỪNG PHASE trên bảng Signboard (PRD §6.1)
+//
+// KHÁC 7C: `display_order` của 7C là thứ tự PHASE trên biểu đồ; bảng này là thứ
+// tự các NHÓM CỘT Sub-phase khi mở một Phase trên Signboard. Sub-phase là thứ
+// của từng dự án nên tách bảng riêng — không nhét chung vào phase_definition.
+// `sub_phase_code` so với `[Sub-phase]` trong tiêu đề SAU chuẩn hoá (E-31).
+// Phase không có Sub-phase thì không có dòng nào — không phải khai.
+// ============================================================================
+model SubPhaseOrder {
+  id          BigInt @id @default(autoincrement())
+  configSetId BigInt @map("config_set_id")
+
+  phaseCode    String @map("phase_code") @db.VarChar(24)
+  subPhaseCode String @map("sub_phase_code") @db.VarChar(64)
+
+  displayOrder Int @map("display_order") // thứ tự nhóm, trái sang phải
+
+  configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)
+
+  @@unique([configSetId, phaseCode, subPhaseCode], map: "uq_sub_phase")
+  @@index([configSetId, phaseCode, displayOrder], map: "idx_subphase_set")
+  @@map("sub_phase_order")
 }
 
 // ============================================================================

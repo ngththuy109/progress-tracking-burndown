@@ -202,6 +202,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
       labelVi: taskCode,
       displayOrder: i + 1,
     })),
+    subPhaseOrders: [],
     projectKey: null,
     globalVersion: 1,
     projectVersion: null,
@@ -211,6 +212,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
       phaseDefinitions: false,
       matchRules: false,
       signboardColumns: false,
+      subPhaseOrders: false,
     },
   };
 }
@@ -290,6 +292,7 @@ export function runInherit(fixture: InheritFixture): {
       labelVi: taskCode,
       displayOrder: i + 1,
     })),
+    subPhaseOrders: [],
   });
 
   const merged = mergeInheritance(

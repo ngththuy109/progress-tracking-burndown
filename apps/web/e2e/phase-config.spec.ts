@@ -35,6 +35,7 @@ const GLOBAL_CONFIG = {
     phaseDefinitions: false,
     matchRules: false,
     signboardColumns: false,
+    subPhaseOrders: false,
   },
 };
 
@@ -49,6 +50,7 @@ const PROJECT_CONFIG = {
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 };
 

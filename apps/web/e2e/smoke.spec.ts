@@ -35,7 +35,7 @@ const VALID_CONFIG = {
   projectKey: null,
   globalVersion: 3,
   projectVersion: null,
-  inherited: { titlePatterns: true, phaseDefinitions: true, matchRules: true, signboardColumns: true, subtaskPatterns: true },
+  inherited: { titlePatterns: true, phaseDefinitions: true, matchRules: true, signboardColumns: true, subtaskPatterns: true, subPhaseOrders: true },
 };
 
 /**

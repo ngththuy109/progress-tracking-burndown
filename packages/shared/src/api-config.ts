@@ -137,6 +137,7 @@ export const inheritFlagsSchema = z.object({
   phaseDefinitions: z.boolean(),
   matchRules: z.boolean(),
   signboardColumns: z.boolean(),
+  subPhaseOrders: z.boolean(),
 });
 export type InheritFlags = z.infer<typeof inheritFlagsSchema>;
 
@@ -147,6 +148,7 @@ export const INHERITABLE_PARTS = [
   'phaseDefinitions',
   'matchRules',
   'signboardColumns',
+  'subPhaseOrders',
 ] as const;
 export type InheritablePartKey = (typeof INHERITABLE_PARTS)[number];
 

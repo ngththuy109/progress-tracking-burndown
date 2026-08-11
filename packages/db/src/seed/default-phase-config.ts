@@ -76,6 +76,15 @@ export const DEFAULT_PHASE_CONFIG: ConfigPayload = {
     { keyword: 'Triển khai', matchMode: 'CONTAINS', phaseCode: 'RELEASE', matchPriority: 50 },
   ],
 
+  /**
+   * Thứ tự Sub-phase trong từng Phase trên Signboard — Mặc định RỖNG.
+   *
+   * Sub-phase là thứ của từng dự án (ví dụ `FUT_ConfirmPoint` trước
+   * `FUT_TestCase`), không có bộ "chuẩn" nào để seed. Chưa khai thì bảng tự xếp:
+   * khớp Phase → theo `display_order`, lạ → A→Z, "(No sub-phase)" cuối.
+   */
+  subPhaseOrders: [],
+
   signboardColumns: [
     { taskCode: 'Create', labelVi: 'Tạo mới', labelJa: '作成', displayOrder: 1 },
     { taskCode: 'BALReview', labelVi: 'BAL review', labelJa: 'BALレビュー', displayOrder: 2 },
