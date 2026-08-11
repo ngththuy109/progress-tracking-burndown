@@ -4,7 +4,7 @@ import './load-env.js';
 import { pathToFileURL } from 'node:url';
 import { Redis } from 'ioredis';
 import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
-import { disconnectPrisma, getPrisma } from '@app/db';
+import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
 import { withTimeout, TimeoutError } from '@app/shared';
 import { RedisTokenBucketStore, type EvalRedis } from './queue/redis-token-bucket.js';
 import { createShutdown, registerSignalHandlers } from './queue/shutdown.js';
@@ -230,6 +230,13 @@ async function bootstrap(): Promise<void> {
   // không có database.
   const prisma = getPrisma();
   await prisma.$queryRaw`SELECT 1`;
+
+  // CHẶN khởi động nếu database còn migration chưa áp. Deploy mã mới mà quên
+  // `pnpm db:migrate` thì mọi job chạm cột/bảng mới sẽ đổ hàng loạt vì thiếu
+  // schema — thà chết sớm ở đây với đúng lệnh phải chạy.
+  await assertMigrationsApplied(prisma, {
+    onSkip: (reason, dir) => log({ event: 'migrations.check.skipped', reason, dir }),
+  });
 
   // JiraClient dùng token bucket Redis DÙNG CHUNG (C-7): 40 req/s toàn hệ thống,
   // chứ không phải mỗi worker một hạn riêng — nếu không bốn worker thành 160 req/s
