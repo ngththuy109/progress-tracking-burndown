@@ -237,6 +237,33 @@ export function BurndownChart({
       />
       <Legend />
 
+      {/*
+        CẦU NỐI cho đường Thực tế: cùng dữ liệu nhưng `connectNulls`, nét đứt
+        mờ, vẽ TRƯỚC để nằm DƯỚI đường chính. Ở đâu có dữ liệu thật, đường chính
+        đè khít lên nó; chỗ thiếu snapshot chỉ còn nét đứt mờ hiện ra — người
+        xem thấy MẠCH LIỀN (yêu cầu 2026-08) nhưng vẫn phân biệt được đoạn nào
+        là nối ước lượng chứ không phải số đo thật (E-12 giữ theo tinh thần:
+        đoạn thiếu trông KHÁC hẳn, kèm banner đỏ liệt kê đúng những ngày thiếu).
+      */}
+      {series.map((s, i) => (
+        <Line
+          key={`${s.key}-actual-bridge`}
+          type="monotone"
+          dataKey={`${s.key}__actual`}
+          stroke={s.colorHex ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]}
+          strokeWidth={1.5}
+          strokeOpacity={0.55}
+          strokeDasharray="4 4"
+          connectNulls
+          dot={false}
+          activeDot={false}
+          // Không vào chú giải lẫn tooltip: đây là nét phụ trợ của chính đường
+          // Thực tế, không phải một chuỗi số riêng.
+          legendType="none"
+          tooltipType="none"
+        />
+      ))}
+
       {series.map((s, i) => (
         <Line
           key={`${s.key}-actual`}
@@ -245,10 +272,11 @@ export function BurndownChart({
           name={`${s.label} · Actual`}
           stroke={s.colorHex ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]}
           strokeWidth={2}
-          // `connectNulls={false}`: ngày thiếu snapshot phải là LỖ THỦNG NHÌN
-          // THẤY ĐƯỢC. Nối tắt qua đó trông đẹp hơn nhưng là bịa ra một tiến độ
-          // không có thật (E-12). Ngày nghỉ KHÔNG tạo lỗ thủng vì đã được kéo
-          // phẳng trong `toChartRows` — đường liền mạch qua dải xám.
+          // `connectNulls={false}` trên ĐƯỜNG CHÍNH: đoạn qua ngày thiếu
+          // snapshot không được vẽ nét liền — nét liền là cam kết "số đo thật".
+          // Mạch liền mà người xem thấy do CẦU NỐI nét đứt phía trên đảm nhận;
+          // ngày nghỉ thì không tạo lỗ thủng vì đã kéo phẳng trong
+          // `toChartRows` (E-12).
           connectNulls={false}
           dot={workdayOnlyDot}
         />
