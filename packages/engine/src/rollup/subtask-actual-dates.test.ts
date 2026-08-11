@@ -105,6 +105,62 @@ describe('actual_start — worklog là nguồn ưu tiên', () => {
   });
 });
 
+describe('chuyển nhầm In Progress rồi trả về Open — reset actual_start khi resync', () => {
+  it('kéo In Progress về To Do, chưa Done, không log giờ thì actual_start = null', () => {
+    // Bug gốc: user chuyển nhầm sang In Progress dù chưa bắt đầu, sửa lại về
+    // Open rồi bấm resync — actual_start vẫn không về null. Dấu vết In Progress
+    // còn trong changelog nhưng trạng thái HIỆN TẠI là To Do nghĩa là CHƯA làm.
+    const s = sub({
+      changelog: [
+        status('3', '2026-03-09T02:00:00Z'), // 未対応 → 対応中 (nhầm)
+        status('1', '2026-03-10T02:00:00Z'), // 対応中 → 未対応 (sửa lại về Open)
+      ],
+    });
+    const r = resolveSubtaskActualDates(s, STATUS, VN);
+    expect(r.actualStart).toBeNull();
+    expect(r.actualEnd).toBeNull();
+    expect(r.actualEndIsProvisional).toBe(true);
+  });
+
+  it('kéo về To Do rồi lại chuyển In Progress thì actual_start = lần In Progress ĐẦU', () => {
+    // KHÔNG được chặn quá tay: nếu ticket lại đang In Progress thì nó đã bắt đầu
+    // thật, giữ nguyên ngày In Progress đầu tiên.
+    const s = sub({
+      changelog: [
+        status('3', '2026-03-09T02:00:00Z'),
+        status('1', '2026-03-10T02:00:00Z'),
+        status('3', '2026-03-11T02:00:00Z'), // hiện đang In Progress
+      ],
+    });
+    expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-09');
+  });
+
+  it('có worklog thì vẫn giữ actual_start dù đã kéo về To Do', () => {
+    // Worklog là bằng chứng đã thật sự làm — không bị xoá theo trạng thái.
+    const s = sub({
+      changelog: [
+        status('3', '2026-03-09T02:00:00Z'),
+        status('1', '2026-03-11T02:00:00Z'), // về To Do
+      ],
+      worklogs: [wl('2026-03-09T02:00:00Z')],
+    });
+    expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-09');
+  });
+
+  it('đã Done rồi mới kéo về To Do thì GIỮ ngày bắt đầu — việc đã làm là thật', () => {
+    // Chỉ reset khi CHƯA TỪNG Done. Task To Do→In Progress→Done→To Do (kéo về
+    // backlog sau khi xong) là việc thật, actual_start vẫn là lần In Progress đầu.
+    const s = sub({
+      changelog: [
+        status('3', '2026-03-09T02:00:00Z'),
+        status('10001', '2026-03-12T02:00:00Z'),
+        status('1', '2026-03-13T02:00:00Z'), // kéo ngược về To Do
+      ],
+    });
+    expect(resolveSubtaskActualDates(s, STATUS, VN).actualStart).toBe('2026-03-09');
+  });
+});
+
 describe('actual_end — chưa Done thì KHÔNG tạm tính', () => {
   it('Sub-task chưa Done thì actual_end = null dù đã có worklog', () => {
     // Trước đây lấy tạm ngày worklog cuối — PM đọc nhầm thành việc đã xong.
