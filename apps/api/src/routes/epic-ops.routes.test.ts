@@ -98,7 +98,7 @@ class FakeReads implements EpicOpsReadPort {
   async storedRemaining() {
     return this.stored;
   }
-  async subtasksWithHistory(_epicKey: string, _projectKey: string) {
+  async subtasksWithHistory() {
     return {
       subtasks: this.subtasks,
       summaries: Object.fromEntries(this.subtasks.map((s) => [s.key, `Việc ${s.key}`])),

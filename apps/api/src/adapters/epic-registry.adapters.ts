@@ -16,7 +16,6 @@ import {
   type JiraClient,
   type JiraClientRegistry,
   type JiraIssue,
-  type ResolvedFieldMapping,
 } from '@app/jira';
 import type { TrackedEpicStatus } from '@app/shared';
 import type {

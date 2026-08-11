@@ -3,7 +3,6 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import {
   RECOMPUTE_SECONDS_PER_EPIC,
   addEpicsResponseSchema,
-  missingDatesResponseSchema,
   type Principal,
   type TrackedEpicStatus,
 } from '@app/shared';
