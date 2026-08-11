@@ -80,6 +80,7 @@
 | 40 | Sau khi import + Resync, mở biểu đồ Epic vắt qua ngày lễ | Đường Kế hoạch **đi ngang** qua ngày lễ (không giảm); trục ngang không có ngày lễ đó | ☐ |
 | 41 | Mở biểu đồ Epic mà lịch **chưa khai** ngày lễ năm nay | Cảnh báo 📅 nói rõ lịch chưa có ngày lễ và cách khắc phục | ☐ |
 | 42 | Đặt `wbs_end_date` một Sub-task JMReview (Side = JP) vào đúng ngày lễ Nhật, sync | Màn Phase sub-tasks: banner đỏ + badge ⚠ trên dòng đó, ghi rõ ngày và **tên ngày lễ JP**; cùng ngày đó Sub-task phía VN **không** bị báo | ☐ |
+| 42a | Mở **Signboard** của Phase chứa Sub-task đó | Ô tương ứng có badge `⚠ day off (JP)`; rê chuột thấy lý do kèm tên ngày lễ; đầu bảng có banner đếm và link *See the full list* | ☐ |
 | 43 | Đặt `wbs_start_date` một Sub-task Create (Side = VN) vào thứ Bảy, sync | Badge ⚠ ghi *weekend* phía VN; màn Epics cột **On days off** đếm được và bấm sang được màn Sub-tasks | ☐ |
 | 44 | Sub-task có khoảng plan **vắt qua** cuối tuần (hai mốc đều ngày làm việc) | **Không** bị báo vi phạm | ☐ |
 | 45 | Thêm Epic mới ở màn Epics | Có ô chọn lịch (mặc định VN_STANDARD); lịch chưa có ngày lễ hiện ⚠ ngay trong ô chọn | ☐ |

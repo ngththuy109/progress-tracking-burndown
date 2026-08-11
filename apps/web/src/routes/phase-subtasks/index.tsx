@@ -8,6 +8,7 @@ import {
 } from '@app/shared';
 import { usePhaseSubtasks } from '../../api/use-phase-subtasks.js';
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
+import { conflictText } from './conflict-text.js';
 import {
   Badge,
   DataTable,
@@ -45,23 +46,6 @@ function DateRange({ start, end }: { readonly start: string | null; readonly end
       {start ?? '—'} <span aria-hidden="true">→</span> {end ?? '—'}
     </span>
   );
-}
-
-/**
- * Câu mô tả một vi phạm plan-ngày nghỉ, đủ để PM biết sửa gì trên Jira.
- * Ví dụ: "End 2026-02-17 is a JP holiday (山の日)".
- */
-export function conflictText(c: PlanConflict): string {
-  return c.violations
-    .map((v) => {
-      const what = v.field === 'START' ? 'Start' : 'End';
-      const why =
-        v.reason === 'WEEKEND'
-          ? `falls on a ${c.side} weekend`
-          : `is a ${c.side} holiday${v.holidayLabel === null ? '' : ` (${v.holidayLabel})`}`;
-      return `${what} ${v.date} ${why}`;
-    })
-    .join('; ');
 }
 
 function buildColumns(conflicts: ReadonlyMap<string, PlanConflict>): readonly Column<PhaseSubtaskTicket>[] {

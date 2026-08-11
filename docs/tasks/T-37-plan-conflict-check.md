@@ -124,3 +124,8 @@ tên ngày lễ, và màn Epics đếm được số vi phạm của từng Epic
   Task cha theo PRD §2.9.2).
 - Badge ⚠ và banner trên màn Phase sub-tasks; cột "On days off" trên màn Epics.
 - 19 test mới cho service + route.
+- Bổ sung theo yêu cầu PM (2026-08-11): cảnh báo hiện NGAY TRÊN Ô của bảng
+  Signboard — badge `⚠ day off (VN/JP)` trên ô lá chứa ticket vi phạm, lý do
+  nằm trong tooltip của chính ô, banner đếm theo Phase đang xem kèm link sang
+  màn Phase sub-tasks. Ô Σ/Overall không lặp lại cảnh báo cho đỡ nhiễu.
+  Thêm 5 test component/hàm thuần (`signboard-cell.test.tsx`).
