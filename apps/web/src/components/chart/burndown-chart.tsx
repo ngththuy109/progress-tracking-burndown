@@ -29,19 +29,23 @@ const PLANNED_FALLBACK = '#9ca3af';
 const OFF_DAY_FILL = '#9ca3af';
 const OFF_DAY_FILL_OPACITY = 0.18;
 
+/** Đường Kế hoạch làm ĐẬM hơn màu Thực tế bao nhiêu — pha 40% về phía đen. */
+const PLANNED_DARKEN = 0.4;
+
 /**
  * Màu của đường Kế hoạch, suy ra từ màu đường Thực tế cùng Phase.
  *
- * Pha 55% về phía trắng: hai đường RÕ RÀNG khác màu (PM từng nhầm vì trước đây
- * chỉ khác mỗi nét đứt), nhưng vẫn cùng tông để mắt gom được cặp Kế hoạch /
- * Thực tế của cùng một Phase khi có nhiều Phase trên biểu đồ.
+ * Pha 40% về phía ĐEN: đường Kế hoạch trước đây pha về trắng nên quá nhạt, gần
+ * như chìm vào nền (PM báo khó nhìn). Nay làm ĐẬM hơn hẳn màu Thực tế — vẫn
+ * cùng tông để mắt gom được cặp Kế hoạch / Thực tế của cùng một Phase, nhưng
+ * nổi rõ; nét đứt đậm bên dưới lo phần phân biệt với đường Thực tế.
  */
 export function plannedColorOf(actualHex: string): string {
   const hex = /^#([0-9a-fA-F]{6})$/.exec(actualHex.trim())?.[1];
   if (hex === undefined) return PLANNED_FALLBACK;
 
   const rgb = parseInt(hex, 16);
-  const toward = (channel: number): number => Math.round(channel + (255 - channel) * 0.55);
+  const toward = (channel: number): number => Math.round(channel * (1 - PLANNED_DARKEN));
   const r = toward((rgb >> 16) & 0xff);
   const g = toward((rgb >> 8) & 0xff);
   const b = toward(rgb & 0xff);
@@ -214,6 +218,45 @@ export function measuredOnlyDot(props: {
   return <circle key={props.key} cx={cx} cy={cy} r={3} stroke={stroke} strokeWidth={1} fill="#fff" />;
 }
 
+/**
+ * Bề rộng gần đúng một nhãn ngày `YYYY-MM-DD` cần để không chồng lên nhau (px).
+ * Dùng để giãn nhãn cho thưa; VẠCH LƯỚI vẫn một vạch mỗi ngày.
+ */
+const DAY_LABEL_WIDTH_PX = 78;
+
+/**
+ * Chọn tập ngày ĐƯỢC GHI NHÃN sao cho nhãn không chồng nhau, giãn đều.
+ *
+ * Trục vẫn có MỘT tick mỗi ngày (`interval={0}` bên dưới) nên lưới phân định đều
+ * từng ngày; chỉ nhãn là thưa bớt. Ẩn nhãn KHÔNG làm mất vạch lưới vì lưới bám
+ * theo vị trí tick, không theo việc có vẽ chữ hay không.
+ */
+export function labelledDates(dates: readonly string[], plotWidthPx: number): Set<string> {
+  const maxLabels = Math.max(2, Math.floor(plotWidthPx / DAY_LABEL_WIDTH_PX));
+  const step = Math.max(1, Math.ceil(dates.length / maxLabels));
+  return new Set(dates.filter((_, i) => i % step === 0));
+}
+
+/**
+ * Nhãn trục ngày: chỉ vẽ chữ cho ngày nằm trong `shown`, còn lại trả về nhóm
+ * rỗng. Tick (và vạch lưới) của mọi ngày vẫn do Recharts vẽ như thường.
+ */
+export function dayAxisTick(
+  props: { x?: number; y?: number; payload?: { value?: string | number } },
+  shown: ReadonlySet<string>,
+): ReactElement {
+  const { x, y, payload } = props;
+  const value = String(payload?.value ?? '');
+  if (!shown.has(value) || typeof x !== 'number' || typeof y !== 'number') return <g />;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text dy={12} textAnchor="middle" fontSize={11} fill="#4b5563">
+        {value}
+      </text>
+    </g>
+  );
+}
+
 export function BurndownChart({
   series,
   markers,
@@ -235,6 +278,12 @@ export function BurndownChart({
   const unclickableDays = useMemo(
     () => new Set(rows.filter((r) => r.offDay === true && r.hasData !== true).map((r) => r.date)),
     [rows],
+  );
+  // Nhãn ngày giãn theo bề rộng vẽ được (trừ hao trục Y + lề) để khỏi chồng chữ;
+  // vạch lưới thì vẫn một vạch mỗi ngày nhờ `interval={0}` trên XAxis.
+  const labelDates = useMemo(
+    () => labelledDates(rows.map((r) => r.date), Math.max(120, width - 90)),
+    [rows, width],
   );
 
   return (
@@ -264,7 +313,18 @@ export function BurndownChart({
         />
       ))}
 
-      <XAxis dataKey="date" />
+      {/*
+        `interval={0}`: MỘT tick — và do đó MỘT vạch lưới — cho MỖI ngày, để các
+        đường phân định ngày đều nhau (trước đây Recharts tự bỏ bớt tick nên chỗ
+        có chỗ không). Nhãn ngày vẫn thưa qua `dayAxisTick` cho khỏi chồng chữ.
+      */}
+      <XAxis
+        dataKey="date"
+        interval={0}
+        tick={(props: { x?: number; y?: number; payload?: { value?: string | number } }) =>
+          dayAxisTick(props, labelDates)
+        }
+      />
       <YAxis label={{ value: 'Hours remaining', angle: -90, position: 'insideLeft' }} />
       <Tooltip
         labelFormatter={(label) =>
@@ -325,10 +385,12 @@ export function BurndownChart({
             type="monotone"
             dataKey={`${s.key}__planned`}
             name={`${s.label} · Planned`}
-            // Màu khác đường Thực tế — chỉ khác nét đứt thôi thì hai đường dính
-            // nhau vẫn không phân biệt nổi.
+            // Màu ĐẬM hơn đường Thực tế + nét ĐẬM + nét đứt to: đường Kế hoạch cũ
+            // pha trắng mảnh nên gần như vô hình (PM báo khó nhìn). Nay dày và tối
+            // để đọc rõ, nét đứt to vẫn phân biệt được với đường Thực tế nét liền.
             stroke={plannedColorOf(s.colorHex ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length] ?? FALLBACK_COLORS[0])}
-            strokeDasharray="6 4"
+            strokeWidth={2.5}
+            strokeDasharray="8 4"
             connectNulls={false}
             dot={false}
           />

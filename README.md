@@ -46,7 +46,7 @@ compares against the stored snapshot, and names the culprit — who edited the e
 | Screen | What it answers |
 |---|---|
 | **Epics** | Which Epics are tracked, how each is syncing, and what data is missing |
-| **Burndown chart** | Whole Epic, a single Phase, or several Phases side by side |
+| **Burndown chart** | Whole Epic or a single Phase, Planned vs Actual over time |
 | **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase |
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
 | **Signboard columns** | Which task types become columns |

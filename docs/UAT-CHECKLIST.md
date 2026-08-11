@@ -41,7 +41,7 @@
 |---|---|---|---|---|
 | 15 | **US-03** Xem tổng Epic | Mở biểu đồ của một Epic | Hai đường Kế hoạch và Thực tế; trục ngang hiện **đủ ngày lịch**, thứ Bảy/Chủ nhật/ngày lễ nằm trong **dải xám**; team có log giờ ngày nghỉ thì đường Thực tế giảm đúng ngày đó (có chấm dữ liệu), nghỉ thật thì đường đi ngang qua dải xám | ☐ |
 | 16 | **US-04** Xem một Phase | Bấm tab *Single Phase*, chọn một Phase | Biểu đồ đổi ngay, **không có màn hình chờ tải** | ☐ |
-| 17 | **US-05** So sánh các Phase | Bấm tab *Compare Phases*, chọn 2–3 Phase | Mỗi Phase một đường màu riêng | ☐ |
+| 17 | **US-05** So sánh các Phase *(đã gỡ)* | Mở biểu đồ, xem hàng tab chế độ | **Không còn** tab *Compare Phases* — chỉ còn *Whole Epic* và *Single Phase* (chức năng so sánh đã gỡ khỏi giao diện) | ☐ |
 | 18 | **US-11** Giải thích số liệu | Bấm vào một điểm trên biểu đồ | Bảng hiện từng Sub-task, **quy tắc nào** (cột *Rule*) đã áp dụng, và câu giải thích đọc được | ☐ |
 | 19 | **US-11** Tìm ra nguyên nhân sai số | Trong bảng đó, tìm dòng ghi *Rule 2* | Hiện rõ ai sửa tay ước lượng, sửa thành bao nhiêu, lúc nào | ☐ |
 | 20 | **US-06** Dấu mốc phát sinh việc | Xem khu *Chart markers* | Ngày có phát sinh việc ghi rõ thêm bao nhiêu giờ và Sub-task nào gây ra | ☐ |

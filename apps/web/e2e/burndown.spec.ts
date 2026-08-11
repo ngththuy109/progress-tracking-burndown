@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * E2E biểu đồ Burndown — US-03, US-04, US-05, US-11.
+ * E2E biểu đồ Burndown — US-03, US-04, US-11.
  *
  * Máy chủ giả ĐẾM số lần gọi để chứng minh điều quan trọng nhất của màn hình
- * này: **đổi chế độ xem không gọi lại API**.
+ * này: **đổi chế độ xem không gọi lại API**. (Chế độ so sánh nhiều Phase đã gỡ.)
  */
 
 const DAYS = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];
@@ -145,18 +145,15 @@ test('đổi sang chế độ một Phase KHÔNG gọi lại API', async ({ page
   expect(counts.burndown).toBe(before);
 });
 
-test('chế độ so sánh vẽ mỗi Phase một đường và KHÔNG vẽ đường Kế hoạch', async ({ page }) => {
-  // Bốn Phase × hai đường là tám đường chồng nhau, không ai đọc được.
+test('chế độ so sánh nhiều Phase đã gỡ — không còn tab Compare Phases', async ({ page }) => {
+  // Yêu cầu 2026-08: bỏ chức năng so sánh Phase khỏi màn hình biểu đồ.
   await installApi(page);
   await page.goto(PAGE);
+  await expect(page.getByText('Whole Epic · Actual')).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Compare Phases' }).click();
-  await page.getByRole('button', { name: 'DESIGN' }).click();
-  await page.getByRole('button', { name: 'DEV' }).click();
-
-  await expect(page.getByText('Thiết kế · Actual')).toBeVisible();
-  await expect(page.getByText('Lập trình · Actual')).toBeVisible();
-  await expect(page.getByText('Thiết kế · Planned')).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Compare Phases' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Whole Epic' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Single Phase' })).toBeVisible();
 });
 
 test('chú thích về việc vẽ lại đường Kế hoạch LUÔN hiện, không phải bấm mới thấy', async ({ page }) => {
