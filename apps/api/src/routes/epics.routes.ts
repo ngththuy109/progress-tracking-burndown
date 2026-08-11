@@ -111,7 +111,12 @@ export function registerEpicRoutes(app: FastifyInstance, deps: EpicRouteDeps): v
   );
 
   app.get('/api/epics/:epicKey/missing-dates', async (req, reply) =>
-    handle(reply, async () => ({ rows: await listMissingDates(deps, epicKeyParam(req)) })),
+    handle(reply, async () => {
+      // `missingDatesResponseSchema` yêu cầu cả `epicKey` — thiếu nó là client
+      // từ chối toàn bộ response (RESPONSE_SHAPE_INVALID), không chỉ thiếu chữ.
+      const epicKey = epicKeyParam(req);
+      return { epicKey, rows: await listMissingDates(deps, epicKey) };
+    }),
   );
 }
 
