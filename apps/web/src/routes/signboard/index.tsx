@@ -175,7 +175,20 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
         {/* Trạng thái phụ thuộc "hôm nay". Người dùng mở tab từ hôm qua rồi quay
             lại sẽ thấy trạng thái cũ, nên NGÀY ĐANG TÍNH phải hiện rõ. */}
         <span className="muted">Status as of {data.asOfDate}</span>
-        <button type="button" className="button" onClick={() => void board.refetch()}>
+        <button
+          type="button"
+          className="button"
+          title="Refresh the data and clear any status filter or search"
+          onClick={() => {
+            // "Reload" = quay lại khung nhìn ĐẦY ĐỦ với dữ liệu mới nhất. Người
+            // dùng lọc "task trễ" xong bấm Reload là để xem lại TOÀN BỘ bảng, nên
+            // phải xoá bộ lọc trạng thái và ô tìm kiếm TRƯỚC khi tải lại — giữ
+            // nguyên bộ lọc thì họ kẹt trong khung đã lọc, không có đường ra rõ.
+            setFilter(null);
+            setSearch('');
+            void board.refetch();
+          }}
+        >
           Reload
         </button>
       </div>
