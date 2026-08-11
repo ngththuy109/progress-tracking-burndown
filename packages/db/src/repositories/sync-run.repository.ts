@@ -37,6 +37,10 @@ export async function finishSyncRun(
     daysComputed?: number;
     watermarkAfter?: Date | null;
     errorMessage: string | null;
+    /** Bước đang chạy khi job ném lỗi — để màn hình Monitoring chỉ được "lỗi ở đâu". */
+    errorStep?: string | null;
+    /** Stack trace nguyên văn — chỉ hiện ở màn hình chi tiết lần chạy. */
+    errorDetail?: string | null;
   },
 ): Promise<void> {
   const existing = await prisma.syncRun.findUnique({
@@ -56,6 +60,8 @@ export async function finishSyncRun(
       daysComputed: args.daysComputed ?? 0,
       watermarkAfter: args.watermarkAfter ?? null,
       errorMessage: args.errorMessage,
+      errorStep: args.errorStep ?? null,
+      errorDetail: args.errorDetail ?? null,
     },
   });
 }

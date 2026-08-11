@@ -200,6 +200,13 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   registerOpsRoutes(app, {
     registry,
     opsHealth: () => opsHealthPort.opsHealth(),
+    runDetail: (runId) => opsHealthPort.runDetail(runId),
+    dataQuality: {
+      issues: () => opsHealthPort.dataQualityIssues(),
+      issueProject: (issueKey) => opsHealthPort.issueProject(issueKey),
+      setExempt: (args) => opsHealthPort.setDataQualityExempt(args),
+    },
+    resolvePrincipal: getPrincipal,
   });
 
   return app;

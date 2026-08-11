@@ -101,6 +101,8 @@ export function createSyncRunPort(prisma: PrismaClient): SyncRunPort {
         apiCalls: args.apiCalls,
         rateLimitHits: args.rateLimitHits,
         errorMessage: args.errorMessage,
+        errorStep: args.errorStep,
+        errorDetail: args.errorDetail,
       }),
   };
 }

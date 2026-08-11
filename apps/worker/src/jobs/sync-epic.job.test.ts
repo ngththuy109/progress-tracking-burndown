@@ -512,6 +512,10 @@ describe('vòng đời và nhật ký', () => {
     expect(r.errorMessage).toBeTruthy();
     expect(store.runs[0]!.status).toBe('FAILED');
     expect(store.runs[0]!.errorMessage).toBeTruthy();
+    // Màn hình Monitoring cần "lỗi ở đâu, nguyên nhân": Jira chết ngay từ lần
+    // gọi đầu → bước lỗi là FETCH_TREE, và stack được giữ nguyên văn.
+    expect(store.runs[0]!.errorStep).toBe('FETCH_TREE');
+    expect(store.runs[0]!.errorDetail).toBeTruthy();
     expect(store.epicState.get('PAY-100')!.status).toBe('ERROR');
     // KHÔNG gỡ khỏi sổ (E-26): có thể chỉ là lỗi tạm thời
     expect(store.epicState.get('PAY-100')).toBeDefined();

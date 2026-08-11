@@ -266,6 +266,8 @@ export class FakeStore implements SyncRunPort, EpicStatePort, DirtyEpicQueuePort
     issuesRead?: number;
     worklogsRead?: number;
     errorMessage?: string | null;
+    errorStep?: string | null;
+    errorDetail?: string | null;
   }> = [];
   readonly dirty = new Set<string>();
   readonly epicState = new Map<string, { status: TrackedEpicStatus; lastSyncedAt: Date | null; lastError: string | null }>();
@@ -342,6 +344,8 @@ export class FakeStore implements SyncRunPort, EpicStatePort, DirtyEpicQueuePort
     issuesRead: number;
     worklogsRead: number;
     errorMessage: string | null;
+    errorStep?: string | null;
+    errorDetail?: string | null;
   }): Promise<void> {
     const run = this.runs.find((r) => r.id === args.id);
     if (run) Object.assign(run, args);
