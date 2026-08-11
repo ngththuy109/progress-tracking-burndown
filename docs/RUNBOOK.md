@@ -36,7 +36,8 @@ PM báo số liệu sai — đây là thứ tự kiểm tra:
 | 4 | Xem khối **Stored number differs from the recomputed one** | Có nghĩa snapshot đã cũ — bấm **Resync** ở màn hình Epic |
 | 5 | Ngày sai **cũ hơn 7 ngày** | Mức *Nhanh* chỉ dựng lại 7 ngày gần nhất. Bấm **Resync** rồi chọn mức *A specific date range* (xem quy trình 1) |
 | 6 | **Vừa đổi Phase settings** mà Signboard / biểu đồ theo Phase chưa đổi | Bấm **Resync** ở màn hình Epic, chọn mức *Toàn bộ* — mức *Nhanh* không phân loại lại Sub-task cũ (xem quy trình 6) |
-| 7 | Vẫn không ra | Gọi Tech Lead, kèm mã Epic và ngày |
+| 7 | **Đường Kế hoạch giảm đều qua thứ 7/CN hoặc tuần lễ Tết** | Biểu đồ có hiện cảnh báo 📅 không? Lịch của Epic chưa khai ngày lễ (hoặc Epic trỏ lịch không tồn tại). Xem quy trình 7 — Import ngày nghỉ |
+| 8 | Vẫn không ra | Gọi Tech Lead, kèm mã Epic và ngày |
 
 Đây cũng là cách trả lời rủi ro **R-07** (PM không tin số liệu): không tranh luận, mở bảng giải thích ra.
 
@@ -282,7 +283,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 ---
 
-## Sáu quy trình vận hành thường dùng
+## Bảy quy trình vận hành thường dùng
 
 ### 1. Dựng lại lịch sử một Epic
 
@@ -376,6 +377,41 @@ Lưu xong, các Epic bị ảnh hưởng được đánh dấu vào `dirty:epics
 > ⚠️ **Resync tay thì phải là mức *Toàn bộ*, không phải *Nhanh*.** Lượt tăng dần (mức *Nhanh*, và cả job đêm) chỉ đọc lại ticket vừa đổi trên Jira: tầng Task luôn được phân loại lại, nhưng **Sub-task không đổi thì giữ nguyên `phase_code` cũ** — Signboard và biểu đồ theo Phase (xếp nhóm theo `phase_code` lưu trên từng Sub-task) trông như "config không ăn". Vì sao như vậy: xem [PHASE-MAPPING.md](./PHASE-MAPPING.md).
 
 Mất ~40 giây mỗi Epic, theo dõi ở `/ops`. Thông báo *"X Epics will be recomputed"* lúc lưu là số Epic đã được đánh dấu chờ quét; log của lượt quét (`dirty-sweep.done`) là chỗ xác nhận job backfill đã thật sự được đẩy (xem PHASE-MAPPING.md mục 7).
+
+---
+
+### 7. Import ngày nghỉ đầu năm (việc định kỳ MỖI NĂM, hai lịch)
+
+**Khi nào:** đầu mỗi năm, ngay khi nhà nước công bố lịch nghỉ chính thức
+(và mỗi khi có nghỉ bù phát sinh). Làm cho **cả hai lịch**: phía VN
+(`VN_STANDARD` — người làm) và phía khách hàng (`JP_STANDARD` — người review).
+
+**Cách làm — trên giao diện (cần quyền ADMIN):** màn hình **Days off** → chọn
+tab lịch → chọn năm → dán danh sách (`YYYY-MM-DD, tên ngày lễ` — dán hai cột
+từ Excel là được) hoặc nạp file CSV → xem preview (dòng sai được chỉ đích
+danh, chưa ghi gì cả) → chọn chế độ:
+
+- **Merge** — thêm/ghi đè các ngày trong danh sách, giữ nguyên ngày khác;
+- **Replace all of {năm}** — xoá sạch năm đó rồi chèn lại (dùng khi import lại
+  danh sách chính thức, tránh sót ngày đã bỏ).
+
+**Điều gì xảy ra sau khi bấm Import:** cache biểu đồ của mọi Epic dùng lịch bị
+xoá; Epic ACTIVE được đánh dấu `dirty:epics` — job quét mỗi giờ tự tính lại,
+hoặc bấm **Resync** nếu muốn thấy ngay. Worker đọc lại lịch ở đầu mỗi job nên
+**không cần restart** gì cả.
+
+**Nếu đường Kế hoạch vẫn sai sau khi import:** kiểm tra Epic đang trỏ lịch
+nào (cột **Calendar** ở màn Epics — thấy `(unknown!)` là lịch rác, chọn lại
+`VN_STANDARD`). Dữ liệu cũ từ trước T-38 sửa hàng loạt bằng:
+
+```bash
+psql "$DATABASE_URL" -f tools/db/fix-epic-calendar.sql
+```
+
+Liên quan: cột Signboard nào do phía JP làm (JMReview…) thì đặt **Side = JP**
+ở màn **Signboard columns** — báo cáo "plan rơi vào ngày nghỉ" (màn Phase
+sub-tasks và cột *On days off* ở màn Epics) dựa vào cờ đó để biết soi bằng
+lịch nào.
 
 ---
 

@@ -2634,7 +2634,7 @@ Nếu cùng một `TaskName` lạ xuất hiện **≥ 3 lần**, hiện gợi ý
 | **E-11** | **Job đêm chạy chồng lên nhau** trên cùng 1 Epic | Khoá Redis `joblock:sync:{key}`, TTL 15 phút **có heartbeat gia hạn mỗi 60s**. Job thứ hai **không bỏ qua im lặng** mà thêm Epic vào `dirty:epics` rồi thoát. | **Không phải "snapshot sai"** — mà là: gọi Jira gấp đôi (nguy cơ 429) và ghi đè bằng dữ liệu cũ. Nếu bỏ qua im lặng thì mất luôn yêu cầu tính lại của E-03. | `UNIQUE (epic_key, snapshot_date)` + UPSERT idempotent mới là lớp đảm bảo đúng đắn thật sự — khoá chỉ là tối ưu. Khoá hỏng hoàn toàn thì số liệu **vẫn đúng**, chỉ tốn quota. Xem mục 4.2.1. |
 | **E-12** | **Thiếu snapshot của một ngày** (job lỗi, server tắt) | Job hôm sau tự dò từ ngày bắt đầu Epic, tìm ngày trống và dựng bù. | Biểu đồ bị thủng lỗ, đường nối tắt qua ngày trống gây hiểu nhầm. | Bảng theo dõi độ đầy đủ dữ liệu. Nếu thiếu > 3 ngày → cảnh báo mức nghiêm trọng. |
 | **E-13** | **Sub-task Done rồi mở lại (reopen)** | `resolveStatusCategoryAt` tự xử lý đúng: sau ngày reopen sẽ không còn là `done`, quay lại Quy tắc 2 hoặc 3. | Nếu cache cứng "đã done thì mãi mãi done" → khối lượng bị mất luôn. | Không cache trạng thái vĩnh viễn. Có unit test cho luồng `To Do → Done → In Progress → Done`. |
-| **E-14** | **Nhân sự nghỉ / ngày lễ giữa Phase** | `countWorkdays` tra bảng `calendar_holiday`, bỏ qua ngày nghỉ. | Đường Kế hoạch giảm cả trong Tết → PM tưởng team đang chậm nghiêm trọng. | Bảng ngày lễ nạp cho cả năm. Nếu thiếu dữ liệu lịch → mặc định T2–T6 và ghi log cảnh báo. |
+| **E-14** | **Nhân sự nghỉ / ngày lễ giữa Phase** | `countWorkdays` tra bảng `calendar_holiday`, bỏ qua ngày nghỉ. | Đường Kế hoạch giảm cả trong Tết → PM tưởng team đang chậm nghiêm trọng. | Bảng ngày lễ nạp cho cả năm **qua màn hình "Days off" (Phụ lục C, T-36)** — admin import đầu năm cho cả lịch VN lẫn lịch JP. Nếu thiếu dữ liệu lịch → mặc định T2–T6, ghi cảnh báo **và hiện thẳng trên màn hình Burndown** (T-38). |
 | **E-15** | **Ngày kết thúc Phase bị dời** (ai đó sửa `wbs_end_date` trên Jira) | Ngày Phase tổng hợp lại ngay ở lần đồng bộ kế tiếp. Đường Kế hoạch tự dịch theo. **Không cần PM thao tác gì.** | Vì kế hoạch tự trôi nên độ trễ bị "hấp thụ" âm thầm — nhìn biểu đồ vẫn thấy bình thường. | Mỗi lần `plan_end` của Phase bị đẩy lùi, ghi một dòng vào bảng **Lịch sử dịch chuyển kế hoạch** (Phase nào, từ ngày nào sang ngày nào, ai sửa, do Sub-task nào). Hiện dấu mốc trên biểu đồ và tổng số ngày đã bị lùi. Đây là tuyến phòng thủ chính cho **R-11**. |
 | **E-16** | **Epic không có Task Phase nào** | Trả biểu đồ rỗng kèm mã lý do `NO_PHASE_FOUND`. | Chia cho 0 khi tính `originalSeconds / plannedWorkdays` → crash. | Kiểm tra đầu vào trước khi tính. Hiện thông báo hướng dẫn: *"Epic chưa có Task nào theo quy ước `[Phase] ...`"*. |
 | **E-17** | **Worklog bị xoá trên Jira** | So khớp bằng `/worklog/deleted`. Đặt `is_deleted = true`, loại khỏi phép tính, tính lại từ ngày `started`. | Giờ đã xoá vẫn được tính → đường Thực tế thấp hơn thực tế. | Không xoá cứng để còn điều tra được. Job đối soát chạy hằng tuần. |
@@ -3235,4 +3235,64 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 
 ---
 
-*Hết tài liệu — PRD v1.0*
+## Phụ lục C — Bổ sung 2026-08: Ngày nghỉ hai phía & kiểm tra plan (T-36 → T-38)
+
+> Phần này bổ sung SAU bàn giao v1.0, không viết lại lịch sử các mục trên.
+> Nguồn gốc: đường Kế hoạch bị "chia đều cho tất cả các ngày" vì hai lỗ hổng —
+> bảng `calendar_holiday` chưa từng có đường nạp dữ liệu, và màn Track new
+> Epics gán cứng một `calendar_id` không tồn tại.
+
+### C.1 Bối cảnh nghiệp vụ
+
+Mỗi task do **người VN làm** và **người JP (khách hàng) review**. Hai phía
+nghỉ khác ngày nhau (Tết ↔ Golden Week…), vì vậy:
+
+1. Đường Kế hoạch burndown cháy theo **lịch thực thi** của Epic (mặc định
+   `VN_STANDARD` — phía làm).
+2. Loại task (cột Signboard: Create, BALReview, JMReview…) mang cờ **`side:
+   VN | JP`** cho biết phía nào làm loại task đó. Từ `task_type` của Sub-task
+   (§2.9) suy ra phía làm → biết phải kiểm tra ngày kế hoạch với lịch nào.
+
+### C.2 Import ngày nghỉ (T-36)
+
+- Màn hình **Days off**: tab theo lịch (`VN_STANDARD` / `JP_STANDARD`), xem
+  theo năm, import bằng dán danh sách (`YYYY-MM-DD[, tên ngày lễ]`) hoặc CSV,
+  xoá từng ngày. Ghi: chỉ ADMIN; đọc: mọi vai trò.
+- API:
+  - `GET /api/calendars` — danh sách lịch kèm số ngày lễ và các năm đã khai.
+  - `GET /api/calendars/{id}/holidays?year=` — ngày lễ theo năm.
+  - `POST /api/calendars/{id}/holidays/import` — thân
+    `{mode: MERGE | REPLACE_YEAR, year?, holidays: [{date, label?}]}`, tối đa
+    500 dòng, một transaction, lỗi trả từng dòng và **không ghi gì**.
+  - `DELETE /api/calendars/{id}/holidays/{date}`.
+- Sau khi sửa: xoá cache biểu đồ của mọi Epic dùng lịch, đánh dấu
+  `dirty:epics` cho Epic ACTIVE (worker tự tính lại — đường Kế hoạch floating
+  nên toàn bộ lịch sử tự đúng); worker đọc lại lịch ở đầu mỗi job nên không
+  cần restart.
+
+### C.3 Kiểm tra plan rơi vào ngày nghỉ (T-37)
+
+- **Luật:** chỉ soi hai mốc `wbs_start_date` / `wbs_end_date`. Khoảng plan
+  vắt qua ngày nghỉ KHÔNG phải vi phạm (đường Kế hoạch đã tự loại các ngày đó
+  — §4.3). Vi phạm khi mốc rơi vào ngày không làm việc (cuối tuần theo
+  `workdays_mask` hoặc ngày lễ) của **lịch phía làm**: side VN → lịch thực thi
+  của Epic; side JP → `JP_STANDARD`.
+- Sub-task không suy ra được phía (`task_type` NULL hoặc cột đã xoá): kiểm
+  theo lịch VN và gắn `sideResolved: false` — không bỏ qua trong im lặng (C-10).
+- API: `GET /api/epics/{epicKey}/plan-conflicts` (chi tiết từng vi phạm, kèm
+  tên ngày lễ) và `GET /api/plan-conflicts/summary` (đếm theo Epic; PM chỉ
+  nhận project mình — §9.3). Tính **lúc đọc**, không chốt vào snapshot.
+- UI: badge ⚠ + banner trên màn Phase sub-tasks; cột "On days off" trên màn
+  Epics.
+
+### C.4 Gán lịch cho Epic (T-38)
+
+- Track new Epics: ô chọn lịch (mặc định `VN_STANDARD`), timezone đi theo
+  lịch. Màn Epics đổi được lịch của Epic đã theo dõi.
+- `BurndownResponse.calendarWarnings[]`: lịch không tồn tại / chưa khai ngày
+  lễ nào → cảnh báo hiện thẳng trên màn Burndown.
+- Data-fix một lần: `tools/db/fix-epic-calendar.sql`.
+
+---
+
+*Hết tài liệu — PRD v1.0 (+ Phụ lục C, 2026-08)*

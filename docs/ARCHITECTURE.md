@@ -187,6 +187,8 @@ Danh tính được phân giải một lần mỗi request trong một hook `onR
 | API routes | `apps/api/src/routes/**` | Mỗi card một file route riêng |
 | Worker jobs | `apps/worker/src/jobs/**` | T-11, T-18 |
 | Web | `apps/web/src/**` | T-20, T-21 |
+| Web — Ngày nghỉ | `apps/web/src/routes/config-holidays/**` | T-36 |
+| Kiểm tra plan-ngày nghỉ | `apps/api/**/plan-conflicts.*` | T-37 |
 | Type dùng chung | `packages/shared/src/**` | **Nhiều card cùng đụng** — xem cảnh báo dưới |
 
 > ⚠️ **`packages/shared` là điểm nghẽn xung đột.** Gần như card nào cũng cần thêm type vào đây. Quy ước: **mỗi card tạo một file riêng** (`shared/src/phase.ts`, `shared/src/signboard.ts`…), và chỉ thêm một dòng export vào `index.ts`. Không gom mọi type vào một file.

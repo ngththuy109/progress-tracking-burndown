@@ -77,6 +77,13 @@ cho ra CÙNG một bộ (6 Phase + 29 luật khớp Việt/Nhật/Anh + 5 cột 
   columns** mở với bộ RỖNG (`GET /api/config/phase` trả 200, `globalVersion: 0`);
   bạn thêm Phase/cột rồi Lưu → tạo bản Mặc định v1.
 
+> **Sau khi seed, còn một bước dữ liệu nữa: import ngày nghỉ (T-36).** Seed cố
+> ý KHÔNG kèm ngày lễ (danh sách đổi theo năm, cần người thật xác nhận lễ bù).
+> Đăng nhập ADMIN → màn hình **Days off** → import ngày lễ năm hiện tại cho CẢ
+> hai lịch: `VN_STANDARD` (phía làm) và `JP_STANDARD` (phía khách hàng review).
+> Bỏ qua bước này thì đường Kế hoạch cháy đều qua tuần nghỉ Tết (E-14) và biểu
+> đồ sẽ hiện cảnh báo 📅. Quy trình chi tiết: RUNBOOK mục "quy trình 7".
+
 > **Không tải engine của Prisma — chạy được cả khi máy chặn mạng.** Bình thường Prisma tải hai
 > binary Rust (query engine + schema engine) từ CDN `binaries.prisma.sh` lúc `pnpm install` và
 > `prisma generate`; máy chặn mạng ra ngoài sẽ chết ở cả hai bước. Dự án đã cấu hình để **không cần

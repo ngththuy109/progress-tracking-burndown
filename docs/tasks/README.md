@@ -1,7 +1,9 @@
-# Task cards — toàn bộ 4 giai đoạn
+# Task cards — 4 giai đoạn gốc + bổ sung
 
 34 card phủ **toàn bộ 12 tuần** (GĐ 1: 3 tuần, GĐ 2: 4.5 tuần, GĐ 3: 2 tuần, GĐ 4: 2.5 tuần).
-**Cả 34 card đã làm xong** (`status: review`).
+**Cả 34 card đã làm xong** (`status: review`). Sau bàn giao có thêm các card
+bổ sung T-35 (Signboard theo Sub-phase) và GĐ 5 — Lịch ngày nghỉ & kiểm tra
+plan (T-36 → T-38, đã xong).
 
 | Tài liệu | Vai trò |
 |---|---|
@@ -70,6 +72,21 @@
 | **T-35** | [Signboard nhóm cột theo Sub-phase](./T-35-signboard-sub-phase-layout.md) | medium | opus | T-22, T-28, T-31 | `apps/api`, `apps/web/routes/signboard`, `shared` |
 
 > **T-35 là card bổ sung sau kế hoạch 34 card gốc** — thêm nhóm cột theo Sub-phase (`[Phase]` trước Function) cho bảng Signboard. Không có trong sơ đồ phụ thuộc bên dưới.
+
+### GĐ 5 — Lịch ngày nghỉ & kiểm tra plan (bổ sung 2026-08, xong)
+
+Bối cảnh: bảng `calendar_holiday` chưa từng có đường nạp dữ liệu ("card vận
+hành" mà T-02/T-12 để lại), và màn Track new Epics gán cứng một lịch không tồn
+tại — nên đường Kế hoạch cháy đều qua thứ 7/CN lẫn ngày lễ. Nghiệp vụ nền:
+người VN làm, người JP (khách hàng) review, hai phía nghỉ khác ngày.
+
+| ID | Tiêu đề | Effort | Model | Phụ thuộc | Vùng chính |
+|---|---|---|---|---|---|
+| **T-36** | [Import ngày nghỉ cho hai lịch VN / JP](./T-36-holiday-import.md) | medium | opus | T-02, T-12, T-23, T-24 | `apps/api`, `db/repositories`, `apps/web/routes/config-holidays` |
+| **T-37** | [Kiểm tra plan rơi vào ngày nghỉ theo phía làm](./T-37-plan-conflict-check.md) | medium | opus | T-08, T-32, T-36 | `apps/api`, `apps/web`, migration `signboard_column.side` |
+| **T-38** | [Sửa gán lịch cho Epic + cảnh báo lịch trên Burndown](./T-38-epic-calendar-fix.md) | low | opus | T-10, T-29, T-30, T-36 | `apps/web/routes/epics`, `apps/api`, `tools/db` |
+
+Ba card này không có trong sơ đồ phụ thuộc bên dưới.
 
 ---
 
