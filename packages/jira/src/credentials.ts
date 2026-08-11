@@ -56,6 +56,28 @@ export class BasicAuthProvider implements CredentialProvider {
 }
 
 /**
+ * Basic auth với thông tin truyền TRỰC TIẾP — dùng cho kết nối theo dự án.
+ *
+ * Khác `BasicAuthProvider` (đọc env, dùng cho đường fallback legacy), provider
+ * này nhận baseUrl/email/token đã được tầng gọi nạp từ bảng `project` và GIẢI MÃ
+ * sẵn. Package này không biết gì về AES hay DB — ranh giới ARCHITECTURE.md §2.
+ */
+export class StaticCredentialProvider implements CredentialProvider {
+  private readonly creds: JiraCredentials;
+
+  constructor(opts: { baseUrl: string; email: string; apiToken: string }) {
+    this.creds = {
+      baseUrl: opts.baseUrl.replace(/\/+$/, ''),
+      authHeader: `Basic ${Buffer.from(`${opts.email}:${opts.apiToken}`).toString('base64')}`,
+    };
+  }
+
+  async get(): Promise<JiraCredentials> {
+    return this.creds;
+  }
+}
+
+/**
  * Che thông tin nhạy cảm trước khi ghi log.
  *
  * CONVENTIONS.md C-9 CẤM ghi token vào log. Đây là bộ lọc bắt buộc, không phải

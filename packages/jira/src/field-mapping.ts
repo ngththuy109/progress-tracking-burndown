@@ -26,6 +26,16 @@ export interface ResolvedFieldMapping {
   readonly wbsEndDate: string;
 }
 
+/**
+ * Schema của ánh xạ ĐÃ resolve — dùng để validate `jiraResolvedJson` lưu trong
+ * bảng `project`. JSON trong DB là dữ liệu không tin được: sai cấu trúc thì bỏ
+ * qua và resolve lại từ đầu, KHÔNG dùng bừa (CONVENTIONS.md C-10).
+ */
+export const resolvedFieldMappingSchema = z.object({
+  wbsStartDate: z.string().min(1),
+  wbsEndDate: z.string().min(1),
+});
+
 /** Kiểu field Jira được chấp nhận. Sai kiểu là chặn khởi động. */
 const ACCEPTED_TYPES = new Set(['date', 'datetime']);
 
