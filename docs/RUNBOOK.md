@@ -368,7 +368,14 @@ Mỗi lượt chạy ghi một dòng log `rebuild.range` nói rõ nó dựng l�
 
 ### 2. Đổi token Jira
 
-Làm được **cả khi token cũ đã hết hạn** — hệ thống không cần token cũ để đổi:
+Làm được **cả khi token cũ đã hết hạn** — hệ thống không cần token cũ để đổi.
+
+**Dự án có kết nối riêng (multi-tenant):** làm trên giao diện, không cần
+khởi động lại gì — *Admin → Projects → (dự án) → Kết nối Jira*: dán token mới
+→ **Test connection** → Lưu. Registry client tự nhận token mới ở lần dùng kế
+tiếp (fingerprint đổi → client được dựng lại), không có cache nào phải xóa tay.
+
+**Dự án dùng fallback env (chế độ cũ):**
 
 ```bash
 # 1. Tạo token mới tại https://id.atlassian.com/manage-profile/security/api-tokens
@@ -380,6 +387,31 @@ pnpm smoke
 ```
 
 Worker chờ tối đa 30 giây cho job đang chạy. Quá hạn nó thoát với mã khác 0 và ghi log rõ ràng.
+
+### 2b. Khóa mã hóa token (`APP_ENCRYPTION_KEY`) — mất / đổi
+
+Token Jira của từng dự án lưu trong DB, mã hóa AES-256-GCM bằng
+`APP_ENCRYPTION_KEY`. Hệ quả vận hành:
+
+- **DB đã có token mà key thiếu/sai** → api lẫn worker **từ chối khởi động**
+  (fail-fast, thông điệp chỉ rõ project đầu tiên không giải mã được). Đây là
+  chủ đích: chạy tiếp nghĩa là một nửa số tenant sync được, nửa còn lại chết
+  im lặng lúc 2h sáng.
+- **Khôi phục đúng key cũ** là cách sửa duy nhất không mất dữ liệu.
+- **Mất hẳn key**: xóa token của từng dự án (`UPDATE project SET
+  jira_token_enc = NULL WHERE jira_token_enc IS NOT NULL;`), đặt key MỚI, rồi
+  nhập lại token cho từng dự án trên giao diện. Các dự án dùng fallback env
+  không bị ảnh hưởng.
+
+### 2c. Ghi chú deploy bản multi-tenant (một lần)
+
+1. Chạy migration như thường lệ (`pnpm db:migrate`) — dữ liệu cũ tự chuyển:
+   tenant sinh từ `tracked_epic.project_key`, PM/VIEWER cũ thành membership
+   (VIEWER được cấp mọi dự án hiện có).
+2. `redis-cli DEL meta:statuscategory` — key cache status map toàn cục cũ đã
+   chết, thay bằng `meta:statuscategory:<projectKey>`.
+3. `APP_ENCRYPTION_KEY` chỉ bắt buộc trước khi nhập token riêng đầu tiên.
+4. URL web đổi sang `/p/<PROJECT>/...` — cập nhật bookmark/monitor nếu có.
 
 ### 3. Tắt khẩn cấp việc gọi Jira
 

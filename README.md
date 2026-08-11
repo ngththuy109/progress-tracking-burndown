@@ -41,6 +41,27 @@ hours does not push it down. This is the single most common source of "the chart
 is why `GET /api/burndown/epic/:key/day/:date/explain` exists: it recomputes the day from raw data,
 compares against the stored snapshot, and names the culprit — who edited the estimate, and when.
 
+## Multi-project (multi-tenant)
+
+The system serves **many projects from one shared database**, each logically isolated:
+
+- **Tenant = Jira project key.** Every screen lives under `/p/<PROJECT>/...`; members of a
+  project see only that project's data. Access is granted per project (**PM** or **VIEWER**
+  per membership), with a global **ADMIN** who manages everything.
+- **Per-project Jira connection.** Each project can point at its own Jira site with its own
+  API token (stored AES-256-GCM-encrypted; write-only through the API). Projects without their
+  own connection fall back to the `JIRA_*` env vars, so a legacy single-site deployment keeps
+  working untouched. Connections are verified with a per-step **Test connection** button, not
+  at boot — one broken tenant cannot take the process down.
+- **Per-project ticket hierarchy.** `hierarchyDepth` (1–4 levels below the tracked root)
+  replaces the fixed Epic → Task → Sub-task shape. Depth 2 is the classic layout; a flat
+  1-level project parses its Phase from the leaf ticket title. Tiers between root and leaf
+  beyond those roles are stored as `MIDDLE` and stay out of the math by construction.
+- **Per-project config.** Phase patterns, Signboard columns, work calendars and days off can
+  all be overridden per project, on top of the shared Default set (as before).
+- **Known limit:** two different Jira sites that both contain a project with the *same key*
+  cannot both be tenants — the key is the tenant identity.
+
 ## Screens
 
 | Screen | What it answers |
