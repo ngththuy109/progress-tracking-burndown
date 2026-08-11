@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { TrackedEpicSummary } from '@app/shared';
+import type { MissingDateRow, TrackedEpicSummary } from '@app/shared';
 import { useEpicList, useMissingDates, usePatchEpic } from '../../api/use-epics.js';
 import { usePlanConflictSummary } from '../../api/use-plan-conflicts.js';
 import { useCalendars } from '../../api/use-calendars.js';
@@ -14,6 +14,11 @@ import {
   type Column,
 } from '../../components/ui/index.js';
 import { AddEpicsPanel } from './add-epics-panel.js';
+import {
+  buildMissingDatesCsv,
+  buildMissingDatesJql,
+  missingDatesCsvFilename,
+} from './missing-dates-export.js';
 import { RemoveEpicDialog } from './remove-epic-dialog.js';
 import { ResyncDialog } from './resync-dialog.js';
 
@@ -328,6 +333,10 @@ function MissingDatesPanel({ epicKey, onClose }: { readonly epicKey: string; rea
         </ul>
       )}
 
+      {query.isSuccess && query.data.rows.length > 0 && (
+        <MissingDatesTools epicKey={epicKey} rows={query.data.rows} />
+      )}
+
       <div className="actions">
         <button type="button" className="button" onClick={onClose}>
           Close
@@ -335,6 +344,73 @@ function MissingDatesPanel({ epicKey, onClose }: { readonly epicKey: string; rea
       </div>
     </section>
   );
+}
+
+/**
+ * Câu JQL và nút tải CSV — hai đường đưa danh sách này RA NGOÀI app: JQL để mở
+ * đúng các ticket trên Jira mà điền ngày (bulk edit được), CSV để gửi cho người
+ * không có tài khoản app này.
+ */
+function MissingDatesTools({
+  epicKey,
+  rows,
+}: {
+  readonly epicKey: string;
+  readonly rows: readonly MissingDateRow[];
+}) {
+  const [copied, setCopied] = useState(false);
+  const jql = buildMissingDatesJql(rows);
+  if (jql === null) return null;
+
+  return (
+    <div className="stack">
+      <label className="field">
+        <span>JQL — paste into Jira issue search to open these sub-tasks</span>
+        {/* readOnly + tự bôi đen khi focus: nơi clipboard bị trình duyệt chặn
+            (chạy qua HTTP nội bộ) thì vẫn Ctrl+C tay được ngay. */}
+        <textarea
+          className="input"
+          readOnly
+          rows={3}
+          value={jql}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+      </label>
+      <div className="row">
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            // Clipboard bị chặn thì nút giữ nguyên chữ "Copy JQL" — người dùng
+            // còn ô văn bản bên trên để copy tay, không cần báo lỗi ầm ĩ.
+            navigator.clipboard
+              ?.writeText(jql)
+              .then(() => setCopied(true))
+              .catch(() => undefined);
+          }}
+        >
+          {copied ? 'Copied ✓' : 'Copy JQL'}
+        </button>
+        <button
+          type="button"
+          className="button"
+          onClick={() => downloadTextFile(missingDatesCsvFilename(epicKey), buildMissingDatesCsv(rows))}
+        >
+          Download CSV
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Tải một chuỗi xuống thành file — không đụng server, dữ liệu đã ở client. */
+function downloadTextFile(filename: string, content: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export { RemoveEpicDialog };
