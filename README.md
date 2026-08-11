@@ -51,6 +51,7 @@ compares against the stored snapshot, and names the culprit — who edited the e
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
 | **Signboard columns** | Which task types become columns |
 | **Phase settings** | Title patterns and matching rules, with a preview before saving |
+| **Days off** | Public holidays and make-up workdays for the Vietnam and Japan calendars |
 | **Monitoring** | Nightly jobs, Jira rate limits, data quality, plan drift |
 
 Phase settings are edited by the PM in the browser — no code change, no deploy. Saving is a

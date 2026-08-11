@@ -69,7 +69,7 @@
 | 32 | Xoá một cột đang dùng | Cảnh báo nói rõ Sub-task sẽ **rơi khỏi bảng** nhưng **vẫn được tính vào Burndown** | ☐ |
 | 32a | Đổi **Side** của một cột (VD: JMReview → *JP does*) rồi lưu | Màn Phase sub-tasks kiểm tra lại các Sub-task loại đó bằng **lịch JP** (xem mục Ngày nghỉ bên dưới) | ☐ |
 
-## Ngày nghỉ & kiểm tra plan (T-36 → T-38)
+## Ngày nghỉ, kiểm tra plan & ngày làm bù (T-36 → T-39)
 
 | # | Thao tác | Đạt khi thấy | ☐ |
 |---|---|---|---|
@@ -84,6 +84,8 @@
 | 43 | Đặt `wbs_start_date` một Sub-task Create (Side = VN) vào thứ Bảy, sync | Badge ⚠ ghi *weekend* phía VN; màn Epics cột **On days off** đếm được và bấm sang được màn Sub-tasks | ☐ |
 | 44 | Sub-task có khoảng plan **vắt qua** cuối tuần (hai mốc đều ngày làm việc) | **Không** bị báo vi phạm | ☐ |
 | 45 | Thêm Epic mới ở màn Epics | Có ô chọn lịch (mặc định VN_STANDARD); lịch chưa có ngày lễ hiện ⚠ ngay trong ô chọn | ☐ |
+| 46 | ADMIN mở **Days off** → mục *Make-up workdays (làm bù)*, tab lịch VN, dán `2026-04-25, làm bù 30/4` rồi Import | Bảng hiện ngày kèm thứ (**Sat**) và lý do; thông báo mấy ngày thêm và mấy Epic sẽ tính lại | ☐ |
+| 47 | Sau khi import ngày làm bù + Resync, mở biểu đồ một Epic có tuần chứa ngày làm bù | Thứ 7 làm bù **KHÔNG bị bôi xám** và đường Kế hoạch/Thực tế **vẫn giảm** trên ngày đó; chỉ Chủ nhật còn dải xám | ☐ |
 
 ## Giám sát vận hành
 

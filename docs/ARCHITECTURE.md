@@ -178,7 +178,7 @@ Danh tính được phân giải một lần mỗi request trong một hook `onR
 | Repository | `packages/db/src/repositories/**` | Nhiều card, mỗi card một file riêng |
 | Jira client | `packages/jira/src/**` | T-03, T-04, T-05 |
 | Engine — parser | `packages/engine/src/parser/**` | T-07, T-08 |
-| Engine — calendar | `packages/engine/src/calendar/**` | T-12 |
+| Engine — calendar | `packages/engine/src/calendar/**` | T-12, T-39 (ngày làm bù) |
 | Engine — remaining | `packages/engine/src/remaining/**` | T-13 |
 | Engine — rollup | `packages/engine/src/rollup/**` | T-14, T-15 |
 | Engine — planned | `packages/engine/src/planned/**` | T-16 |
@@ -187,7 +187,7 @@ Danh tính được phân giải một lần mỗi request trong một hook `onR
 | API routes | `apps/api/src/routes/**` | Mỗi card một file route riêng |
 | Worker jobs | `apps/worker/src/jobs/**` | T-11, T-18 |
 | Web | `apps/web/src/**` | T-20, T-21 |
-| Web — Ngày nghỉ | `apps/web/src/routes/config-holidays/**` | T-36 |
+| Web — Ngày nghỉ | `apps/web/src/routes/config-holidays/**` | T-36, T-39 (ngày làm bù) |
 | Kiểm tra plan-ngày nghỉ | `apps/api/**/plan-conflicts.*` | T-37 |
 | Type dùng chung | `packages/shared/src/**` | **Nhiều card cùng đụng** — xem cảnh báo dưới |
 
