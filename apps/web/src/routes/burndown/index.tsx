@@ -117,6 +117,14 @@ export function BurndownScreen() {
         </div>
       )}
 
+      {/* Cấu hình lịch sai không được im lặng (C-10): lịch thiếu ngày lễ làm
+          đường Kế hoạch cháy đều qua tuần nghỉ Tết — trông y hệt team đang chậm. */}
+      {data.calendarWarnings.map((warning) => (
+        <p className="notice notice--error" role="alert" key={warning}>
+          📅 {warning}
+        </p>
+      ))}
+
       <MarkerList markers={data.markers} />
 
       {data.planShiftSummary.shiftCount > 0 && (

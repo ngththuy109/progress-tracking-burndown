@@ -106,6 +106,7 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
     },
     planIsFloating: true,
     planNote: PLAN_FLOATING_NOTE,
+    calendarWarnings: [...args.calendar.warnings],
   };
 }
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { TrackedEpicSummary } from '@app/shared';
 import { useEpicList, useMissingDates, usePatchEpic } from '../../api/use-epics.js';
 import { usePlanConflictSummary } from '../../api/use-plan-conflicts.js';
+import { useCalendars } from '../../api/use-calendars.js';
 import {
   Badge,
   DataTable,
@@ -62,6 +63,7 @@ export function EpicListScreen() {
   // Số Sub-task có plan rơi vào ngày nghỉ (T-37) — một lần gọi cho cả danh
   // sách. Lỗi ở đây KHÔNG chặn màn hình: cột chỉ để trống.
   const conflictSummary = usePlanConflictSummary();
+  const calendars = useCalendars();
   const patch = usePatchEpic();
   const [removing, setRemoving] = useState<Epic | null>(null);
   const [resyncing, setResyncing] = useState<Epic | null>(null);
@@ -95,6 +97,42 @@ export function EpicListScreen() {
       sortKey: (e) => e.epicKey,
     },
     { key: 'project', header: 'Project', render: (e) => e.projectKey, sortKey: (e) => e.projectKey },
+    {
+      // Lịch THỰC THI của Epic — đường Kế hoạch cháy theo lịch này. Đổi xong
+      // worker sẽ dùng lịch mới từ lần sync kế tiếp; bấm Resync nếu cần ngay.
+      key: 'calendar',
+      header: 'Calendar',
+      render: (e) => (
+        <select
+          className="input"
+          value={e.calendarId}
+          aria-label={`Work calendar of ${e.epicKey}`}
+          disabled={patch.isPending}
+          onChange={(ev) => {
+            const next = calendars.data?.calendars.find((c) => c.calendarId === ev.target.value);
+            patch.mutate({
+              epicKey: e.epicKey,
+              // Múi giờ đi theo lịch — hai thứ lệch nhau làm ngày chốt sổ sai.
+              patch: { calendarId: ev.target.value, ...(next ? { timezone: next.timezone } : {}) },
+            });
+          }}
+        >
+          {(calendars.data?.calendars ?? []).map((c) => (
+            <option key={c.calendarId} value={c.calendarId}>
+              {c.calendarId}
+              {c.holidayCount === 0 ? ' ⚠' : ''}
+            </option>
+          ))}
+          {/* Epic đang trỏ một lịch không (còn) tồn tại — ví dụ 'default' của
+              dữ liệu cũ. Vẫn hiện ra để PM thấy và sửa, kèm dấu hỏi. */}
+          {calendars.data !== undefined &&
+            !calendars.data.calendars.some((c) => c.calendarId === e.calendarId) && (
+              <option value={e.calendarId}>{e.calendarId} (unknown!)</option>
+            )}
+        </select>
+      ),
+      sortKey: (e) => e.calendarId,
+    },
     {
       key: 'status',
       header: 'Status',

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { RECOMPUTE_SECONDS_PER_EPIC, type AddEpicsRequest } from '@app/shared';
+import { RECOMPUTE_SECONDS_PER_EPIC, SIDE_CALENDAR_ID, type AddEpicsRequest } from '@app/shared';
 import { useAddEpics, useValidateEpics } from '../../api/use-epics.js';
+import { useCalendars } from '../../api/use-calendars.js';
 import { useMe } from '../../api/use-me.js';
 import { Badge, ErrorState } from '../../components/ui/index.js';
 
@@ -12,8 +13,16 @@ import { Badge, ErrorState } from '../../components/ui/index.js';
  * do đó (PRD §2.6).
  */
 
-export const DEFAULT_TIMEZONE = 'Asia/Tokyo';
-export const DEFAULT_CALENDAR_ID = 'default';
+/**
+ * Lịch THỰC THI mặc định của Epic mới: người VN làm nên đường Kế hoạch cháy
+ * theo lịch VN. Trước đây chỗ này gán cứng `'default'` — một lịch KHÔNG TỒN
+ * TẠI trong seed, khiến mọi tầng âm thầm rơi về lịch mặc định không có ngày lễ
+ * và đường Kế hoạch cháy đều qua tuần nghỉ Tết (E-14). Nay là giá trị khởi đầu
+ * của ô chọn, danh sách lấy từ `GET /api/calendars`.
+ */
+export const DEFAULT_CALENDAR_ID = SIDE_CALENDAR_ID.VN;
+/** Dự phòng khi chưa tải được danh sách lịch — khớp timezone của VN_STANDARD. */
+export const DEFAULT_TIMEZONE = 'Asia/Ho_Chi_Minh';
 
 /** Tách theo dấu phẩy, xuống dòng hoặc khoảng trắng — PM hay dán từ Excel. */
 export function parseKeys(raw: string): string[] {
@@ -34,6 +43,8 @@ export function estimateMinutes(epicCount: number): number {
 export function AddEpicsPanel() {
   const me = useMe();
   const [raw, setRaw] = useState('');
+  const [calendarId, setCalendarId] = useState(DEFAULT_CALENDAR_ID);
+  const calendars = useCalendars();
   const validate = useValidateEpics();
   const add = useAddEpics();
 
@@ -61,8 +72,12 @@ export function AddEpicsPanel() {
   const confirm = (): void => {
     const body: AddEpicsRequest = {
       keys: addable,
-      timezone: DEFAULT_TIMEZONE,
-      calendarId: DEFAULT_CALENDAR_ID,
+      // Múi giờ đi THEO lịch: chọn lịch VN là chốt sổ theo giờ Việt Nam. Hai ô
+      // riêng sẽ có ngày lệch nhau — lịch VN nhưng chốt sổ giờ Tokyo.
+      timezone:
+        calendars.data?.calendars.find((c) => c.calendarId === calendarId)?.timezone ??
+        DEFAULT_TIMEZONE,
+      calendarId,
       note: null,
     };
     add.mutate(body);
@@ -83,6 +98,24 @@ export function AddEpicsPanel() {
           aria-label="Epic keys"
           onChange={(e) => setRaw(e.target.value)}
         />
+      </label>
+
+      <label className="field">
+        <span>Work calendar (drives the Planned line and snapshot cut-off time)</span>
+        <select
+          className="input"
+          value={calendarId}
+          aria-label="Work calendar"
+          onChange={(e) => setCalendarId(e.target.value)}
+        >
+          {(calendars.data?.calendars ?? []).map((c) => (
+            <option key={c.calendarId} value={c.calendarId}>
+              {c.calendarId} · {c.timezone}
+              {c.holidayCount === 0 ? ' · ⚠ no holidays registered' : ''}
+            </option>
+          ))}
+          {calendars.data === undefined && <option value={DEFAULT_CALENDAR_ID}>{DEFAULT_CALENDAR_ID}</option>}
+        </select>
       </label>
 
       <div className="actions">
