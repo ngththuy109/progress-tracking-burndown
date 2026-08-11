@@ -6,7 +6,11 @@ const CONFIG = {
   fallbackScanFullTitle: true,
   titlePatterns: [{ patternText: '[Phase] {name}', sortOrder: 1 }],
   subtaskPatterns: [{ patternText: '[{project}][{team}][{phase}][{function}]_{task}', sortOrder: 1 }],
-  phaseDefinitions: [{ phaseCode: 'DESIGN', labelVi: 'Thiết kế', labelJa: null, displayOrder: 1 }],
+  phaseDefinitions: [
+    { phaseCode: 'DESIGN', labelVi: 'Thiết kế', labelJa: null, displayOrder: 1 },
+    { phaseCode: 'BUILD', labelVi: 'Lập trình', labelJa: null, displayOrder: 2 },
+    { phaseCode: 'TEST', labelVi: 'Kiểm thử', labelJa: null, displayOrder: 3 },
+  ],
   matchRules: [],
   signboardColumns: [
     { taskCode: 'Create', labelVi: 'Create', labelJa: null, displayOrder: 1 },
@@ -214,4 +218,38 @@ test('Phase không có Sub-phase thì khu ⑤ chỉ là ghi chú, không bắt k
 
   await expect(page.getByRole('heading', { name: /Sub-phase order/ })).toBeVisible();
   await expect(page.getByText('No sub-phase order declared yet')).toBeVisible();
+});
+
+test('khu ⑤ chọn Phase từ danh sách đã định nghĩa, không phải gõ tay', async ({ page }) => {
+  const calls = await installApi(page);
+  await page.goto(PAGE);
+
+  await page.getByRole('button', { name: '+ Add Phase group' }).click();
+
+  // Ô Phase là ô CHỌN (combobox) liệt kê đúng các Phase khai ở khu ②, kèm ô
+  // gợi ý "chưa chọn" đứng đầu.
+  const phase = page.getByLabel('Phase of sub-phase group 1');
+  await expect(phase.locator('option')).toContainText(['(select a Phase)', 'DESIGN', 'BUILD', 'TEST']);
+
+  // Chọn một Phase từ danh sách — `selectOption` chỉ chạy được trên <select>,
+  // nên bản thân nó đã chứng minh đây không còn là ô gõ tay.
+  await phase.selectOption('BUILD');
+  await page.getByLabel('Sub-phase code, BUILD row 1').fill('build_confirmpoint');
+  await page.getByRole('button', { name: /Save columns/ }).click();
+
+  await expect.poll(() => calls.saves.length).toBe(1);
+  expect(calls.saves[0]?.payload.subPhaseOrders).toEqual([
+    { phaseCode: 'BUILD', subPhaseCode: 'build_confirmpoint', displayOrder: 1 },
+  ]);
+});
+
+test('mã Phase cũ không còn trong danh sách vẫn hiện ra để PM sửa', async ({ page }) => {
+  await installApi(page);
+  // FUT_TestCase KHÔNG nằm trong danh sách Phase đã định nghĩa — nhóm được điền
+  // sẵn từ link Signboard vẫn phải giữ và hiện mã đó, không được nuốt mất.
+  await page.goto(`${PAGE}?orderPhase=FUT_TestCase&subs=fut_testcase`);
+
+  const phase = page.getByLabel('Phase of sub-phase group 1');
+  await expect(phase).toHaveValue('FUT_TestCase');
+  await expect(phase.locator('option')).toContainText(['FUT_TestCase', 'DESIGN', 'BUILD', 'TEST']);
 });
