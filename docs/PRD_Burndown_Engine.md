@@ -845,12 +845,26 @@ Scenario: Hiển thị 2 đường Kế hoạch và Thực tế
     And Epic chạy từ 2026-03-02 đến 2026-03-27 (20 ngày làm việc)
     And job chốt sổ đã chạy đủ từ ngày bắt đầu tới hôm nay
   When tôi mở biểu đồ Burndown của Epic "PAY-100"
-  Then tôi thấy đường "Kế hoạch" là một đường liên tục, mỗi ngày làm việc đều có 1 điểm
+  Then tôi thấy đường "Kế hoạch" là một đường liên tục, mỗi ngày đều có 1 điểm
     And đường "Kế hoạch" bắt đầu ở 200 giờ và kết thúc ở 0 giờ
     And tôi thấy đường "Thực tế" có đúng 1 điểm cho mỗi ngày đã trôi qua
     And đường "Thực tế" KHÔNG nằm ngang nhiều ngày liền khi team vẫn đang log giờ
-    And trục ngang chỉ hiện ngày làm việc, KHÔNG hiện Thứ 7, Chủ nhật, ngày lễ
+    And trục ngang hiện ĐỦ ngày lịch; Thứ 7, Chủ nhật, ngày lễ được BÔI XÁM
+    And ngày nghỉ team có log giờ thì đường "Thực tế" giảm đúng ngày đó
+    And ngày nghỉ không ai làm thì đường đi ngang qua dải xám (kéo phẳng, không có chấm dữ liệu)
 ```
+
+> **Cập nhật 2026-08 (sau bàn giao).** Ba thay đổi hành vi so với bản gốc của
+> scenario này, theo yêu cầu người dùng thực tế:
+> 1. **Ngày nghỉ lên trục, bôi xám** — bản gốc bỏ hẳn Thứ 7/CN khỏi trục, người
+>    xem tưởng "biểu đồ mất ngày". Snapshot nay được chốt cho **mọi ngày lịch**
+>    (không chỉ ngày làm việc), nên giờ log cuối tuần hiện đúng hôm làm thay vì
+>    dồn vào sáng Thứ 2.
+> 2. **Ngày làm việc thiếu snapshot** vẫn không được vẽ nét liền (E-12), nhưng
+>    được nối bằng **nét đứt mờ** để mắt theo được một mạch, kèm banner đỏ liệt
+>    kê đúng những ngày thiếu.
+> 3. **Epic trễ hạn** (hôm nay đã qua `plan_end` mà việc chưa xong): trục Tổng
+>    Epic kéo dài tới ngày có snapshot mới nhất thay vì cắt cụt ở `plan_end`.
 
 ```gherkin
 Scenario: Chỉ rõ đang chậm hay đang nhanh
@@ -1418,7 +1432,7 @@ sequenceDiagram
         W->>DB: UPSERT phase_rollup
 
         Note over W,DB: GIAI ĐOẠN 5 — Dựng lại lịch sử
-        loop Với mỗi ngày làm việc từ ngày bắt đầu Epic đến hôm qua
+        loop Với mỗi NGÀY LỊCH từ ngày bắt đầu Epic đến hôm nay (2026-08: gồm cả ngày nghỉ — giờ log Thứ 7/CN hiện đúng ngày)
             W->>W: Tính trạng thái từng Sub-task tại 23:59:59 ngày đó
             W->>W: Tính khối lượng còn lại theo 3 quy tắc ưu tiên
             W->>W: Tính đường Kế hoạch từ phase_rollup (KHÔNG có baseline)
@@ -2643,7 +2657,7 @@ Nếu cùng một `TaskName` lạ xuất hiện **≥ 3 lần**, hiện gợi ý
 | **E-09** | **Đổi tiêu đề Task làm đổi Phase** | Đọc changelog trường `summary` → nhận diện lại `phase_code`. Áp dụng **cho toàn bộ lịch sử** (khác với E-01). | Nếu chỉ áp dụng từ hôm nay, biểu đồ Phase bị đứt đoạn giữa chừng. | Ghi vào `sync_run.error_message` dòng `PHASE_RECLASSIFIED`. Gửi thông báo cho PM. **Dùng chung cơ chế tính lại với E-21** (đổi cấu hình) — cùng một luồng, không cài đặt hai đường riêng. |
 | **E-10** | **Changelog bị Jira cắt bớt** (issue quá cũ, quá nhiều thay đổi) | Phân trang hết `/changelog`. Nếu vẫn thiếu, đánh dấu `HISTORY_TRUNCATED`. | Thiếu changelog → tính sai trạng thái quá khứ, đường Thực tế lệch. | Rơi xuống Quy tắc 3 cho toàn bộ issue đó. Hiện nhãn "độ chính xác thấp" trên tooltip của điểm dữ liệu liên quan. |
 | **E-11** | **Job đêm chạy chồng lên nhau** trên cùng 1 Epic | Khoá Redis `joblock:sync:{key}`, TTL 15 phút **có heartbeat gia hạn mỗi 60s**. Job thứ hai **không bỏ qua im lặng** mà thêm Epic vào `dirty:epics` rồi thoát. | **Không phải "snapshot sai"** — mà là: gọi Jira gấp đôi (nguy cơ 429) và ghi đè bằng dữ liệu cũ. Nếu bỏ qua im lặng thì mất luôn yêu cầu tính lại của E-03. | `UNIQUE (epic_key, snapshot_date)` + UPSERT idempotent mới là lớp đảm bảo đúng đắn thật sự — khoá chỉ là tối ưu. Khoá hỏng hoàn toàn thì số liệu **vẫn đúng**, chỉ tốn quota. Xem mục 4.2.1. |
-| **E-12** | **Thiếu snapshot của một ngày** (job lỗi, server tắt) | Job hôm sau tự dò từ ngày bắt đầu Epic, tìm ngày trống và dựng bù. | Biểu đồ bị thủng lỗ, đường nối tắt qua ngày trống gây hiểu nhầm. | Bảng theo dõi độ đầy đủ dữ liệu. Nếu thiếu > 3 ngày → cảnh báo mức nghiêm trọng. |
+| **E-12** | **Thiếu snapshot của một ngày** (job lỗi, server tắt) | Job hôm sau tự dò từ ngày bắt đầu Epic, tìm ngày trống và dựng bù. | Biểu đồ bị thủng lỗ; ngày thiếu mà vẽ nét liền như ngày có số liệu sẽ gây hiểu nhầm. | Bảng theo dõi độ đầy đủ dữ liệu (chỉ đếm **ngày làm việc** — ngày nghỉ trống không phải lỗi). Trên biểu đồ, khoảng thiếu KHÔNG được vẽ nét liền: nối bằng **nét đứt mờ** (2026-08) kèm banner đỏ liệt kê đúng ngày thiếu. Nếu thiếu > 3 ngày → cảnh báo mức nghiêm trọng. |
 | **E-13** | **Sub-task Done rồi mở lại (reopen)** | `resolveStatusCategoryAt` tự xử lý đúng: sau ngày reopen sẽ không còn là `done`, quay lại Quy tắc 2 hoặc 3. | Nếu cache cứng "đã done thì mãi mãi done" → khối lượng bị mất luôn. | Không cache trạng thái vĩnh viễn. Có unit test cho luồng `To Do → Done → In Progress → Done`. |
 | **E-14** | **Nhân sự nghỉ / ngày lễ giữa Phase** | `countWorkdays` tra bảng `calendar_holiday`, bỏ qua ngày nghỉ. | Đường Kế hoạch giảm cả trong Tết → PM tưởng team đang chậm nghiêm trọng. | Bảng ngày lễ nạp cho cả năm **qua màn hình "Days off" (Phụ lục C, T-36)** — admin import đầu năm cho cả lịch VN lẫn lịch JP. Nếu thiếu dữ liệu lịch → mặc định T2–T6, ghi cảnh báo **và hiện thẳng trên màn hình Burndown** (T-38). |
 | **E-15** | **Ngày kết thúc Phase bị dời** (ai đó sửa `wbs_end_date` trên Jira) | Ngày Phase tổng hợp lại ngay ở lần đồng bộ kế tiếp. Đường Kế hoạch tự dịch theo. **Không cần PM thao tác gì.** | Vì kế hoạch tự trôi nên độ trễ bị "hấp thụ" âm thầm — nhìn biểu đồ vẫn thấy bình thường. | Mỗi lần `plan_end` của Phase bị đẩy lùi, ghi một dòng vào bảng **Lịch sử dịch chuyển kế hoạch** (Phase nào, từ ngày nào sang ngày nào, ai sửa, do Sub-task nào). Hiện dấu mốc trên biểu đồ và tổng số ngày đã bị lùi. Đây là tuyến phòng thủ chính cho **R-11**. |

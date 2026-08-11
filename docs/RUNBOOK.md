@@ -37,7 +37,8 @@ PM báo số liệu sai — đây là thứ tự kiểm tra:
 | 5 | Ngày sai **cũ hơn 7 ngày** | Mức *Nhanh* chỉ dựng lại 7 ngày gần nhất. Bấm **Resync** rồi chọn mức *A specific date range* (xem quy trình 1) |
 | 6 | **Vừa đổi Phase settings** mà Signboard / biểu đồ theo Phase chưa đổi | Bấm **Resync** ở màn hình Epic, chọn mức *Toàn bộ* — mức *Nhanh* không phân loại lại Sub-task cũ (xem quy trình 6) |
 | 7 | **Đường Kế hoạch giảm đều qua thứ 7/CN hoặc tuần lễ Tết** | Biểu đồ có hiện cảnh báo 📅 không? Lịch của Epic chưa khai ngày lễ (hoặc Epic trỏ lịch không tồn tại). Xem quy trình 7 — Import ngày nghỉ |
-| 8 | Vẫn không ra | Gọi Tech Lead, kèm mã Epic và ngày |
+| 8 | **Mất nguyên MỘT THỨ trong tuần** (ví dụ mọi Thứ 2 không có điểm) | `workdays_mask` của lịch sai quy ước bit. Biểu đồ và màn Days off đều hiện cảnh báo 📅. Xem mục *Lịch sai quy ước bit* bên dưới |
+| 9 | Vẫn không ra | Gọi Tech Lead, kèm mã Epic và ngày |
 
 Đây cũng là cách trả lời rủi ro **R-07** (PM không tin số liệu): không tranh luận, mở bảng giải thích ra.
 
@@ -125,7 +126,11 @@ Bình thường `healthz` trả `{"status":"ok","components":{"postgres":"ok","r
 
 **Triệu chứng.** Sau 02:00 mà vẫn còn ngày chưa có snapshot.
 
-**Ảnh hưởng.** Biểu đồ có **lỗ thủng nhìn thấy được** — cố ý, không phải lỗi hiển thị.
+**Ảnh hưởng.** Khoảng thiếu trên biểu đồ **không được vẽ nét liền** — chỉ có nét
+đứt mờ nối qua, kèm banner đỏ liệt kê đúng những ngày thiếu. Cố ý, không phải
+lỗi hiển thị. Chỉ **ngày làm việc** mới bị đếm là thiếu: từ 2026-08 snapshot
+được chốt cho cả ngày nghỉ (để giờ log cuối tuần hiện đúng ngày), nhưng ngày
+nghỉ trống không phải lỗi và không kích hoạt cảnh báo này.
 
 **Kiểm tra ngay:**
 
@@ -280,6 +285,38 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 **Ảnh hưởng.** Chúng không lên được bảng Signboard, nhưng **vẫn được tính vào Burndown**.
 
 **Xử lý.** Mở Signboard của Phase đó, xem khu *Not on the board*. Nếu cùng một loại task lạ xuất hiện nhiều lần, hệ thống gợi ý thêm cột — bấm là sang thẳng màn hình cấu hình.
+
+---
+
+## Lịch sai quy ước bit — mất nguyên một thứ trong tuần
+
+**Triệu chứng.** Biểu đồ Burndown của Epic thiếu đúng MỘT thứ trong tuần, tuần
+nào cũng vậy (ca thực tế đã gặp: mọi Thứ 2 biến mất, trong khi Chủ nhật lại có
+điểm dữ liệu). Banner 📅 trên màn hình Biểu đồ và màn **Days off** nói thẳng
+mask đang mô tả những ngày nào.
+
+**Nguyên nhân.** Bản ghi `work_calendar` được sửa/thêm tay với `workdays_mask`
+tính theo **số thứ tự ngày 1-indexed** (`T2=1<<1 … CN=1<<7`), trong khi hệ
+thống đọc **bit 0 = Thứ 2 … bit 6 = CN** (quy ước luxon, xem
+`packages/shared/src/calendar.ts`). Cả tuần trượt một ngày: muốn T2–T7 = 63 mà
+ghi 126 thì máy hiểu là T3–CN.
+
+Bảng quy đổi đúng: T2=1, T3=2, T4=4, T5=8, T6=16, T7=32, CN=64.
+**T2–T6 = 31**, **T2–T7 = 63**.
+
+**Hệ thống tự phòng thủ** (từ migration `20260811140000_workdays_mask_guard`):
+- Lượt `pnpm db:migrate` đầu tiên **tự chữa** các giá trị 1-indexed đã biết
+  (62→31, 126→63, 254→127).
+- Hai CHECK constraint (`ck_workdays_mask_range`, `ck_workdays_mask_has_monday`)
+  khiến database **từ chối** mask ngoài 1..127 hoặc thiếu Thứ 2 ngay lúc ghi —
+  kể cả sửa tay bằng psql.
+- Database chưa áp migration thì cảnh báo 📅 vẫn hiện trên biểu đồ và màn
+  Days off (C-10) — lỗi không còn im lặng.
+
+**Xử lý.** Chạy `pnpm db:migrate` (nếu chưa), rồi Bấm **Resync** ở màn hình
+Epic để dựng bù snapshot cho những ngày từng bị mask sai loại khỏi lịch. Nếu
+thật sự cần một lịch nghỉ Thứ 2, gỡ `ck_workdays_mask_has_monday` bằng một
+migration mới kèm lý do (C-13) — đừng sửa migration cũ.
 
 ---
 

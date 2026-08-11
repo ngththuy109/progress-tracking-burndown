@@ -215,3 +215,15 @@ Hàm trả về cả `written` lẫn `skippedStale`, và job báo cáo lại `sk
 ### Ba việc trong card thuộc về T-23, không làm ở đây
 
 CRON, hàng đợi `dirty:epics` chạy mỗi giờ, và giới hạn 4 Epic song song đều cần **hạ tầng hàng đợi BullMQ** mà T-23 mới dựng. Card này để lại đúng thứ T-23 cần: một hàm `reconstructEpic()` thuần điều phối, nhận cổng qua tham số. Đã ghi vào card T-23.
+
+---
+
+## Cập nhật sau bàn giao — 2026-08 (nhánh `claude/burndown-chart-missing-day`)
+
+Giai đoạn 5 nay dựng snapshot cho **mọi ngày lịch** trong dải, không chỉ ngày
+làm việc (`listCalendarDays` thay `listWorkdays`): team log giờ Thứ 7/CN thì
+đường Thực tế giảm đúng hôm đó thay vì dồn vào sáng Thứ 2. Ngày nghỉ không ai
+làm thì snapshot phẳng so với hôm trước — biểu đồ bôi xám ngày nghỉ nên đoạn
+phẳng đọc đúng nghĩa. Riêng phép dò ngày thiếu E-12 vẫn CHỈ quét ngày làm việc
+(cố ý — tránh đêm đầu sau nâng cấp phải đào lại toàn bộ lịch sử cuối tuần; xem
+ghi chú tại `earliestMissingSnapshotDate` trong `wire.ts`).
