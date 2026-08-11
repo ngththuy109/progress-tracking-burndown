@@ -54,6 +54,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     builtBy: 'T-32',
   },
   {
+    path: '/config/holidays',
+    label: 'Days off',
+    icon: '📅',
+    summary: 'Import public holidays for the VN side and the JP (customer) side.',
+    builtBy: 'T-36',
+  },
+  {
     path: '/config/phase',
     label: 'Phase settings',
     icon: '⚙️',
