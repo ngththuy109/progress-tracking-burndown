@@ -50,6 +50,20 @@ export const signboardColumnSchema = z.object({
   displayOrder: z.number().int(),
 });
 
+/**
+ * Thứ tự hiển thị của MỘT Sub-phase trong một Phase cụ thể — PRD §6.1.
+ *
+ * KHÁC `displayOrder` của Phase: đây là thứ tự các NHÓM CỘT Sub-phase trên bảng
+ * Signboard khi mở một Phase, không liên quan gì tới thứ tự Phase trên biểu đồ.
+ * `subPhaseCode` khớp với `[Sub-phase]` trong tiêu đề Sub-task, so sau chuẩn hoá
+ * NFKC + chữ thường (E-31). Phase không có Sub-phase thì đơn giản là không khai.
+ */
+export const subPhaseOrderSchema = z.object({
+  phaseCode: z.string().min(1, 'Phase code is required.').max(24, 'Phase code is at most 24 characters.'),
+  subPhaseCode: z.string().min(1, 'Sub-phase code is required.').max(64, 'Sub-phase code is at most 64 characters.'),
+  displayOrder: z.number().int(),
+});
+
 /** Nội dung một bộ cấu hình, không kèm metadata version. */
 export const configPayloadSchema = z.object({
   fallbackScanFullTitle: z.boolean().default(true),
@@ -58,12 +72,15 @@ export const configPayloadSchema = z.object({
   phaseDefinitions: z.array(phaseDefinitionSchema),
   matchRules: z.array(matchRuleSchema),
   signboardColumns: z.array(signboardColumnSchema),
+  // `.default([])` để payload cũ (lưu trước khi có phần này) vẫn đọc được.
+  subPhaseOrders: z.array(subPhaseOrderSchema).default([]),
 });
 
 export type TitlePattern = z.infer<typeof titlePatternSchema>;
 export type PhaseDefinition = z.infer<typeof phaseDefinitionSchema>;
 export type MatchRule = z.infer<typeof matchRuleSchema>;
 export type SignboardColumn = z.infer<typeof signboardColumnSchema>;
+export type SubPhaseOrder = z.infer<typeof subPhaseOrderSchema>;
 export type ConfigPayload = z.infer<typeof configPayloadSchema>;
 
 /**
@@ -81,6 +98,7 @@ export const EMPTY_CONFIG_PAYLOAD: ConfigPayload = {
   phaseDefinitions: [],
   matchRules: [],
   signboardColumns: [],
+  subPhaseOrders: [],
 };
 
 export interface ConfigSetMeta {
@@ -112,7 +130,9 @@ export interface EffectiveConfig extends ConfigPayload {
   readonly globalVersion: number;
   readonly projectVersion: number | null;
   /** true = phần đó lấy từ bộ Mặc định, chưa được project ghi đè. */
-  readonly inherited: Readonly<Record<InheritablePart | 'signboardColumns' | 'subtaskPatterns', boolean>>;
+  readonly inherited: Readonly<
+    Record<InheritablePart | 'signboardColumns' | 'subtaskPatterns' | 'subPhaseOrders', boolean>
+  >;
 }
 
 /** Kết quả kiểm tra hợp lệ khi lưu — PRD §2.2.4. */

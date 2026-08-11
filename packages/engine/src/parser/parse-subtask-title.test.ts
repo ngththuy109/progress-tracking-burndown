@@ -24,6 +24,7 @@ const BASE: ConfigPayload = {
     { taskCode: 'JMReview', labelVi: 'JM review', displayOrder: 4 },
     { taskCode: 'FixCommentJM', labelVi: 'Sửa comment JM', displayOrder: 5 },
   ],
+  subPhaseOrders: [],
 };
 
 const cfg = (over: Partial<ConfigPayload> = {}): EffectiveConfig => ({
@@ -38,6 +39,7 @@ const cfg = (over: Partial<ConfigPayload> = {}): EffectiveConfig => ({
     phaseDefinitions: true,
     matchRules: true,
     signboardColumns: true,
+    subPhaseOrders: true,
   },
 });
 

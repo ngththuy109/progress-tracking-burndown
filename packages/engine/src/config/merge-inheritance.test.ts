@@ -22,6 +22,7 @@ const GLOBAL: ConfigPayload = {
     { keyword: '設計', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
   ],
   signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  subPhaseOrders: [],
 };
 
 const V = { globalVersion: 3, projectVersion: null };
@@ -39,6 +40,7 @@ describe('kế thừa cấu hình theo project', () => {
       phaseDefinitions: true,
       matchRules: true,
       signboardColumns: true,
+      subPhaseOrders: true,
     });
   });
 
@@ -228,5 +230,44 @@ describe('kiểm tra hợp lệ trước khi lưu', () => {
       }),
     );
     expect(issues.some((i) => i.code === 'DUPLICATE_TASK_CODE')).toBe(true);
+  });
+
+  it('chặn lưu khi một Sub-phase khai hai lần cho cùng Phase — kể cả khác hoa/thường', () => {
+    // `FUT_TC` và `fut_tc` chuẩn hoá về cùng khoá (E-31) — hai dòng là mơ hồ.
+    const issues = validateConfigPayload(
+      withRules({
+        subPhaseOrders: [
+          { phaseCode: 'DESIGN', subPhaseCode: 'FUT_TC', displayOrder: 1 },
+          { phaseCode: 'design', subPhaseCode: 'fut_tc', displayOrder: 2 },
+        ],
+      }),
+    );
+    const dup = issues.find((i) => i.code === 'DUPLICATE_SUB_PHASE');
+    expect(dup).toBeDefined();
+    expect(dup?.path).toBe('subPhaseOrders[1].subPhaseCode');
+    expect(hasBlockingError(issues)).toBe(true);
+  });
+
+  it('Sub-phase trỏ tới Phase không có trong danh sách chỉ CẢNH BÁO, vẫn cho lưu', () => {
+    const issues = validateConfigPayload(
+      withRules({
+        subPhaseOrders: [{ phaseCode: 'MIGRATION', subPhaseCode: 'round1', displayOrder: 1 }],
+      }),
+    );
+    const warn = issues.find((i) => i.code === 'SUB_PHASE_UNKNOWN_PHASE');
+    expect(warn?.level).toBe('WARNING');
+    expect(hasBlockingError(issues)).toBe(false);
+  });
+
+  it('cùng mã Sub-phase ở HAI Phase khác nhau là hợp lệ, không phải trùng', () => {
+    const issues = validateConfigPayload(
+      withRules({
+        subPhaseOrders: [
+          { phaseCode: 'DESIGN', subPhaseCode: 'round1', displayOrder: 1 },
+          { phaseCode: 'DEV', subPhaseCode: 'round1', displayOrder: 1 },
+        ],
+      }),
+    );
+    expect(issues.some((i) => i.code === 'DUPLICATE_SUB_PHASE')).toBe(false);
   });
 });

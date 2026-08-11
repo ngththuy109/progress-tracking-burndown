@@ -8,6 +8,8 @@ import {
   isDirty,
   loadDraft,
   payloadToSave,
+  subPhaseGroups,
+  type DraftAction,
   type DraftState,
 } from '../config-phase/draft-state.js';
 import { indexIssues, issuesOf, NO_ISSUES } from '../config-phase/field-errors.js';
@@ -47,24 +49,58 @@ export function SignboardColumnScreen() {
         {projectKey !== null && <code>{projectKey}</code>}
       </div>
 
-      <ColumnEditor key={projectKey ?? 'GLOBAL'} config={query.data} suggested={params.get('add')} />
+      <ColumnEditor
+        key={projectKey ?? 'GLOBAL'}
+        config={query.data}
+        suggested={params.get('add')}
+        orderPhase={params.get('orderPhase')}
+        orderSubs={params.get('subs')}
+      />
     </div>
   );
 }
 
+/** So khoá kiểu E-31 — bản nhẹ phía web, đủ để nhận ra nhóm đã tồn tại. */
+const groupKey = (s: string): string => s.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+
 function ColumnEditor({
   config,
   suggested,
+  orderPhase,
+  orderSubs,
 }: {
   readonly config: Parameters<typeof loadDraft>[0];
   /** Mã cột được gợi ý từ màn hình Signboard (T-31). */
   readonly suggested: string | null;
+  /** Phase được màn hình Signboard gửi sang để khai thứ tự Sub-phase. */
+  readonly orderPhase: string | null;
+  /** Danh sách Sub-phase ĐANG CÓ trên bảng của Phase đó, phân tách bằng dấu phẩy. */
+  readonly orderSubs: string | null;
 }) {
   const [state, dispatch] = useReducer(draftReducer, config, (c) => {
-    const base = loadDraft(c);
+    let base = loadDraft(c);
     // Sang đây từ nút "thêm cột này" thì điền sẵn mã, PM khỏi gõ lại và khỏi gõ
     // sai chính tả.
-    return suggested === null ? base : draftReducer(base, { type: 'ADD_COLUMN', taskCode: suggested });
+    if (suggested !== null) base = draftReducer(base, { type: 'ADD_COLUMN', taskCode: suggested });
+    // Sang từ nút "xếp thứ tự Sub-phase": điền sẵn CẢ NHÓM với đúng các Sub-phase
+    // đang hiện trên bảng — PM chỉ việc bấm mũi tên, không phải gõ lại mã nào.
+    // Phase đã có nhóm thì thôi, không nhân đôi.
+    if (
+      orderPhase !== null &&
+      orderPhase !== '' &&
+      !base.draft.subPhaseOrders.some((r) => groupKey(r.phaseCode) === groupKey(orderPhase))
+    ) {
+      const subs = (orderSubs ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== '');
+      base = draftReducer(base, {
+        type: 'ADD_SUB_PHASE_GROUP',
+        phaseCode: orderPhase,
+        subPhaseCodes: subs.length > 0 ? subs : [''],
+      });
+    }
+    return base;
   });
   const [note, setNote] = useState('');
   const save = useSaveConfig();
@@ -120,6 +156,8 @@ function ColumnEditor({
 
         <IssueList issues={errors.at('signboardColumns')} />
       </section>
+
+      <SubPhaseOrderSection state={state} errors={errors} dispatch={dispatch} />
 
       <PreviewPanel state={state} />
 
@@ -251,6 +289,128 @@ function ColumnRow({
 
       <IssueList issues={errors} />
     </li>
+  );
+}
+
+/**
+ * Khu ⑤ — thứ tự Sub-phase TRONG TỪNG PHASE trên bảng Signboard.
+ *
+ * Đây là CHỖ SETTING RIÊNG mà khu ② Phase list không đảm nhiệm: ② xếp thứ tự
+ * các PHASE trên biểu đồ, còn ở đây xếp thứ tự các NHÓM CỘT Sub-phase khi mở
+ * MỘT Phase trên Signboard. Phase không có Sub-phase thì không cần khai gì —
+ * bảng của nó chỉ có một nhóm, không có thứ tự nào để chỉnh.
+ */
+function SubPhaseOrderSection({
+  state,
+  errors,
+  dispatch,
+}: {
+  readonly state: DraftState;
+  readonly errors: ReturnType<typeof indexIssues>;
+  readonly dispatch: (a: DraftAction) => void;
+}) {
+  const groups = subPhaseGroups(state);
+  const disabled = state.projectKey !== null && state.inherited.subPhaseOrders;
+
+  return (
+    <section className="panel" aria-labelledby="sub-phase-order-title">
+      <h2 className="panel__title" id="sub-phase-order-title">
+        ⑤ Sub-phase order
+      </h2>
+      <p className="panel__hint">
+        When a Phase has several sub-phases (the <code>[Sub-phase]</code> bracket right before the
+        Function name), this is the order of the sub-phase column groups on its Signboard. Only
+        declare Phases that actually have sub-phases. A sub-phase code matches after
+        normalisation, so <code>FUT_TC</code> and <code>fut_tc</code> are the same. Sub-phases not
+        listed here fall back to the old rule: match a Phase&rsquo;s code → that Phase&rsquo;s
+        order, otherwise A→Z, with &ldquo;(No sub-phase)&rdquo; always last.
+      </p>
+
+      <InheritNotice
+        part="subPhaseOrders"
+        partLabel="Sub-phase order"
+        inherited={state.inherited.subPhaseOrders}
+        projectKey={state.projectKey}
+        onOverride={(part) => dispatch({ type: 'OVERRIDE_PART', part })}
+      />
+
+      {groups.map((group, gi) => (
+        // Key theo dòng ĐẦU của nhóm, KHÔNG theo mã Phase: mã là thứ đang gõ dở
+        // trong ô — key đổi theo từng phím thì input bị dựng lại và mất focus.
+        <div className="stack" key={group.rows[0]?.index ?? gi}>
+          <label className="field">
+            <span>Phase</span>
+            <input
+              className="input input--code"
+              value={group.phaseCode}
+              disabled={disabled}
+              aria-label={`Phase of sub-phase group ${gi + 1}`}
+              onChange={(e) =>
+                dispatch({
+                  type: 'RENAME_SUB_PHASE_GROUP',
+                  phaseCode: group.phaseCode,
+                  value: e.target.value,
+                })
+              }
+            />
+          </label>
+          <ul className="rows">
+            {group.rows.map(({ row, index }, groupIndex) => {
+              const name = row.subPhaseCode === '' ? `sub-phase ${groupIndex + 1}` : row.subPhaseCode;
+              return (
+                <li className="row" key={index}>
+                  <MoveButtons
+                    label={name}
+                    index={groupIndex}
+                    total={group.rows.length}
+                    onMove={(delta) => dispatch({ type: 'MOVE_SUB_PHASE', index, delta })}
+                  />
+                  <input
+                    className="input input--code"
+                    value={row.subPhaseCode}
+                    disabled={disabled}
+                    aria-label={`Sub-phase code, ${group.phaseCode || 'new Phase'} row ${groupIndex + 1}`}
+                    onChange={(e) =>
+                      dispatch({ type: 'UPDATE_SUB_PHASE', index, subPhaseCode: e.target.value })
+                    }
+                  />
+                  <span className="row__order muted">#{row.displayOrder}</span>
+                  <DeleteButton label={name} onClick={() => dispatch({ type: 'REMOVE_SUB_PHASE', index })} />
+                  <IssueList issues={errors.atRow('subPhaseOrders', index)} />
+                </li>
+              );
+            })}
+          </ul>
+          <button
+            type="button"
+            className="button"
+            disabled={disabled}
+            onClick={() => dispatch({ type: 'ADD_SUB_PHASE', phaseCode: group.phaseCode })}
+          >
+            + Add sub-phase to {group.phaseCode === '' ? 'this Phase' : group.phaseCode}
+          </button>
+        </div>
+      ))}
+
+      {groups.length === 0 && (
+        <p className="muted">
+          No sub-phase order declared yet — every board keeps the fallback order. The easiest way
+          to start is the &ldquo;Set sub-phase order&rdquo; link on a Signboard that shows several
+          sub-phase groups: it opens this screen with that Phase pre-filled.
+        </p>
+      )}
+
+      <button
+        type="button"
+        className="button"
+        disabled={disabled}
+        onClick={() => dispatch({ type: 'ADD_SUB_PHASE_GROUP', phaseCode: '', subPhaseCodes: [''] })}
+      >
+        + Add Phase group
+      </button>
+
+      <IssueList issues={errors.at('subPhaseOrders')} />
+    </section>
   );
 }
 
