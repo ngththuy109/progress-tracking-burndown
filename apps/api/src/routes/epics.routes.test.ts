@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import {
   RECOMPUTE_SECONDS_PER_EPIC,
   addEpicsResponseSchema,
+  missingDatesResponseSchema,
   type Principal,
   type TrackedEpicStatus,
 } from '@app/shared';
@@ -279,8 +280,12 @@ describe('danh sách, duyệt và phân quyền', () => {
       { issueKey: 'PAY-132', summary: '[PAY][A][Design][Login]_Create', parentKey: 'PAY-101', missingStart: false, missingEnd: true },
     ]);
     const body = (await local.inject({ method: 'GET', url: '/api/epics/PAY-100/missing-dates' })).json();
-    expect(body.rows).toHaveLength(2);
-    expect(body.rows[1]).toMatchObject({ issueKey: 'PAY-132', missingStart: false, missingEnd: true });
+    // Parse bằng đúng schema mà web dùng: response thiếu trường nào là client
+    // hiện "Could not load data" (RESPONSE_SHAPE_INVALID) chứ không im lặng.
+    const parsed = missingDatesResponseSchema.parse(body);
+    expect(parsed.epicKey).toBe('PAY-100');
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[1]).toMatchObject({ issueKey: 'PAY-132', missingStart: false, missingEnd: true });
   });
 
   it('PATCH với timezone không hợp lệ bị từ chối HTTP 400', async () => {
