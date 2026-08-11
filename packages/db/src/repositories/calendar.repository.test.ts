@@ -21,6 +21,7 @@ function fakePrisma(row: unknown, onCall?: () => void): PrismaClient {
 }
 
 const holidayRow = (d: string) => ({ holidayDate: new Date(`${d}T00:00:00.000Z`) });
+const makeupRow = (d: string) => ({ workDate: new Date(`${d}T00:00:00.000Z`) });
 
 describe('đọc lịch làm việc', () => {
   it('repository gộp đúng ngày lễ vào WorkCalendar', async () => {
@@ -39,6 +40,24 @@ describe('đọc lịch làm việc', () => {
     expect(cal.holidays.has('2026-04-30')).toBe(true);
     expect(cal.holidays.size).toBe(2);
     expect(cal.timezone).toBe('Asia/Ho_Chi_Minh');
+  });
+
+  it('repository gộp đúng ngày LÀM BÙ vào WorkCalendar', async () => {
+    const cal = await getCalendar(
+      fakePrisma({
+        calendarId: 'VN_STANDARD',
+        timezone: 'Asia/Ho_Chi_Minh',
+        workdaysMask: DEFAULT_WORKDAYS_MASK,
+        hoursPerDay: 8,
+        holidays: [],
+        makeupWorkdays: [makeupRow('2026-04-25'), makeupRow('2026-05-30')], // hai Thứ 7
+      }),
+      'VN_STANDARD',
+    );
+
+    expect(cal.makeupWorkdays?.has('2026-04-25')).toBe(true);
+    expect(cal.makeupWorkdays?.has('2026-05-30')).toBe(true);
+    expect(cal.makeupWorkdays?.size).toBe(2);
   });
 
   it('ngày lễ giữ nguyên ngày dương lịch, không bị đổi múi giờ', async () => {

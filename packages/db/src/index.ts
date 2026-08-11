@@ -116,6 +116,13 @@ export {
 } from './repositories/calendar-holiday.repository.js';
 
 export {
+  listMakeupWorkdays,
+  importMakeupWorkdays,
+  deleteMakeupWorkday,
+  type ImportMakeupWorkdaysResult,
+} from './repositories/calendar-makeup-workday.repository.js';
+
+export {
   upsertPhaseRollups,
   loadPhaseRollups,
   deleteObsoleteRollups,

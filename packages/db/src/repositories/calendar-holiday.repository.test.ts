@@ -106,6 +106,7 @@ describe('listCalendarsWithHolidayMeta', () => {
                 { holidayDate: day('2026-02-17') },
                 { holidayDate: day('2026-04-30') },
               ],
+              makeupWorkdays: [{ workDate: day('2026-04-25') }, { workDate: day('2026-05-30') }],
             },
           ]),
       },
@@ -119,6 +120,8 @@ describe('listCalendarsWithHolidayMeta', () => {
       hoursPerDay: 8,
       holidayCount: 3,
       years: [2026, 2027],
+      makeupWorkdayCount: 2,
+      makeupYears: [2026],
     });
   });
 });

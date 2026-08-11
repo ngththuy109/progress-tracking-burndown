@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { CalendarSummary, Holiday, Principal } from '@app/shared';
+import type { CalendarSummary, Holiday, MakeupWorkday, Principal } from '@app/shared';
 import { registerCalendarRoutes, type CalendarStore } from './calendars.routes.js';
 
 /**
@@ -22,13 +22,19 @@ const VN: CalendarSummary = {
   hoursPerDay: 8,
   holidayCount: 1,
   years: [2026],
+  makeupWorkdayCount: 1,
+  makeupYears: [2026],
 };
 
 class FakeStore implements CalendarStore {
   holidayRows: Holiday[] = [{ date: '2026-02-17', label: 'Tết' }];
+  makeupRows: MakeupWorkday[] = [{ date: '2026-04-25', label: 'Làm bù 30/4' }];
   importCalls: unknown[] = [];
+  makeupImportCalls: unknown[] = [];
   deleteCalls: string[] = [];
+  makeupDeleteCalls: string[] = [];
   deleteResult = 1;
+  makeupDeleteResult = 1;
   epics = { all: ['PAY-1', 'PAY-2'], active: ['PAY-1'] };
 
   async list() {
@@ -47,6 +53,17 @@ class FakeStore implements CalendarStore {
   async deleteHoliday(_c: string, date: string) {
     this.deleteCalls.push(date);
     return this.deleteResult;
+  }
+  async makeupWorkdays() {
+    return this.makeupRows;
+  }
+  async importMakeupWorkdays(args: unknown) {
+    this.makeupImportCalls.push(args);
+    return { inserted: 2, updated: 1, deleted: 0 };
+  }
+  async deleteMakeupWorkday(_c: string, date: string) {
+    this.makeupDeleteCalls.push(date);
+    return this.makeupDeleteResult;
   }
   async epicsUsing() {
     return this.epics;
@@ -238,5 +255,89 @@ describe('xoá một ngày', () => {
   it('ngày sai định dạng báo 400', async () => {
     const res = await app.inject({ method: 'DELETE', url: '/api/calendars/VN_STANDARD/holidays/17-02-2026' });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+const makeupImportBody = (over: Record<string, unknown> = {}) => ({
+  mode: 'MERGE',
+  year: null,
+  makeupWorkdays: [
+    { date: '2026-04-25', label: 'Làm bù 30/4' },
+    { date: '2026-05-30', label: null },
+  ],
+  ...over,
+});
+
+describe('ngày làm bù', () => {
+  it('VIEWER xem được danh sách ngày làm bù', async () => {
+    principal = VIEWER;
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/calendars/VN_STANDARD/makeup-workdays?year=2026',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().makeupWorkdays[0].date).toBe('2026-04-25');
+  });
+
+  it.each([
+    ['PM', PM],
+    ['VIEWER', VIEWER],
+  ])('%s không được import ngày làm bù', async (_role, p) => {
+    principal = p;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/calendars/VN_STANDARD/makeup-workdays/import',
+      payload: makeupImportBody(),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(store.makeupImportCalls).toHaveLength(0);
+  });
+
+  it('import hợp lệ trả số đếm và lan truyền như ngày lễ', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/calendars/VN_STANDARD/makeup-workdays/import',
+      payload: makeupImportBody(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      calendarId: 'VN_STANDARD',
+      inserted: 2,
+      updated: 1,
+      deleted: 0,
+      epicsMarkedForRecompute: 1,
+    });
+    expect(store.makeupImportCalls).toHaveLength(1);
+    expect(invalidated.sort()).toEqual(['PAY-1', 'PAY-2']);
+    expect(dirtied).toEqual([['PAY-1']]);
+  });
+
+  it('dòng sai trả lỗi TỪNG DÒNG (trỏ đúng makeupWorkdays.i) và không ghi gì', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/calendars/VN_STANDARD/makeup-workdays/import',
+      payload: makeupImportBody({
+        makeupWorkdays: [
+          { date: '2026-04-25', label: null },
+          { date: '25/04/2026', label: null },
+        ],
+      }),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(
+      res.json().issues.some((i: { path: string }) => i.path.startsWith('makeupWorkdays.1')),
+    ).toBe(true);
+    expect(store.makeupImportCalls).toHaveLength(0);
+  });
+
+  it('xoá ngày làm bù thành công thì lan truyền', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/calendars/VN_STANDARD/makeup-workdays/2026-04-25',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().deleted).toBe(1);
+    expect(store.makeupDeleteCalls).toEqual(['2026-04-25']);
+    expect(invalidated.sort()).toEqual(['PAY-1', 'PAY-2']);
   });
 });

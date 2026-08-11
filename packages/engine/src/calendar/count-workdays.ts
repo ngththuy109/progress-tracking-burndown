@@ -29,12 +29,19 @@ function parse(date: DateOnly, timezone: string): DateTime {
  *
  * `dt.weekday` của luxon: T2 = 1 … CN = 7. Bit tương ứng là `weekday - 1`.
  * `Date.getDay()` của JavaScript đánh số khác (CN = 0) — dùng nhầm lệch cả tuần.
+ *
+ * Thứ tự ưu tiên:
+ *  1. NGÀY LỄ luôn thắng → nghỉ, kể cả khi lỡ khai làm bù trùng ngày.
+ *  2. NGÀY LÀM BÙ → làm việc, kể cả khi mask coi là cuối tuần (đó chính là mục
+ *     đích: bù cho một ngày nghỉ khác). Đường Kế hoạch vẫn giảm trên ngày này.
+ *  3. Còn lại theo mask ngày làm việc.
  */
 export function isWorkday(date: DateOnly, calendar: WorkCalendar): boolean {
+  if (calendar.holidays.has(date)) return false;
+  if (calendar.makeupWorkdays?.has(date) === true) return true;
   const dt = parse(date, calendar.timezone);
   const bit = 1 << (dt.weekday - 1);
-  if ((calendar.workdaysMask & bit) === 0) return false;
-  return !calendar.holidays.has(date);
+  return (calendar.workdaysMask & bit) !== 0;
 }
 
 /**

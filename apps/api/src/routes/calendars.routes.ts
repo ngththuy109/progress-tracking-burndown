@@ -1,13 +1,18 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   importHolidaysRequestSchema,
+  importMakeupWorkdaysRequestSchema,
   isDateOnly,
   type CalendarSummary,
   type DeleteHolidayResponse,
+  type DeleteMakeupWorkdayResponse,
   type Holiday,
   type ImportHolidaysResponse,
+  type ImportMakeupWorkdaysResponse,
   type ListCalendarsResponse,
   type ListHolidaysResponse,
+  type ListMakeupWorkdaysResponse,
+  type MakeupWorkday,
   type Principal,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
@@ -36,6 +41,14 @@ export interface CalendarStore {
     holidays: readonly Holiday[];
   }): Promise<{ inserted: number; updated: number; deleted: number }>;
   deleteHoliday(calendarId: string, date: string): Promise<number>;
+  makeupWorkdays(calendarId: string, year: number | null): Promise<readonly MakeupWorkday[]>;
+  importMakeupWorkdays(args: {
+    calendarId: string;
+    mode: 'MERGE' | 'REPLACE_YEAR';
+    year: number | null;
+    makeupWorkdays: readonly MakeupWorkday[];
+  }): Promise<{ inserted: number; updated: number; deleted: number }>;
+  deleteMakeupWorkday(calendarId: string, date: string): Promise<number>;
   /** Epic đang dùng lịch — `all` để xoá cache biểu đồ, `active` để tính lại. */
   epicsUsing(calendarId: string): Promise<{ all: readonly string[]; active: readonly string[] }>;
 }
@@ -79,7 +92,7 @@ export function registerCalendarRoutes(app: FastifyInstance, deps: CalendarRoute
       throw new ApiError(
         403,
         'FORBIDDEN',
-        'Only Admins can edit holidays. Holidays change the Planned line of every Epic using the calendar.',
+        'Only Admins can edit the work calendar. Holidays and make-up workdays change the Planned line of every Epic using the calendar.',
       );
     }
     return p;
@@ -167,6 +180,74 @@ export function registerCalendarRoutes(app: FastifyInstance, deps: CalendarRoute
       const deleted = await deps.store.deleteHoliday(calendarId, date);
       // Xoá một ngày không tồn tại là no-op: không lan truyền, không báo lỗi —
       // hai người cùng xoá một dòng thì người bấm sau vẫn thấy kết quả đúng.
+      const epicsMarkedForRecompute = deleted > 0 ? await propagateCalendarChange(calendarId) : 0;
+      return { calendarId, deleted, epicsMarkedForRecompute };
+    }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Ngày LÀM BÙ — cùng khuôn phân quyền/lan truyền với ngày lễ. Đổi lịch làm bù
+  // cũng làm đường Kế hoạch đổi nên phải xoá cache biểu đồ + đánh dấu tính lại.
+  // -------------------------------------------------------------------------
+
+  app.get('/api/calendars/:calendarId/makeup-workdays', async (req, reply) =>
+    handle(reply, async (): Promise<ListMakeupWorkdaysResponse> => {
+      requirePrincipal(req);
+      const calendarId = calendarIdParam(req);
+      await assertCalendarExists(deps, calendarId);
+      const year = yearQuery(req);
+      return {
+        calendarId,
+        year,
+        makeupWorkdays: [...(await deps.store.makeupWorkdays(calendarId, year))],
+      };
+    }),
+  );
+
+  app.post('/api/calendars/:calendarId/makeup-workdays/import', async (req, reply) =>
+    handle(reply, async (): Promise<ImportMakeupWorkdaysResponse> => {
+      requireAdmin(req);
+      const calendarId = calendarIdParam(req);
+      await assertCalendarExists(deps, calendarId);
+
+      const parsed = importMakeupWorkdaysRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ApiError(
+          400,
+          'BAD_REQUEST',
+          'The make-up workday list is not valid. Nothing was imported — fix the listed lines and send again.',
+          parsed.error.issues.map((i) => ({
+            level: 'ERROR' as const,
+            code: 'SCHEMA_INVALID',
+            message: i.message,
+            path: i.path.join('.'),
+          })),
+        );
+      }
+
+      const result = await deps.store.importMakeupWorkdays({
+        calendarId,
+        mode: parsed.data.mode,
+        year: parsed.data.year,
+        makeupWorkdays: parsed.data.makeupWorkdays,
+      });
+      const epicsMarkedForRecompute = await propagateCalendarChange(calendarId);
+      return { calendarId, ...result, epicsMarkedForRecompute };
+    }),
+  );
+
+  app.delete('/api/calendars/:calendarId/makeup-workdays/:date', async (req, reply) =>
+    handle(reply, async (): Promise<DeleteMakeupWorkdayResponse> => {
+      requireAdmin(req);
+      const calendarId = calendarIdParam(req);
+      await assertCalendarExists(deps, calendarId);
+
+      const date = (req.params as { date?: string }).date ?? '';
+      if (!isDateOnly(date)) {
+        throw new ApiError(400, 'BAD_REQUEST', `The date must look like YYYY-MM-DD, got "${date}".`);
+      }
+
+      const deleted = await deps.store.deleteMakeupWorkday(calendarId, date);
       const epicsMarkedForRecompute = deleted > 0 ? await propagateCalendarChange(calendarId) : 0;
       return { calendarId, deleted, epicsMarkedForRecompute };
     }),

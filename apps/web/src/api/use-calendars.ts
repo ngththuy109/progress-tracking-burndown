@@ -7,14 +7,21 @@ import {
 } from '@tanstack/react-query';
 import {
   deleteHolidayResponseSchema,
+  deleteMakeupWorkdayResponseSchema,
   importHolidaysResponseSchema,
+  importMakeupWorkdaysResponseSchema,
   listCalendarsResponseSchema,
   listHolidaysResponseSchema,
+  listMakeupWorkdaysResponseSchema,
   type DeleteHolidayResponse,
+  type DeleteMakeupWorkdayResponse,
   type ImportHolidaysRequest,
   type ImportHolidaysResponse,
+  type ImportMakeupWorkdaysRequest,
+  type ImportMakeupWorkdaysResponse,
   type ListCalendarsResponse,
   type ListHolidaysResponse,
+  type ListMakeupWorkdaysResponse,
 } from '@app/shared';
 import { apiClient, type ApiClient } from './client.js';
 
@@ -32,6 +39,8 @@ export const calendarKeys = {
   list: () => ['calendars', 'list'] as const,
   holidays: (calendarId: string, year: number | null) =>
     ['calendars', calendarId, 'holidays', year ?? 'all'] as const,
+  makeupWorkdays: (calendarId: string, year: number | null) =>
+    ['calendars', calendarId, 'makeup-workdays', year ?? 'all'] as const,
 };
 
 export function useCalendars(
@@ -97,6 +106,65 @@ export function useDeleteHoliday(
   return useMutation({
     mutationFn: (vars: DeleteHolidayVars) =>
       client.delete(`/calendars/${vars.calendarId}/holidays/${vars.date}`, deleteHolidayResponseSchema),
+    onSuccess: invalidate,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Ngày làm bù — cùng khuôn hook với ngày lễ, cùng làm mới biểu đồ/plan-conflicts.
+// ---------------------------------------------------------------------------
+
+export function useMakeupWorkdays(
+  calendarId: string | null,
+  year: number | null,
+  client: ApiClient = apiClient,
+): UseQueryResult<ListMakeupWorkdaysResponse, Error> {
+  return useQuery({
+    queryKey: calendarKeys.makeupWorkdays(calendarId ?? '', year),
+    enabled: calendarId !== null && calendarId !== '',
+    queryFn: ({ signal }) =>
+      client.get(`/calendars/${calendarId ?? ''}/makeup-workdays`, listMakeupWorkdaysResponseSchema, {
+        signal,
+        query: { year },
+      }),
+  });
+}
+
+export interface ImportMakeupWorkdaysVars {
+  readonly calendarId: string;
+  readonly body: ImportMakeupWorkdaysRequest;
+}
+
+export function useImportMakeupWorkdays(
+  client: ApiClient = apiClient,
+): UseMutationResult<ImportMakeupWorkdaysResponse, Error, ImportMakeupWorkdaysVars> {
+  const invalidate = useInvalidateCalendarData();
+  return useMutation({
+    mutationFn: (vars: ImportMakeupWorkdaysVars) =>
+      client.post(
+        `/calendars/${vars.calendarId}/makeup-workdays/import`,
+        vars.body,
+        importMakeupWorkdaysResponseSchema,
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+export interface DeleteMakeupWorkdayVars {
+  readonly calendarId: string;
+  readonly date: string;
+}
+
+export function useDeleteMakeupWorkday(
+  client: ApiClient = apiClient,
+): UseMutationResult<DeleteMakeupWorkdayResponse, Error, DeleteMakeupWorkdayVars> {
+  const invalidate = useInvalidateCalendarData();
+  return useMutation({
+    mutationFn: (vars: DeleteMakeupWorkdayVars) =>
+      client.delete(
+        `/calendars/${vars.calendarId}/makeup-workdays/${vars.date}`,
+        deleteMakeupWorkdayResponseSchema,
+      ),
     onSuccess: invalidate,
   });
 }
