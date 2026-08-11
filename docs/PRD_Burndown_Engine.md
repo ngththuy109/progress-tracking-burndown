@@ -655,7 +655,7 @@ Jira **không có sẵn** hai trường này. Hệ thống suy ra từ lịch s�
 
 | Mốc | Cách tính |
 |---|---|
-| `actual_start` | Ngày worklog **sớm nhất** (theo trường `started`). Không có worklog → lần đầu chuyển sang `In Progress` (đọc từ changelog). Vẫn không có mà task đã Done → lấy đúng **ngày Done** (task xong nhưng không log giờ, không qua In Progress — coi như bắt đầu và kết thúc cùng ngày) |
+| `actual_start` | Ngày worklog **sớm nhất** (theo trường `started`). Không có worklog → lần đầu chuyển sang `In Progress` (đọc từ changelog) — **trừ khi** Sub-task **hiện đã bị kéo về `To Do` và chưa từng `Done`**, khi đó coi như **chưa bắt đầu** (`null`). Vẫn không có mà task đã Done → lấy đúng **ngày Done** (task xong nhưng không log giờ, không qua In Progress — coi như bắt đầu và kết thúc cùng ngày) |
 | `actual_end` | Chưa Done → **chưa tính** (`null`) — KHÔNG tạm tính từ worklog. Đã Done → ngày worklog **muộn nhất**; không có worklog → lần **CUỐI CÙNG** chuyển sang `Done` |
 
 **Vì sao lấy "lần cuối cùng" chuyển sang Done?** Vì có ca mở lại (reopen). Ví dụ một task không log giờ nào:
@@ -668,6 +668,18 @@ Jira **không có sẵn** hai trường này. Hệ thống suy ra từ lịch s�
 | 16/03 | `対応中` → `完了` | ← `actual_end` = **16/03** (lần Done cuối) |
 
 Nếu lấy lần Done đầu tiên (12/03) thì mất trắng 4 ngày làm lại — báo cáo sẽ sai.
+
+**Vì sao `actual_start` phải xét trạng thái HIỆN TẠI, không chỉ dấu vết quá khứ?** Vì có ca **chuyển nhầm** rồi trả lại. User bấm nhầm sang `In Progress` dù chưa bắt đầu, phát hiện ra rồi kéo ticket về `Open` (`To Do`). Dấu vết `In Progress` cũ **nằm mãi trong changelog**, nên nếu chỉ tìm "lần đầu chuyển In Progress" thì `actual_start` **không bao giờ về `null`** — kể cả sau khi bấm resync:
+
+| Ngày | Sự kiện | Ghi chú |
+|---|---|---|
+| 09/03 | `未対応` → `対応中` | Bấm nhầm — chưa thật sự bắt đầu |
+| 10/03 | `対応中` → `未対応` | Kéo lại về Open |
+| — | *hiện tại: `To Do`, chưa từng Done, không worklog* | ← `actual_start` = **null** |
+
+Quy tắc: chỉ tính lần chuyển `In Progress` khi Sub-task **hiện KHÔNG còn ở nhóm `To Do`**. Điều kiện phải là **"chưa từng Done"**, không phải chỉ "hiện là `To Do`" — task `To Do → In Progress → Done → To Do` (kéo về backlog **sau khi** đã xong) vẫn là việc thật, giữ nguyên `actual_start`. Và worklog vẫn là bằng chứng mạnh nhất: đã log giờ thì `actual_start` giữ nguyên dù trạng thái hiện tại là gì. Xem **E-32**.
+
+> **Hệ quả nếu bỏ qua:** một `actual_start` "ma" đẩy ô Signboard từ *"chưa bắt đầu"* sang *"đang làm"* (§6.3 bước 4), và biểu đồ vẽ đường Thực tế cho một task đang nằm ở `To Do`.
 
 #### 2.7.3. Khi Sub-task thiếu ngày kế hoạch
 
@@ -2651,6 +2663,7 @@ Nếu cùng một `TaskName` lạ xuất hiện **≥ 3 lần**, hiện gợi ý
 | **E-29** | **`TaskName` không nằm trong danh sách cột** (ví dụ `_UnitTest`) | Lấy được `function_name` bình thường, đặt `task_type = NULL`, `sb_parse_status = UNKNOWN_TASK_TYPE`. | Tự động tạo cột mới cho mọi giá trị lạ → bảng phình ra hàng chục cột do lỗi gõ nhầm. | Hiện ở khu "Task khác" ngay dưới bảng. Nếu **cùng một** giá trị lạ xuất hiện **≥ 3 lần** → gợi ý *"Thêm 'UnitTest' thành một cột mới?"* kèm nút sang màn hình cấu hình. Quyền quyết định vẫn thuộc PM. |
 | **E-30** | **Sub-task thiếu `wbs_start_date` / `wbs_end_date`** nên không tính được trạng thái | Ô hiện trạng thái **`NoPlan`** (⚠ kẻ sọc), **không đoán bừa**. | Ép vào `NYS` là sai nghĩa (task có thể đang làm dở); ép vào `OnSchedule` là bịa kết luận không căn cứ. Cả hai đều khiến PM tưởng mọi thứ ổn. | `NoPlan` xếp hạng 3 khi gộp ô (mục 6.5) nên không bị `Completed` che mất. Nối với rủi ro **R-08** và API `/api/epics/:key/missing-dates` để PM đi điền. |
 | **E-31** | **Cùng một Function nhưng viết khác nhau** (`Login` / `login` / `Ｌｏｇｉｎ`) | Chuẩn hoá **NFKC + lowercase** thành `function_key` để **gộp về một hàng**. Tên hiển thị lấy theo dạng gặp đầu tiên. | Không gộp → một Function bị tách thành 3 hàng, mỗi hàng thiếu dữ liệu, PM tưởng có 3 chức năng khác nhau. | Nếu các dạng viết khác nhau vượt 1 kiểu, hiện biểu tượng nhỏ cạnh tên hàng, rê chuột thấy đủ các cách viết đang tồn tại để PM chuẩn hoá lại trên Jira. |
+| **E-32** | **Chuyển nhầm Sub-task sang `In Progress` rồi trả lại `To Do`** (bấm nhầm dù chưa bắt đầu, sửa lại rồi resync) | `resolveSubtaskActualDates` chỉ tính lần chuyển `In Progress` khi Sub-task **hiện không còn ở nhóm `To Do`**. Hiện là `To Do` **và chưa từng `Done`** (không worklog) → `actual_start` = `null`. Xem §2.7.2. | Dấu vết `In Progress` cũ nằm mãi trong changelog. Nếu chỉ tìm "lần đầu In Progress" thì resync **không bao giờ** xoá được `actual_start` → Signboard báo *"đang làm"* và biểu đồ vẽ đường Thực tế cho task đang nằm ở `To Do` (§6.3 bước 4) — lỗi im lặng. | Điều kiện là **"chưa từng Done"**, không chỉ "hiện là To Do": ca `To Do → In Progress → Done → To Do` (kéo về backlog sau khi xong) vẫn giữ ngày bắt đầu. Worklog vẫn thắng — có giờ log thì giữ nguyên. Bất biến `start = null ⟹ end = null` được giữ. Có unit test cho `To Do → In Progress → To Do`. |
 
 ---
 
