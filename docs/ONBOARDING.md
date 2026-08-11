@@ -47,6 +47,8 @@ Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đ�
 
 > **Chỉ cần Jira thật khi muốn đồng bộ dữ liệu thật.** Toàn bộ test chạy được mà không cần Jira, PostgreSQL hay Redis — xem mục 5.
 
+> **Muốn ô Signboard mở/copy được link ticket?** Đặt thêm `VITE_JIRA_BASE_URL` (thường trùng `JIRA_BASE_URL`). Rê chuột vào một ô task sẽ hiện thẻ có nút **mở** ticket trên Jira (tab mới) và **copy** link. Bỏ trống thì ô vẫn chạy, chỉ copy được *mã* ticket. Đây là biến của **frontend** — server không đọc `JIRA_BASE_URL` hộ trình duyệt được.
+
 > **Xác thực khi chạy local.** Ở môi trường triển khai, app dùng **SSO qua một cổng** đặt header danh tính `x-user-id` (xem [AUTH.md](./AUTH.md)). Ở local **không có cổng**: các API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic, sửa cấu hình, quản lý người dùng) cần header danh tính — thiếu là **401** (đặt mỗi `AUTH_BOOTSTRAP_ADMINS` chưa đủ: nó chỉ ánh xạ *danh tính → ADMIN*, không tự tạo danh tính). Dùng app qua **trình duyệt**: chạy `AUTH_BOOTSTRAP_ADMINS=you@cty.com VITE_DEV_USER=you@cty.com pnpm dev` — Vite dev proxy tự chèn `x-user-id` (đóng vai cổng ở local). Gọi bằng **`curl`**: thêm `-H 'x-user-id: you@cty.com'`. Chi tiết ở [AUTH.md §9](./AUTH.md). Các biến `AUTH_*` đều tùy chọn — mặc định người đã xác thực nhưng chưa cấp quyền là `VIEWER`.
 
 ## 3. Dựng database

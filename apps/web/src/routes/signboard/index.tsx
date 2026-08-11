@@ -11,7 +11,14 @@ import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
+import { jiraBaseUrl } from '../../api/jira.js';
 import type { PlanConflict } from '@app/shared';
+
+/**
+ * Base URL Jira cho các link "mở ticket" trong ô. Đọc MỘT lần (biến Vite tĩnh);
+ * `''` = chưa cấu hình → ô chỉ cho copy mã, không mở thẳng sang Jira.
+ */
+const JIRA_BASE = jiraBaseUrl();
 
 /**
  * Bảng Signboard — PRD §6.
@@ -392,13 +399,19 @@ function BoardTable({
     );
   }
 
+  // Cột Σ (gộp mỗi Sub-phase) CHỈ có nghĩa khi có ≥2 Sub-phase để so với nhau.
+  // Một Sub-phase thì Σ của nó TRÙNG KHÍT cột "Overall" (cùng đúng bộ ticket) —
+  // hiện cả hai là in "total" hai lần. Bỏ Σ, giữ "Overall" cho rõ nghĩa.
+  const showSubtotals = columnGroups.length > 1;
+
   return (
     <section className="panel">
       <div className="table-wrap">
         <table className="table signboard">
           <caption className="table__caption">Function × sub-phase × task type grid</caption>
           <thead>
-            {/* Tầng 1: nhóm Sub-phase. Mỗi nhóm trải trên bộ cột loại task + cột Σ. */}
+            {/* Tầng 1: nhóm Sub-phase. Mỗi nhóm trải trên bộ cột loại task, cộng
+                cột Σ khi có ≥2 nhóm (một nhóm thì Σ trùng Overall — xem trên). */}
             <tr>
               {/* Cột Function DÍNH bên trái: bảng rất rộng, cuộn sang phải mà
                   mất tên hàng thì mọi ô trở nên vô nghĩa. */}
@@ -413,7 +426,7 @@ function BoardTable({
                 <th
                   key={g.subPhaseKey}
                   scope="colgroup"
-                  colSpan={g.taskColumns.length + 1}
+                  colSpan={g.taskColumns.length + (showSubtotals ? 1 : 0)}
                   className="table__th signboard__group"
                 >
                   {g.subPhaseLabel}
@@ -423,7 +436,8 @@ function BoardTable({
                 Overall
               </th>
             </tr>
-            {/* Tầng 2: loại task trong từng nhóm, cộng một cột Σ khép nhóm. */}
+            {/* Tầng 2: loại task trong từng nhóm, cộng một cột Σ khép nhóm (chỉ
+                khi ≥2 nhóm). */}
             <tr>
               {columnGroups.map((g) => (
                 <Fragment key={g.subPhaseKey}>
@@ -432,13 +446,15 @@ function BoardTable({
                       {c.label}
                     </th>
                   ))}
-                  <th
-                    scope="col"
-                    className="table__th signboard__subtotal-head"
-                    title={`Worst status across ${g.subPhaseLabel}`}
-                  >
-                    Σ
-                  </th>
+                  {showSubtotals && (
+                    <th
+                      scope="col"
+                      className="table__th signboard__subtotal-head"
+                      title={`Worst status across ${g.subPhaseLabel}`}
+                    >
+                      Σ
+                    </th>
+                  )}
                 </Fragment>
               ))}
             </tr>
@@ -462,19 +478,28 @@ function BoardTable({
                           className={`table__td${empty ? ' signboard__empty' : ''}`}
                           data-status={tdStatus(cell, filter)}
                         >
-                          {/* ⚠ chỉ gắn ở ô LÁ. Ô Σ và Overall gộp nhiều loại
-                              task — lặp lại cảnh báo ở đó chỉ thêm nhiễu. */}
+                          {/* ⚠ và hovercard "mở/copy ticket" chỉ gắn ở ô LÁ. Ô Σ
+                              và Overall gộp nhiều loại task — lặp lại ở đó chỉ
+                              thêm nhiễu. */}
                           {cell !== undefined && (
-                            <SignboardCellView cell={cell} filter={filter} conflicts={conflicts} />
+                            <SignboardCellView
+                              cell={cell}
+                              filter={filter}
+                              conflicts={conflicts}
+                              interactive
+                              jiraBaseUrl={JIRA_BASE}
+                            />
                           )}
                         </td>
                       );
                     })}
-                    <td className="table__td signboard__subtotal" data-status={tdStatus(row.subtotals[gi], null)}>
-                      {row.subtotals[gi] !== undefined && (
-                        <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
-                      )}
-                    </td>
+                    {showSubtotals && (
+                      <td className="table__td signboard__subtotal" data-status={tdStatus(row.subtotals[gi], null)}>
+                        {row.subtotals[gi] !== undefined && (
+                          <SignboardCellView cell={row.subtotals[gi]!} filter={null} />
+                        )}
+                      </td>
+                    )}
                   </Fragment>
                 ))}
                 <td className="table__td" data-status={tdStatus(row.total, null)}>
