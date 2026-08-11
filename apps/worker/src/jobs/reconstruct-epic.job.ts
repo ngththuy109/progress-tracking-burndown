@@ -12,7 +12,7 @@ import {
   buildSnapshotForDay,
   computePhaseRollups,
   detectPlanShift,
-  listWorkdays,
+  listCalendarDays,
   resolveSubtaskActualDates,
 } from '@app/engine';
 import {
@@ -153,18 +153,25 @@ export async function reconstructEpic(
       }
     }
 
-    // --- GIAI ĐOẠN 5: dựng snapshot từng ngày làm việc ---
-    const workdays = listWorkdays(args.from, args.to, deps.calendar);
+    // --- GIAI ĐOẠN 5: dựng snapshot từng ngày lịch ---
+    //
+    // MỌI ngày lịch, KHÔNG chỉ ngày làm việc (quyết định 2026-08): team log giờ
+    // vào Thứ 7/CN thì snapshot của đúng ngày đó phải mang số thật, để đường
+    // Thực tế giảm ngay hôm làm thay vì dồn cả vào sáng Thứ 2. Ngày nghỉ không
+    // ai làm gì thì snapshot phẳng so với hôm trước — biểu đồ bôi xám ngày nghỉ
+    // nên đoạn phẳng đọc đúng nghĩa "nghỉ". Đường Kế hoạch của ngày nghỉ cũng
+    // phẳng sẵn vì công thức T-16 chỉ đốt theo ngày làm việc.
+    const days = listCalendarDays(args.from, args.to, deps.calendar.timezone);
 
     // Dò ngày thiếu (E-12): job hôm sau tự bù những ngày job trước bỏ lỡ. Không
     // bù thì biểu đồ thủng lỗ và đường nối tắt qua ngày trống gây hiểu nhầm.
     const existing = await deps.ports.existingSnapshotDates(epicKey);
-    const daysBackfilled = workdays.filter((d) => !existing.has(d)).length;
+    const daysBackfilled = days.filter((d) => !existing.has(d)).length;
 
     const snapshots: DailySnapshotData[] = [];
     let previousScope = await deps.ports.previousTotalScope(epicKey, args.from);
 
-    for (const dateStr of workdays) {
+    for (const dateStr of days) {
       const snap = buildSnapshotForDay({
         epicKey,
         subtasks,

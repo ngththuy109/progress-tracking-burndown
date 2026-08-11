@@ -60,8 +60,10 @@ export interface BurndownChartProps {
 
 interface Row {
   readonly date: string;
-  /** `true` = ngày nghỉ theo lịch (cuối tuần / ngày lễ), chèn thêm cho trục liền mạch. */
+  /** `true` = ngày nghỉ theo lịch (cuối tuần / ngày lễ). */
   readonly offDay?: boolean;
+  /** Ngày này có SỐ ĐO THẬT (snapshot với actual ≠ null) — team làm cuối tuần. */
+  readonly hasData?: boolean;
   readonly [key: string]: string | number | null | boolean | undefined;
 }
 
@@ -77,22 +79,19 @@ function calendarDaysBetween(from: string, to: string): string[] {
 }
 
 /**
- * Ghép nhiều chuỗi số vào một mảng dòng theo ngày, RỒI chèn thêm ngày nghỉ.
+ * Ghép nhiều chuỗi số vào một mảng dòng theo ngày — trục vẽ ĐỦ ngày lịch,
+ * ngày nghỉ bôi xám (quyết định 2026-08).
  *
- * Dữ liệu API chỉ có NGÀY LÀM VIỆC (T-18) — mọi ngày lịch bị khuyết giữa hai
- * điểm liên tiếp chính là ngày nghỉ theo lịch của Epic. Trước đây trục bỏ hẳn
- * những ngày đó để khỏi sinh đoạn nằm ngang giả, nhưng người đọc lại thấy
- * "biểu đồ mất ngày": Thứ 7/CN biến mất và khó đối chiếu với lịch thật.
+ * Ngày nghỉ có hai dạng:
+ *  • CÓ snapshot (team làm Thứ 7/CN): API phát điểm `isOffDay` kèm SỐ THẬT —
+ *    vẽ y như ngày thường (đường giảm đúng hôm làm, có chấm dữ liệu), chỉ khác
+ *    là nằm trong dải xám.
+ *  • KHÔNG có số liệu (nghỉ thật, hoặc phản hồi cũ trong cache chưa phát ngày
+ *    nghỉ): kéo phẳng từ dòng liền trước và đánh dấu `__carried` — đoạn nằm
+ *    ngang chủ đích, không chấm, không bấm được.
  *
- * Quyết định mới (2026-08, theo yêu cầu người dùng): ngày nghỉ VẪN LÊN TRỤC,
- * giá trị kéo phẳng từ ngày làm việc liền trước — đoạn nằm ngang giờ là chủ
- * đích, và được BÔI XÁM (xem `offDayRuns`) để ai cũng đọc ra "ngày nghỉ" chứ
- * không phải "đội đứng yên".
- *
- * Hai điều KHÔNG đổi:
- *  • Ngày làm việc thiếu snapshot vẫn là LỖ THỦNG `null`, và ngày nghỉ ngay
- *    sau nó cũng giữ `null` — tuyệt đối không bịa số (E-12).
- *  • Không đụng API: đây là quyết định trình bày, thuộc tầng hiển thị.
+ * KHÔNG đổi: ngày làm việc thiếu snapshot vẫn là LỖ THỦNG `null`, và ngày nghỉ
+ * ngay sau nó cũng giữ `null` — tuyệt đối không bịa số (E-12).
  */
 export function toChartRows(series: readonly ChartSeries[]): Row[] {
   const byDate = new Map<string, Record<string, string | number | null | boolean>>();
@@ -107,34 +106,57 @@ export function toChartRows(series: readonly ChartSeries[]): Row[] {
       // `null` giữ nguyên: Recharts sẽ để LỖ THỦNG thay vì nối tắt hai điểm.
       row[`${s.key}__actual`] = p.actualRemainingHours;
       row[`${s.key}__planned`] = p.plannedRemainingHours;
+      if (p.isOffDay === true) row['offDay'] = true;
+      // Ngày có SỐ ĐO THẬT: chấm dữ liệu hiện và bấm mở bảng giải thích được.
+      if (p.actualRemainingHours !== null) row['hasData'] = true;
     }
   }
 
-  const workRows = [...byDate.values()].sort((a, b) =>
+  const sorted = [...byDate.values()].sort((a, b) =>
     String(a['date']).localeCompare(String(b['date'])),
   );
 
-  const rows: Row[] = [];
-  for (let i = 0; i < workRows.length; i += 1) {
-    const cur = workRows[i]!;
-    rows.push(cur as Row);
+  // Chèn ngày lịch còn khuyết giữa hai điểm liên tiếp — đường lui cho phản hồi
+  // CŨ trong cache (chưa phát ngày nghỉ). Phản hồi mới đã phát đủ ngày lịch nên
+  // vòng này không chèn gì.
+  const rows: Record<string, string | number | null | boolean>[] = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    const cur = sorted[i]!;
+    rows.push(cur);
 
-    const next = workRows[i + 1];
+    const next = sorted[i + 1];
     if (next === undefined) continue;
 
     for (const day of calendarDaysBetween(String(cur['date']), String(next['date']))) {
       const off: Record<string, string | number | null | boolean> = { date: day, offDay: true };
       for (const s of series) {
-        // Kéo phẳng từ ngày làm việc liền trước. Ngày trước là lỗ thủng thì
-        // ngày nghỉ cũng là lỗ thủng — nối qua đó là bịa ra dữ liệu.
-        off[`${s.key}__actual`] = (cur[`${s.key}__actual`] as number | null | undefined) ?? null;
-        off[`${s.key}__planned`] = (cur[`${s.key}__planned`] as number | null | undefined) ?? null;
+        off[`${s.key}__actual`] = null;
+        off[`${s.key}__planned`] = null;
       }
-      rows.push(off as Row);
+      rows.push(off);
     }
   }
 
-  return rows;
+  // Kéo phẳng ngày nghỉ CHƯA có số liệu từ dòng liền trước (kể cả giá trị đã
+  // kéo — chuỗi T7 rồi CN nối tiếp nhau). Dòng trước là lỗ thủng thì ngày nghỉ
+  // cũng là lỗ thủng: nối qua đó là bịa ra dữ liệu.
+  const keys = series.map((s) => s.key);
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    if (row['offDay'] !== true) continue;
+    const prev = rows[i - 1]!;
+
+    for (const key of keys) {
+      for (const field of [`${key}__actual`, `${key}__planned`]) {
+        if (row[field] == null && typeof prev[field] === 'number') {
+          row[field] = prev[field];
+          row[`${field}__carried`] = true;
+        }
+      }
+    }
+  }
+
+  return rows as Row[];
 }
 
 /**
@@ -165,18 +187,28 @@ export function offDayRuns(rows: readonly Row[]): { from: string; to: string }[]
 }
 
 /**
- * Chấm dữ liệu tự vẽ: GIẤU chấm trên ngày nghỉ. Giá trị ngày nghỉ chỉ là kéo
- * phẳng từ ngày làm việc trước đó — vẽ chấm ở đó trông như có số liệu đo thật.
+ * Chấm dữ liệu tự vẽ: GIẤU chấm trên giá trị KÉO PHẲNG (`__carried`) — đó không
+ * phải số đo thật. Ngày nghỉ mà team có làm (snapshot thật) thì chấm VẪN hiện:
+ * chấm là dấu hiệu "có số đo", không phải "là ngày làm việc".
  */
-function workdayOnlyDot(props: {
+export function measuredOnlyDot(props: {
   key?: string | number;
   cx?: number;
   cy?: number;
   stroke?: string;
+  dataKey?: string | number;
   payload?: Row;
 }): ReactElement {
-  const { cx, cy, stroke, payload } = props;
-  if (payload?.offDay === true || typeof cx !== 'number' || typeof cy !== 'number' || !Number.isFinite(cx) || !Number.isFinite(cy)) {
+  const { cx, cy, stroke, dataKey, payload } = props;
+
+  const carried =
+    typeof dataKey === 'string'
+      ? payload?.[`${dataKey}__carried`] === true
+      : // Recharts đời khác không truyền dataKey: lùi về quy tắc thô — ngày nghỉ
+        // không có số đo thật thì ẩn chấm.
+        payload?.offDay === true && payload?.hasData !== true;
+
+  if (carried || typeof cx !== 'number' || typeof cy !== 'number' || !Number.isFinite(cx) || !Number.isFinite(cy)) {
     return <g key={props.key} />;
   }
   return <circle key={props.key} cx={cx} cy={cy} r={3} stroke={stroke} strokeWidth={1} fill="#fff" />;
@@ -198,6 +230,12 @@ export function BurndownChart({
     () => new Set(rows.filter((r) => r.offDay === true).map((r) => r.date)),
     [rows],
   );
+  // Ngày KHÔNG bấm được: ngày nghỉ không có số đo thật — bảng giải thích không
+  // có snapshot nào để giải thích. Ngày nghỉ team CÓ làm thì bấm bình thường.
+  const unclickableDays = useMemo(
+    () => new Set(rows.filter((r) => r.offDay === true && r.hasData !== true).map((r) => r.date)),
+    [rows],
+  );
 
   return (
     // Kích thước cố định thay vì `ResponsiveContainer`: container đo kích thước
@@ -209,9 +247,7 @@ export function BurndownChart({
       data={rows}
       onClick={(state: { activeLabel?: string | number }) => {
         const label = state.activeLabel;
-        // Ngày nghỉ không có snapshot — mở bảng giải thích cho nó chỉ ra một
-        // màn hình "lệch số" vô nghĩa.
-        if (typeof label === 'string' && !offDays.has(label) && onPointClick) onPointClick(label);
+        if (typeof label === 'string' && !unclickableDays.has(label) && onPointClick) onPointClick(label);
       }}
     >
       <CartesianGrid strokeDasharray="3 3" />
@@ -275,10 +311,10 @@ export function BurndownChart({
           // `connectNulls={false}` trên ĐƯỜNG CHÍNH: đoạn qua ngày thiếu
           // snapshot không được vẽ nét liền — nét liền là cam kết "số đo thật".
           // Mạch liền mà người xem thấy do CẦU NỐI nét đứt phía trên đảm nhận;
-          // ngày nghỉ thì không tạo lỗ thủng vì đã kéo phẳng trong
-          // `toChartRows` (E-12).
+          // ngày nghỉ thì không tạo lỗ thủng vì hoặc có snapshot thật (team làm
+          // cuối tuần) hoặc đã kéo phẳng trong `toChartRows` (E-12).
           connectNulls={false}
-          dot={workdayOnlyDot}
+          dot={measuredOnlyDot}
         />
       ))}
 

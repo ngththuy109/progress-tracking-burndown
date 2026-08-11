@@ -459,7 +459,14 @@ async function earliestDataDate(prisma: PrismaClient, epicKey: string): Promise<
   return created._min.jiraCreatedAt ? toDateString(created._min.jiraCreatedAt) : null;
 }
 
-/** Ngày làm việc sớm nhất còn thiếu snapshot (E-12). `null` = không thiếu. */
+/**
+ * Ngày làm việc sớm nhất còn thiếu snapshot (E-12). `null` = không thiếu.
+ *
+ * CỐ Ý chỉ quét NGÀY LÀM VIỆC dù snapshot giờ được dựng cho mọi ngày lịch
+ * (2026-08): coi cuối tuần lịch sử "thiếu" sẽ kéo lượt dựng lại về tận đầu Epic
+ * ngay đêm đầu sau khi nâng cấp. Cuối tuần được phủ dần bởi cửa sổ 7 ngày của
+ * lượt đồng bộ thường ngày; muốn có đủ lịch sử cuối tuần cũ thì chạy Resync full.
+ */
 async function earliestMissingSnapshotDate(
   prisma: PrismaClient,
   calendar: Awaited<ReturnType<typeof getCalendar>>,

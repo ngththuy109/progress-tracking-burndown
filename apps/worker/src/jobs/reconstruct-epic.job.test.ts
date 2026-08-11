@@ -243,13 +243,21 @@ describe('dựng snapshot', () => {
     ]);
   });
 
-  it('cuối tuần KHÔNG có snapshot', async () => {
+  it('cuối tuần CŨNG có snapshot — giờ log Thứ 7/CN hiện đúng ngày (2026-08)', async () => {
+    // Trước đây cuối tuần bị bỏ qua và mọi tiến độ cuối tuần dồn vào snapshot
+    // sáng Thứ 2 — người xem không thấy team đã làm hôm nào. Nay chốt sổ MỌI
+    // ngày lịch: cuối tuần không ai làm thì snapshot phẳng, biểu đồ bôi xám.
     const ports = new FakePorts([sub('A')]);
     await run(ports, '2026-03-13', '2026-03-16');
-    expect(ports.savedSnapshots.map((s) => s.snapshotDate)).toEqual(['2026-03-13', '2026-03-16']);
+    expect(ports.savedSnapshots.map((s) => s.snapshotDate)).toEqual([
+      '2026-03-13',
+      '2026-03-14',
+      '2026-03-15',
+      '2026-03-16',
+    ]);
   });
 
-  it('ngày lễ KHÔNG có snapshot', async () => {
+  it('ngày lễ cũng có snapshot, cùng lý do với cuối tuần', async () => {
     const ports = new FakePorts([sub('A')]);
     await reconstructEpic(
       {
@@ -263,7 +271,11 @@ describe('dựng snapshot', () => {
       },
       { epicKey: EPIC, from: '2026-03-09', to: '2026-03-11' },
     );
-    expect(ports.savedSnapshots.map((s) => s.snapshotDate)).toEqual(['2026-03-09', '2026-03-11']);
+    expect(ports.savedSnapshots.map((s) => s.snapshotDate)).toEqual([
+      '2026-03-09',
+      '2026-03-10',
+      '2026-03-11',
+    ]);
   });
 
   it('mọi snapshot mang cùng source_read_at của lượt chạy', async () => {

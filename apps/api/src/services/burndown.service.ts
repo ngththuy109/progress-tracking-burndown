@@ -49,8 +49,15 @@ export function toHours(seconds: number): number {
 export interface BuildChartArgs {
   readonly epicKey: string;
   readonly mode: ChartMode;
-  /** Ngày làm việc trong khoảng, đã tính sẵn từ lịch. */
+  /** Ngày làm việc trong khoảng, đã tính sẵn từ lịch — dùng cho dataHealth. */
   readonly workdays: readonly DateOnly[];
+  /**
+   * TOÀN BỘ ngày lịch trong khoảng — trục vẽ (2026-08: ngày nghỉ lên trục,
+   * bôi xám). Ngày nào không nằm trong `workdays` là ngày nghỉ; snapshot của
+   * ngày nghỉ (worker chốt cho mọi ngày lịch) cho đường Thực tế giảm đúng hôm
+   * team làm cuối tuần.
+   */
+  readonly days: readonly DateOnly[];
   readonly snapshots: readonly SnapshotRow[];
   readonly rollups: readonly PhaseRollup[];
   readonly planShifts: readonly PlanShiftRecord[];
@@ -65,6 +72,7 @@ export interface BuildChartArgs {
 
 export function buildChart(args: BuildChartArgs): BurndownResponse {
   const byDate = new Map(args.snapshots.map((s) => [s.snapshotDate, s]));
+  const workdaySet = new Set(args.workdays);
 
   // Bối cảnh cho phần đường Kế hoạch SAU snapshot cuối cùng: từ đó tới
   // `plan_end` chưa có snapshot nào, đường Kế hoạch được chiếu tiếp từ rollup
@@ -78,18 +86,18 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
   const series =
     args.mode === 'EPIC'
       ? [
-          epicSeries(args.workdays, byDate, projection),
+          epicSeries(args.days, workdaySet, byDate, projection),
           // KÈM luôn chuỗi số của TỪNG Phase vào cùng một phản hồi Tổng Epic.
           // Màn hình Burndown dựng ô chọn Phase TỪ CHÍNH `series` này và đổi
           // Phase KHÔNG gọi lại API (xem `use-burndown.ts`: "một lần gọi cho cả
           // Epic"). Thiếu phần này thì ở chế độ Single Phase / Compare ô chọn
           // trống trơn — PM không có Phase nào để bấm.
           ...distinctPhaseCodes(args.rollups).map((code) =>
-            phaseSeries(code, args.workdays, byDate, args.labels, projection),
+            phaseSeries(code, args.days, workdaySet, byDate, args.labels, projection),
           ),
         ]
       : (args.phaseCodes ?? []).map((code) =>
-          phaseSeries(code, args.workdays, byDate, args.labels, projection),
+          phaseSeries(code, args.days, workdaySet, byDate, args.labels, projection),
         );
 
   // Ngày thiếu snapshot chỉ tính LỖ THỦNG THẬT: ngày nằm trong tầm đã chốt sổ
@@ -106,8 +114,8 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
   return {
     epicKey: args.epicKey,
     mode: args.mode,
-    from: args.workdays[0] ?? '',
-    to: args.workdays[args.workdays.length - 1] ?? '',
+    from: args.days[0] ?? '',
+    to: args.days[args.days.length - 1] ?? '',
     series,
     markers: buildMarkers(args.snapshots, args.planShifts),
     planShiftSummary: summarizeShifts(args.planShifts, args.rollups),
@@ -140,12 +148,18 @@ function distinctPhaseCodes(rollups: readonly PhaseRollup[]): string[] {
   return out;
 }
 
-function point(date: DateOnly, planned: number | null, actual: number | null): ChartPoint {
+function point(
+  date: DateOnly,
+  planned: number | null,
+  actual: number | null,
+  isOffDay: boolean,
+): ChartPoint {
   return {
     date,
     plannedRemainingHours: planned === null ? null : toHours(planned),
     actualRemainingHours: actual === null ? null : toHours(actual),
     varianceHours: planned === null || actual === null ? null : toHours(planned - actual),
+    isOffDay,
   };
 }
 
@@ -177,7 +191,8 @@ function isAfterLastSnapshot(date: DateOnly, projection: PlanProjection): boolea
 }
 
 function epicSeries(
-  workdays: readonly DateOnly[],
+  days: readonly DateOnly[],
+  workdaySet: ReadonlySet<DateOnly>,
   byDate: ReadonlyMap<string, SnapshotRow>,
   projection: PlanProjection,
 ): ChartSeries {
@@ -185,14 +200,18 @@ function epicSeries(
     key: 'EPIC',
     label: 'Whole Epic',
     colorHex: null,
-    points: workdays.map((date) => {
+    points: days.map((date) => {
+      const isOffDay = !workdaySet.has(date);
+      // Ngày nghỉ có snapshot mang SỐ THẬT: team làm Thứ 7/CN thì đường Thực tế
+      // giảm đúng hôm đó (2026-08), không dồn vào sáng hôm sau.
       const snap = byDate.get(date);
-      if (snap !== undefined) return point(date, snap.plannedRemainingS, snap.actualRemainingS);
+      if (snap !== undefined) return point(date, snap.plannedRemainingS, snap.actualRemainingS, isOffDay);
 
       // Ngày thiếu snapshot GIỮA lịch sử trả `null` — LỖ THỦNG NHÌN THẤY ĐƯỢC.
       // Nối tắt hai điểm bên cạnh trông đẹp hơn nhưng là bịa ra một tiến độ
-      // không có thật.
-      if (!isAfterLastSnapshot(date, projection)) return point(date, null, null);
+      // không có thật. (Ngày nghỉ chưa có snapshot cũng trả `null`: tầng hiển
+      // thị tự kéo phẳng, API không bịa số hộ.)
+      if (!isAfterLastSnapshot(date, projection)) return point(date, null, null, isOffDay);
 
       // Sau snapshot cuối: chiếu tiếp đường Kế hoạch, đường Thực tế vẫn `null`.
       // Phạm vi lấy theo snapshot cuối để nối liền mạch với điểm đã vẽ; Epic
@@ -201,14 +220,15 @@ function epicSeries(
         projection.lastSnapshot?.totalScopeS ??
         projection.rollups.reduce((sum, r) => sum + r.totalOriginalS, 0);
       const planned = computePlannedRemaining(projection.rollups, scopeS, date, projection.calendar);
-      return point(date, planned.seconds, null);
+      return point(date, planned.seconds, null, isOffDay);
     }),
   };
 }
 
 function phaseSeries(
   phaseCode: string,
-  workdays: readonly DateOnly[],
+  days: readonly DateOnly[],
+  workdaySet: ReadonlySet<DateOnly>,
   byDate: ReadonlyMap<string, SnapshotRow>,
   labels: BuildChartArgs['labels'],
   projection: PlanProjection,
@@ -219,16 +239,21 @@ function phaseSeries(
     key: phaseCode,
     label: labels?.[phaseCode]?.label ?? phaseCode,
     colorHex: labels?.[phaseCode]?.colorHex ?? null,
-    points: workdays.map((date) => {
+    points: days.map((date) => {
+      const isOffDay = !workdaySet.has(date);
       const snap = byDate.get(date);
       if (snap !== undefined) {
         // Số của Phase lấy TỪ `per_phase`, không lấy số mức Epic. Phase vắng mặt
         // trong ngày đó nghĩa là chưa có Sub-task nào — cũng là một lỗ thủng thật.
         const p = snap.perPhase.find((x) => x.phaseCode === phaseCode);
-        return p === undefined ? point(date, null, null) : point(date, p.plannedRemainingS, p.remainingS);
+        return p === undefined
+          ? point(date, null, null, isOffDay)
+          : point(date, p.plannedRemainingS, p.remainingS, isOffDay);
       }
 
-      if (!isAfterLastSnapshot(date, projection) || rollup === null) return point(date, null, null);
+      if (!isAfterLastSnapshot(date, projection) || rollup === null) {
+        return point(date, null, null, isOffDay);
+      }
 
       // Sau snapshot cuối: mỗi Phase tự chiếu tiếp trên phạm vi của chính nó,
       // đúng cách worker tính `per_phase.plannedRemainingS` (T-17).
@@ -238,8 +263,8 @@ function phaseSeries(
       const planned = computePlannedRemaining([rollup], scopeS, date, projection.calendar);
       // Phase thiếu ngày kế hoạch → không đoán bừa (C-10), giữ nguyên `null`.
       return planned.skippedPhases.length > 0
-        ? point(date, null, null)
-        : point(date, planned.seconds, null);
+        ? point(date, null, null, isOffDay)
+        : point(date, planned.seconds, null, isOffDay);
     }),
   };
 }

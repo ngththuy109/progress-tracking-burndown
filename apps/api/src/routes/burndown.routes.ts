@@ -9,7 +9,7 @@ import type {
   SnapshotRow,
   WorkCalendar,
 } from '@app/shared';
-import { listWorkdays } from '@app/engine';
+import { listCalendarDays, listWorkdays } from '@app/engine';
 import { ApiError } from '../services/phase-config.service.js';
 import {
   assertComparablePhases,
@@ -160,6 +160,9 @@ export function registerBurndownRoutes(app: FastifyInstance, deps: BurndownRoute
       epicKey: args.epicKey,
       mode: args.mode,
       workdays: listWorkdays(from, to, meta.calendar),
+      // Trục vẽ đủ ngày lịch (2026-08): ngày nghỉ bôi xám, và snapshot cuối
+      // tuần (nếu team có làm) hiện đúng ngày trên đường Thực tế.
+      days: listCalendarDays(from, to, meta.calendar.timezone),
       calendar: meta.calendar,
       snapshots,
       rollups,

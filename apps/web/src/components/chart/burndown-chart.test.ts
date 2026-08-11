@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChartSeries } from '@app/shared';
-import { FALLBACK_COLORS, offDayRuns, plannedColorOf, toChartRows } from './burndown-chart.js';
+import { FALLBACK_COLORS, measuredOnlyDot, offDayRuns, plannedColorOf, toChartRows } from './burndown-chart.js';
 
 /** Dựng một chuỗi số gọn cho test: mỗi phần tử là [ngày, kế hoạch, thực tế]. */
 function series(key: string, pts: readonly [string, number | null, number | null][]): ChartSeries {
@@ -55,6 +55,100 @@ describe('toChartRows — ngày nghỉ lên trục, bôi xám thay vì biến m�
     expect(rows[1]?.['A__actual']).toBe(20);
     expect(rows[1]?.['B__actual']).toBe(40);
     expect(rows[1]?.['B__planned']).toBeNull();
+  });
+});
+
+describe('toChartRows — ngày nghỉ do API phát cờ isOffDay (phản hồi mới)', () => {
+  /** Chuỗi số có kèm cờ isOffDay theo từng điểm. */
+  function flagged(
+    key: string,
+    pts: readonly [string, number | null, number | null, boolean][],
+  ): ChartSeries {
+    return {
+      key,
+      label: key,
+      colorHex: null,
+      points: pts.map(([date, planned, actual, isOffDay]) => ({
+        date,
+        plannedRemainingHours: planned,
+        actualRemainingHours: actual,
+        varianceHours: null,
+        isOffDay,
+      })),
+    };
+  }
+
+  it('cuối tuần có SỐ THẬT (team làm Thứ 7) giữ nguyên số, KHÔNG kéo phẳng, bấm được', () => {
+    const rows = toChartRows([
+      flagged('EPIC', [
+        ['2026-08-07', 75, 80, false],
+        ['2026-08-08', 75, 74, true], // Thứ 7 có làm: còn lại giảm thật
+        ['2026-08-09', 75, 74, true], // CN nghỉ: snapshot phẳng nhưng vẫn là số thật
+        ['2026-08-10', 70, 70, false],
+      ]),
+    ]);
+
+    expect(rows).toHaveLength(4); // không chèn thêm gì — API đã phát đủ ngày
+    expect(rows[1]?.offDay).toBe(true);
+    expect(rows[1]?.['EPIC__actual']).toBe(74);
+    expect(rows[1]?.['EPIC__actual__carried']).toBeUndefined(); // số thật, không phải kéo phẳng
+    expect(rows[1]?.hasData).toBe(true); // bấm mở bảng giải thích được
+  });
+
+  it('cuối tuần null (nghỉ, chưa có snapshot) thì kéo phẳng và đánh dấu __carried', () => {
+    const rows = toChartRows([
+      flagged('EPIC', [
+        ['2026-08-07', 75, 80, false],
+        ['2026-08-08', null, null, true],
+        ['2026-08-09', null, null, true],
+        ['2026-08-10', 70, 76, false],
+      ]),
+    ]);
+
+    expect(rows[1]?.['EPIC__actual']).toBe(80);
+    expect(rows[1]?.['EPIC__actual__carried']).toBe(true);
+    // CN kéo tiếp từ Thứ 7 đã kéo — chuỗi liền mạch.
+    expect(rows[2]?.['EPIC__actual']).toBe(80);
+    expect(rows[2]?.hasData).toBeUndefined(); // không có số thật → không bấm được
+  });
+
+  it('ngày làm việc thiếu snapshot vẫn là lỗ thủng — cờ isOffDay=false không được kéo phẳng', () => {
+    const rows = toChartRows([
+      flagged('EPIC', [
+        ['2026-08-07', 75, 80, false],
+        ['2026-08-10', null, null, false], // Thứ 2 thiếu snapshot: lỗ thủng thật
+        ['2026-08-11', 65, 72, false],
+      ]),
+    ]);
+
+    const monday = rows.find((r) => r.date === '2026-08-10');
+    expect(monday?.['EPIC__actual']).toBeNull();
+    expect(monday?.['EPIC__actual__carried']).toBeUndefined();
+  });
+});
+
+describe('measuredOnlyDot — chấm chỉ hiện trên số đo thật', () => {
+  const base = { cx: 10, cy: 20, stroke: '#2563eb', dataKey: 'EPIC__actual' } as const;
+
+  it('giá trị kéo phẳng thì ẨN chấm', () => {
+    const el = measuredOnlyDot({
+      ...base,
+      payload: { date: '2026-08-08', offDay: true, 'EPIC__actual__carried': true },
+    });
+    expect(el.type).toBe('g');
+  });
+
+  it('ngày nghỉ nhưng có SỐ THẬT thì chấm VẪN hiện — chấm nghĩa là "có số đo"', () => {
+    const el = measuredOnlyDot({
+      ...base,
+      payload: { date: '2026-08-08', offDay: true, hasData: true },
+    });
+    expect(el.type).toBe('circle');
+  });
+
+  it('ngày làm việc bình thường hiện chấm', () => {
+    const el = measuredOnlyDot({ ...base, payload: { date: '2026-08-07' } });
+    expect(el.type).toBe('circle');
   });
 });
 
