@@ -42,15 +42,30 @@ export function createBurndownReadPort(prisma: PrismaClient): BurndownReadPort {
         epicKey,
       );
 
+      const warnings: string[] = [];
+      // Thiếu lịch thì dùng mặc định và NÓI RA, không im lặng — sai múi giờ
+      // làm lệch mọi mốc chốt sổ mà nhìn số vẫn thấy hợp lý.
+      if (row.timezone === null) {
+        warnings.push(
+          'This Epic points at a work calendar that does not exist; falling back to Mon–Fri, Asia/Tokyo, no holidays. ' +
+            'Pick a real calendar for this Epic on the Epics screen.',
+        );
+      } else if (holidays.length === 0) {
+        // E-14: không có ngày lễ nào thì đường Kế hoạch cháy đều qua tuần nghỉ
+        // Tết — PM nhìn biểu đồ sẽ tưởng team đang chậm nghiêm trọng.
+        warnings.push(
+          'No holiday is registered on this Epic’s work calendar, so the Planned line treats holiday weeks ' +
+            'as working days. An Admin can import them on the Days off screen.',
+        );
+      }
+
       const calendar: WorkCalendar = {
         calendarId: 'epic',
-        // Thiếu lịch thì dùng mặc định và NÓI RA, không im lặng — sai múi giờ
-        // làm lệch mọi mốc chốt sổ mà nhìn số vẫn thấy hợp lý.
         timezone: row.timezone ?? 'Asia/Tokyo',
         workdaysMask: row.workdays_mask ?? DEFAULT_WORKDAYS_MASK,
         hoursPerDay: row.hours_per_day ?? DEFAULT_HOURS_PER_DAY,
         holidays: new Set(holidays.map((h) => h.holiday_date.toISOString().slice(0, 10))),
-        warnings: row.timezone === null ? ['This Epic has no work calendar; falling back to Asia/Tokyo.'] : [],
+        warnings,
       };
 
       return { projectKey: row.project_key, calendar };

@@ -18,11 +18,11 @@ const BASE: ConfigPayload = {
     { keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
   ],
   signboardColumns: [
-    { taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 },
-    { taskCode: 'BALReview', labelVi: 'BAL review', displayOrder: 2 },
-    { taskCode: 'FixCommentBAL', labelVi: 'Sửa comment BAL', displayOrder: 3 },
-    { taskCode: 'JMReview', labelVi: 'JM review', displayOrder: 4 },
-    { taskCode: 'FixCommentJM', labelVi: 'Sửa comment JM', displayOrder: 5 },
+    { taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 },
+    { taskCode: 'BALReview', labelVi: 'BAL review', side: 'VN', displayOrder: 2 },
+    { taskCode: 'FixCommentBAL', labelVi: 'Sửa comment BAL', side: 'VN', displayOrder: 3 },
+    { taskCode: 'JMReview', labelVi: 'JM review', side: 'VN', displayOrder: 4 },
+    { taskCode: 'FixCommentJM', labelVi: 'Sửa comment JM', side: 'VN', displayOrder: 5 },
   ],
   subPhaseOrders: [],
 };
@@ -145,8 +145,8 @@ describe('khớp loại task — CHÍNH XÁC, không phải "chứa"', () => {
   it('hai cột trùng nhau sau chuẩn hoá thì cảnh báo AMBIGUOUS_TASK_COLUMN', () => {
     const r = parse('[P][A][Design][Login]_Create', 'DESIGN', {
       signboardColumns: [
-        { taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 },
-        { taskCode: 'ｃｒｅａｔｅ', labelVi: 'Tạo mới (trùng)', displayOrder: 2 },
+        { taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 },
+        { taskCode: 'ｃｒｅａｔｅ', labelVi: 'Tạo mới (trùng)', side: 'VN', displayOrder: 2 },
       ],
     });
     expect(r.warnings.some((w) => w.code === 'AMBIGUOUS_TASK_COLUMN')).toBe(true);

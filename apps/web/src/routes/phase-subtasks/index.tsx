@@ -3,9 +3,12 @@ import {
   STATUS_CATEGORY_LABEL,
   type PhaseSubtaskGroup,
   type PhaseSubtaskTicket,
+  type PlanConflict,
   type StatusCategory,
 } from '@app/shared';
 import { usePhaseSubtasks } from '../../api/use-phase-subtasks.js';
+import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
+import { conflictText } from './conflict-text.js';
 import {
   Badge,
   DataTable,
@@ -42,6 +45,29 @@ function DateRange({ start, end }: { readonly start: string | null; readonly end
     <span>
       {start ?? '—'} <span aria-hidden="true">→</span> {end ?? '—'}
     </span>
+  );
+}
+
+function buildColumns(conflicts: ReadonlyMap<string, PlanConflict>): readonly Column<PhaseSubtaskTicket>[] {
+  return COLUMNS.map((col) =>
+    col.key !== 'plan'
+      ? col
+      : {
+          ...col,
+          render: (t: PhaseSubtaskTicket) => {
+            const conflict = conflicts.get(t.issueKey);
+            return (
+              <span>
+                <DateRange start={t.planStart} end={t.planEnd} />{' '}
+                {conflict !== undefined && (
+                  <Badge tone="danger" title={conflictText(conflict)}>
+                    ⚠ day off{conflict.sideResolved ? ` (${conflict.side})` : ''}
+                  </Badge>
+                )}
+              </span>
+            );
+          },
+        },
   );
 }
 
@@ -110,6 +136,10 @@ export function PhaseSubtasksScreen() {
   const epicKey = params.get('epic');
 
   const query = usePhaseSubtasks(epicKey);
+  // Vi phạm plan-ngày nghỉ (T-37). Tải song song và KHÔNG chặn màn hình: bảng
+  // Sub-task vẫn hiện đầy đủ kể cả khi API kiểm tra lỗi — badge chỉ là lớp
+  // cảnh báo thêm.
+  const conflictQuery = usePlanConflicts(epicKey);
 
   if (epicKey === null || epicKey === '') {
     return (
@@ -134,6 +164,9 @@ export function PhaseSubtasksScreen() {
 
   const data = query.data;
   const definedCount = data.groups.filter((g) => g.isDefined).length;
+  const conflicts = new Map(
+    (conflictQuery.data?.conflicts ?? []).map((c) => [c.issueKey, c]),
+  );
 
   return (
     <div className="stack">
@@ -151,19 +184,39 @@ export function PhaseSubtasksScreen() {
         the full set.
       </p>
 
+      {conflictQuery.data !== undefined && conflictQuery.data.summary.total > 0 && (
+        <p className="notice notice--error" role="alert">
+          <strong>{conflictQuery.data.summary.total}</strong> sub-task
+          {conflictQuery.data.summary.total === 1 ? ' has' : 's have'} a planned start or end date on
+          a day off ({conflictQuery.data.summary.bySide.VN} on the VN calendar,{' '}
+          {conflictQuery.data.summary.bySide.JP} on the JP calendar
+          {conflictQuery.data.summary.sideUnknownCount > 0 &&
+            `, ${conflictQuery.data.summary.sideUnknownCount} checked as VN because the task type matches no Signboard column`}
+          ). Fix the wbs dates in Jira, then resync. Rows below are flagged with ⚠.
+        </p>
+      )}
+
       {data.groups.length === 0 ? (
         <EmptyState
           title="No Phases defined and no sub-tasks yet"
           description="Define Phases on the Phase settings screen, then sync the Epic from Jira."
         />
       ) : (
-        data.groups.map((group) => <PhaseGroup key={group.phaseCode} group={group} />)
+        data.groups.map((group) => (
+          <PhaseGroup key={group.phaseCode} group={group} conflicts={conflicts} />
+        ))
       )}
     </div>
   );
 }
 
-function PhaseGroup({ group }: { readonly group: PhaseSubtaskGroup }) {
+function PhaseGroup({
+  group,
+  conflicts,
+}: {
+  readonly group: PhaseSubtaskGroup;
+  readonly conflicts: ReadonlyMap<string, PlanConflict>;
+}) {
   const titleId = `phase-${group.phaseCode}`;
   return (
     <section className="panel" aria-labelledby={titleId}>
@@ -197,7 +250,7 @@ function PhaseGroup({ group }: { readonly group: PhaseSubtaskGroup }) {
       ) : (
         <DataTable
           caption={`Sub-tasks in ${group.label ?? group.phaseCode}`}
-          columns={COLUMNS}
+          columns={buildColumns(conflicts)}
           rows={group.tickets}
           rowKey={(t) => t.issueKey}
         />

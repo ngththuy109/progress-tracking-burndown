@@ -266,6 +266,20 @@ function ColumnRow({
           })
         }
       />
+      {/* Phía làm loại task này — quyết định ngày kế hoạch của Sub-task được
+          kiểm tra với lịch nghỉ VN hay JP (T-37). */}
+      <select
+        className="input"
+        value={col.side}
+        disabled={disabled}
+        aria-label={`Side, row ${index + 1}`}
+        onChange={(e) =>
+          dispatch({ type: 'UPDATE_COLUMN', index, patch: { side: e.target.value as 'VN' | 'JP' } })
+        }
+      >
+        <option value="VN">VN does</option>
+        <option value="JP">JP does</option>
+      </select>
       <span className="row__order muted">#{col.displayOrder}</span>
 
       {confirming ? (

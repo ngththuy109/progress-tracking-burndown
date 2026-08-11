@@ -85,12 +85,18 @@ export const DEFAULT_PHASE_CONFIG: ConfigPayload = {
    */
   subPhaseOrders: [],
 
+  /**
+   * `side` — phía làm loại task đó (T-37): VN = người làm, JP = khách hàng
+   * review. Quyết định ngày kế hoạch của Sub-task được kiểm tra với lịch nghỉ
+   * nào. Mặc định ở đây chỉ là điểm xuất phát hợp lý (JM = phía khách hàng
+   * Nhật review); PM đổi được từng cột qua màn hình Signboard columns.
+   */
   signboardColumns: [
-    { taskCode: 'Create', labelVi: 'Tạo mới', labelJa: '作成', displayOrder: 1 },
-    { taskCode: 'BALReview', labelVi: 'BAL review', labelJa: 'BALレビュー', displayOrder: 2 },
-    { taskCode: 'FixCommentBAL', labelVi: 'Sửa comment BAL', labelJa: 'BAL指摘対応', displayOrder: 3 },
-    { taskCode: 'JMReview', labelVi: 'JM review', labelJa: 'JMレビュー', displayOrder: 4 },
-    { taskCode: 'FixCommentJM', labelVi: 'Sửa comment JM', labelJa: 'JM指摘対応', displayOrder: 5 },
+    { taskCode: 'Create', labelVi: 'Tạo mới', labelJa: '作成', side: 'VN', displayOrder: 1 },
+    { taskCode: 'BALReview', labelVi: 'BAL review', labelJa: 'BALレビュー', side: 'VN', displayOrder: 2 },
+    { taskCode: 'FixCommentBAL', labelVi: 'Sửa comment BAL', labelJa: 'BAL指摘対応', side: 'VN', displayOrder: 3 },
+    { taskCode: 'JMReview', labelVi: 'JM review', labelJa: 'JMレビュー', side: 'JP', displayOrder: 4 },
+    { taskCode: 'FixCommentJM', labelVi: 'Sửa comment JM', labelJa: 'JM指摘対応', side: 'VN', displayOrder: 5 },
   ],
 };
 

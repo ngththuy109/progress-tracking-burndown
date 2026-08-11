@@ -121,6 +121,14 @@ export const burndownResponseSchema = z.object({
   /** Luôn `true` ở phiên bản này. Có baseline rồi mới có thể là `false`. */
   planIsFloating: z.literal(true),
   planNote: z.string(),
+  /**
+   * Cảnh báo về LỊCH LÀM VIỆC của Epic — ví dụ "lịch chưa khai ngày lễ nào"
+   * (E-14) hay "không tìm thấy lịch, đang dùng mặc định". Sinh ra từ T-12
+   * nhưng trước đây chỉ nằm trong dữ liệu nội bộ; đưa vào phản hồi để màn hình
+   * hiện được cho người dùng (C-10) — cấu hình lịch sai không còn im lặng.
+   * `default([])` để client cũ đọc phản hồi cũ vẫn parse được.
+   */
+  calendarWarnings: z.array(z.string()).default([]),
 });
 export type BurndownResponse = z.infer<typeof burndownResponseSchema>;
 

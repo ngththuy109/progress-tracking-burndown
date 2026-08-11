@@ -8,8 +8,10 @@ import {
   type SignboardStatus,
 } from '@app/shared';
 import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
+import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
+import type { PlanConflict } from '@app/shared';
 
 /**
  * Bảng Signboard — PRD §6.
@@ -148,6 +150,9 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
 
   const board = useSignboard(epicKey, phaseCode);
   const unparsed = useUnparsedSubtasks(epicKey, phaseCode);
+  // Vi phạm plan-ngày nghỉ (T-37). Tải song song và KHÔNG chặn bảng: Signboard
+  // vẫn dựng đầy đủ kể cả khi API kiểm tra lỗi — ⚠ chỉ là lớp cảnh báo thêm.
+  const conflictQuery = usePlanConflicts(epicKey);
 
   if (board.isPending) return <LoadingState label="Building the Signboard…" rows={5} />;
   if (board.isError) {
@@ -157,6 +162,12 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
   }
 
   const data = board.data;
+  // Chỉ giữ vi phạm của PHASE đang xem — bảng này là bảng của một Phase, đếm
+  // cả Epic sẽ lệch với những gì nhìn thấy trên lưới.
+  const phaseConflicts = (conflictQuery.data?.conflicts ?? []).filter(
+    (c) => c.phaseCode === phaseCode,
+  );
+  const conflictsByIssue = new Map(phaseConflicts.map((c) => [c.issueKey, c]));
 
   return (
     <div className="stack">
@@ -174,6 +185,19 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
           More than 30% of this Phase&rsquo;s sub-tasks have titles in the wrong format, so the board
           is missing data. They <strong>still count towards the Burndown chart</strong>; see
           &ldquo;Not on the board&rdquo; below to find out which ones to fix.
+        </div>
+      )}
+
+      {phaseConflicts.length > 0 && (
+        <div className="notice notice--error" role="alert">
+          <strong>{phaseConflicts.length}</strong> sub-task
+          {phaseConflicts.length === 1 ? ' in this Phase has' : 's in this Phase have'} a planned
+          start or end date on a day off — cells below are flagged with{' '}
+          <Badge tone="danger">⚠ day off</Badge>; hover a flagged cell for the reason. Fix the wbs
+          dates in Jira, then resync.{' '}
+          <Link className="button" to={`/phase-subtasks?epic=${epicKey}`}>
+            See the full list
+          </Link>
         </div>
       )}
 
@@ -207,6 +231,7 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
         columnGroups={data.columnGroups}
         search={search}
         filter={filter}
+        conflicts={conflictsByIssue}
       />
 
       <UnparsedPanel query={unparsed} />
@@ -315,11 +340,14 @@ function BoardTable({
   columnGroups,
   search,
   filter,
+  conflicts,
 }: {
   readonly rows: readonly SignboardRow[];
   readonly columnGroups: readonly SignboardColumnGroup[];
   readonly search: string;
   readonly filter: SignboardStatus | null;
+  /** Vi phạm plan-ngày nghỉ theo `issueKey`, đã lọc theo Phase đang xem (T-37). */
+  readonly conflicts: ReadonlyMap<string, PlanConflict>;
 }) {
   // Lọc theo `functionKey` ĐÃ CHUẨN HOÁ để gõ `login` cũng tìm ra `Ｌｏｇｉｎ`.
   const shown = useMemo(() => {
@@ -421,7 +449,11 @@ function BoardTable({
                           className={`table__td${empty ? ' signboard__empty' : ''}`}
                           data-status={tdStatus(cell, filter)}
                         >
-                          {cell !== undefined && <SignboardCellView cell={cell} filter={filter} />}
+                          {/* ⚠ chỉ gắn ở ô LÁ. Ô Σ và Overall gộp nhiều loại
+                              task — lặp lại cảnh báo ở đó chỉ thêm nhiễu. */}
+                          {cell !== undefined && (
+                            <SignboardCellView cell={cell} filter={filter} conflicts={conflicts} />
+                          )}
                         </td>
                       );
                     })}

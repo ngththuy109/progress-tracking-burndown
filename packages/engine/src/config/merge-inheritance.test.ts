@@ -21,7 +21,7 @@ const GLOBAL: ConfigPayload = {
     { keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
     { keyword: '設計', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
   ],
-  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
   subPhaseOrders: [],
 };
 
@@ -224,8 +224,8 @@ describe('kiểm tra hợp lệ trước khi lưu', () => {
     const issues = validateConfigPayload(
       withRules({
         signboardColumns: [
-          { taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 },
-          { taskCode: 'Create', labelVi: 'Tạo lại', displayOrder: 2 },
+          { taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 },
+          { taskCode: 'Create', labelVi: 'Tạo lại', side: 'VN', displayOrder: 2 },
         ],
       }),
     );

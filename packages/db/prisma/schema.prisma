@@ -378,6 +378,10 @@ model SignboardColumn {
   labelVi  String  @map("label_vi")
   labelJa  String? @map("label_ja")
 
+  // Phía làm loại task này: VN (người làm) | JP (khách hàng review) — T-37.
+  // Quyết định ngày kế hoạch của Sub-task được kiểm tra với lịch nghỉ nào.
+  side String @default("VN") @db.VarChar(2)
+
   displayOrder Int @map("display_order") // thứ tự cột, trái sang phải
 
   configSet PhaseConfigSet @relation(fields: [configSetId], references: [id], onDelete: Cascade)

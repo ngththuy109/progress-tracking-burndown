@@ -200,6 +200,7 @@ function toEffectiveConfig(cfg: ParseFixture['config']): EffectiveConfig {
     signboardColumns: cfg.taskColumns.map((taskCode, i) => ({
       taskCode,
       labelVi: taskCode,
+      side: 'VN' as const,
       displayOrder: i + 1,
     })),
     subPhaseOrders: [],
@@ -290,6 +291,7 @@ export function runInherit(fixture: InheritFixture): {
     signboardColumns: (spec.taskColumns ?? []).map((taskCode, i) => ({
       taskCode,
       labelVi: taskCode,
+      side: 'VN' as const,
       displayOrder: i + 1,
     })),
     subPhaseOrders: [],

@@ -434,6 +434,18 @@ describe('đường Kế hoạch trôi theo dữ liệu Jira', () => {
     expect(body.planNote).toContain('recomputed after every sync');
   });
 
+  it('cảnh báo lịch (thiếu ngày lễ, lịch không tồn tại) đi kèm phản hồi — E-14 không im lặng', async () => {
+    // T-12 sinh cảnh báo kèm dữ liệu từ đầu, nhưng trước T-38 nó không tới
+    // được phản hồi API — màn hình không có gì để hiện.
+    reads.meta = {
+      projectKey: 'PAY',
+      calendar: { ...CALENDAR, warnings: ['Lịch "VN_STANDARD" chưa khai ngày lễ nào.'] },
+    };
+    const { body } = await get('/api/burndown/epic/PAY-1');
+
+    expect(body.calendarWarnings).toEqual(['Lịch "VN_STANDARD" chưa khai ngày lễ nào.']);
+  });
+
   it('đếm đúng tổng số ngày bị lùi và số lần lùi', () => {
     const shifts: PlanShiftRecord[] = [
       { phaseCode: 'DESIGN', shiftType: 'END_MOVED', fromDate: '2026-03-04', toDate: '2026-03-10', shiftedWorkdays: 4, causedByKeys: ['PAY-17'] },

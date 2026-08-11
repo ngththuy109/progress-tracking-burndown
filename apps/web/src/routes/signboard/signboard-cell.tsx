@@ -1,5 +1,6 @@
-import type { SignboardCell, SignboardStatus } from '@app/shared';
+import type { PlanConflict, SignboardCell, SignboardStatus } from '@app/shared';
 import { Badge, type BadgeTone } from '../../components/ui/index.js';
+import { conflictText } from '../phase-subtasks/conflict-text.js';
 
 /**
  * Một ô của bảng Signboard — PRD §6.3.
@@ -27,13 +28,37 @@ export const STATUS_LABEL: Readonly<Record<SignboardStatus, string>> = {
   NO_PLAN: 'No planned dates',
 };
 
+/**
+ * Vi phạm plan-ngày nghỉ (T-37) của các ticket TRONG một ô.
+ *
+ * Ô Signboard là nơi PM nhìn ngày kế hoạch nhiều nhất, nên cảnh báo "mốc plan
+ * rơi vào ngày nghỉ" phải hiện ngay tại ô — không bắt họ mở màn Phase
+ * sub-tasks mới biết. Hàm thuần, tách riêng để test thẳng.
+ */
+export function cellConflicts(
+  cell: SignboardCell,
+  conflicts: ReadonlyMap<string, PlanConflict>,
+): PlanConflict[] {
+  if (!cell.present || conflicts.size === 0) return [];
+  const out: PlanConflict[] = [];
+  for (const t of cell.tickets) {
+    const found = conflicts.get(t.issueKey);
+    if (found !== undefined) out.push(found);
+  }
+  return out;
+}
+
+const NO_CONFLICTS: ReadonlyMap<string, PlanConflict> = new Map();
+
 export interface SignboardCellViewProps {
   readonly cell: SignboardCell;
   /** Đang lọc theo trạng thái nào. `null` = không lọc. */
   readonly filter: SignboardStatus | null;
+  /** Vi phạm plan-ngày nghỉ theo `issueKey` (T-37). Bỏ trống = không đánh dấu. */
+  readonly conflicts?: ReadonlyMap<string, PlanConflict> | undefined;
 }
 
-export function SignboardCellView({ cell, filter }: SignboardCellViewProps) {
+export function SignboardCellView({ cell, filter, conflicts = NO_CONFLICTS }: SignboardCellViewProps) {
   if (!cell.present) {
     // Ô TRỐNG: Function này vốn không có khâu đó. KHÁC HẲN `NO_PLAN` (có ticket
     // nhưng thiếu ngày). Trộn hai thứ làm thanh tóm tắt đếm sai (§6.5).
@@ -48,10 +73,15 @@ export function SignboardCellView({ cell, filter }: SignboardCellViewProps) {
     return <span className="cell cell--dimmed">·</span>;
   }
 
+  const onDaysOff = cellConflicts(cell, conflicts);
+
   const tooltip = [
     `Planned: ${cell.planStart ?? 'none'} → ${cell.planEnd ?? 'none'}`,
     `Actual: ${cell.actualStart ?? 'not started'} → ${cell.actualEnd ?? 'not finished'}`,
     ...cell.tickets.map((t) => `${t.issueKey}: ${STATUS_LABEL[t.status]}`),
+    // Vi phạm plan-ngày nghỉ đi CÙNG tooltip chính: rê chuột một lần đọc được
+    // cả trạng thái lẫn lý do ⚠, không phải săn hai chỗ.
+    ...onDaysOff.map((c) => `⚠ ${c.issueKey}: ${conflictText(c)}`),
   ].join('\n');
 
   return (
@@ -67,6 +97,9 @@ export function SignboardCellView({ cell, filter }: SignboardCellViewProps) {
       <Badge tone={STATUS_TONE[cell.status]}>
         {cell.status === 'NO_PLAN' ? `⚠ ${STATUS_LABEL[cell.status]}` : STATUS_LABEL[cell.status]}
       </Badge>
+      {onDaysOff.length > 0 && (
+        <Badge tone="danger">⚠ day off ({onDaysOff.map((c) => c.side).join(', ')})</Badge>
+      )}
       {/* Huy hiệu số lượng khi ô gộp nhiều ticket. */}
       {cell.ticketCount > 1 && <span className="cell__count">≡{cell.ticketCount}</span>}
     </span>

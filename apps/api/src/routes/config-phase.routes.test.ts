@@ -16,7 +16,7 @@ const GLOBAL_PAYLOAD: ConfigPayload = {
     { phaseCode: 'TESTING', labelVi: 'Kiểm thử', displayOrder: 2 },
   ],
   matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 }],
-  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+  signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
   subPhaseOrders: [],
 };
 
@@ -276,7 +276,7 @@ describe('khi chưa có bộ Mặc định (chưa seed)', () => {
           subtaskPatterns: [],
           phaseDefinitions: [{ phaseCode: 'DESIGN', labelVi: 'Thiết kế', displayOrder: 1 }],
           matchRules: [],
-          signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', displayOrder: 1 }],
+          signboardColumns: [{ taskCode: 'Create', labelVi: 'Tạo mới', side: 'VN', displayOrder: 1 }],
         },
         note: 'tự định nghĩa từ đầu',
       },

@@ -31,5 +31,7 @@ export * from './reconcile.js';
 export * from './alerts.js';
 export * from './metrics.js';
 export * from './api-signboard.js';
+export * from './api-calendar.js';
+export * from './api-plan-conflicts.js';
 export * from './api-ops.js';
 export * from './with-timeout.js';

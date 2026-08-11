@@ -105,6 +105,17 @@ export {
 } from './repositories/calendar.repository.js';
 
 export {
+  listCalendarsWithHolidayMeta,
+  calendarExists,
+  listHolidays,
+  importHolidays,
+  deleteHoliday,
+  epicKeysUsingCalendar,
+  type CalendarWithHolidayMeta,
+  type ImportHolidaysResult,
+} from './repositories/calendar-holiday.repository.js';
+
+export {
   upsertPhaseRollups,
   loadPhaseRollups,
   deleteObsoleteRollups,

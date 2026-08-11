@@ -56,7 +56,7 @@ export function renderDefaultConfigSql(): string {
   const columnRows = c.signboardColumns
     .map(
       (col) =>
-        `    (set_id, ${q(col.taskCode)}, ${q(col.labelVi)}, ${qOrNull(col.labelJa)}, ${col.displayOrder})`,
+        `    (set_id, ${q(col.taskCode)}, ${q(col.labelVi)}, ${qOrNull(col.labelJa)}, ${q(col.side)}, ${col.displayOrder})`,
     )
     .join(',\n');
 
@@ -129,7 +129,7 @@ ${phaseRows};
   INSERT INTO phase_match_rule (config_set_id, keyword, match_mode, phase_code, match_priority) VALUES
 ${ruleRows};
 
-  INSERT INTO signboard_column (config_set_id, task_code, label_vi, label_ja, display_order) VALUES
+  INSERT INTO signboard_column (config_set_id, task_code, label_vi, label_ja, side, display_order) VALUES
 ${columnRows};
 ${subPhaseInsert}
   RAISE NOTICE '[seed] Đã tạo bộ Mặc định (GLOBAL) version %.', next_version;
