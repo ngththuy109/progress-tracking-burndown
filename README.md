@@ -147,6 +147,9 @@ needs the schema engine). Add a new migration by hand: create
 
 | Command | What it does |
 |---|---|
+| `pnpm web:start` | Build `apps/web` and serve it on port **8080** (set `WEB_PORT` to change) |
+| `pnpm web:build` | Just build the web app to `apps/web/dist/` |
+| `pnpm web:serve` | Serve an already-built `dist/` on `WEB_PORT` (no rebuild) |
 | `pnpm test` | Every unit test |
 | `pnpm test:engine` | Just the pure computation engine — **runs in under 10 seconds** |
 | `pnpm e2e` | Playwright, against a stubbed API on port 5199 |
@@ -218,6 +221,7 @@ All under [`docs/`](./docs), in Vietnamese:
 | [`PHASE-MAPPING.md`](./docs/PHASE-MAPPING.md) | How a ticket gets its Phase, and when a settings change shows up on screens |
 | [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Package boundaries and why they exist |
 | [`ONBOARDING.md`](./docs/ONBOARDING.md) | A new developer, day one |
+| [`WEB-SERVER.md`](./docs/WEB-SERVER.md) | Building and serving the web app on a configurable port (default 8080) |
 | [`RUNBOOK.md`](./docs/RUNBOOK.md) | Whoever is on call, possibly at 2am |
 | [`UAT-CHECKLIST.md`](./docs/UAT-CHECKLIST.md) | The PM, at acceptance |
 | [`tasks/`](./docs/tasks) | 34 task cards — the build log, with what went wrong in each |

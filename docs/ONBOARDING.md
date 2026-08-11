@@ -122,6 +122,11 @@ pnpm dev                 # chạy song song api + worker + web
 | API | 3000 | |
 | E2E | 5199 | Cổng riêng, để chạy test không phải tắt dev server |
 
+> **Muốn chạy bản ĐÃ BUILD (không phải dev server)?** `pnpm web:start` build
+> `apps/web` rồi phục vụ bản tĩnh ở **cổng 8080** (đổi qua `WEB_PORT`). Dùng khi
+> thử bản production tại chỗ, chạy trong container, hoặc self-host. Chi tiết:
+> [WEB-SERVER.md](./WEB-SERVER.md).
+
 ## 5. Chạy test
 
 ```bash
