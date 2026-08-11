@@ -24,10 +24,16 @@ import { parseHolidayLines } from './parse-holiday-lines.js';
  * Chỉ ADMIN sửa được (API tự chặn); các vai trò khác xem để đối chiếu.
  */
 
-/** Tên thân thiện của hai lịch chuẩn; lịch khác (nếu có) hiện mã trần. */
+/**
+ * Tên thân thiện của hai lịch chuẩn; lịch khác (nếu có) hiện mã trần.
+ *
+ * Chỉ ghi TÊN NƯỚC — hai tab đã đủ phân biệt lịch VN với lịch Nhật. Không chú
+ * thích vai trò (ai làm / ai review) vì đặt cạnh "Days off" dễ đọc nhầm là ngày
+ * nghỉ lại "đi làm".
+ */
 const CALENDAR_LABEL: Record<string, string> = {
-  VN_STANDARD: 'Vietnam side (does the work)',
-  JP_STANDARD: 'Customer side — JP (reviews)',
+  VN_STANDARD: 'Vietnam',
+  JP_STANDARD: 'Japan',
 };
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
