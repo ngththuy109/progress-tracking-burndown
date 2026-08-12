@@ -81,6 +81,7 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
   const projection: PlanProjection = {
     calendar: args.calendar,
     rollups: args.rollups,
+    firstSnapshot: earliestSnapshot(args.snapshots),
     lastSnapshot: latestSnapshot(args.snapshots),
   };
 
@@ -101,16 +102,23 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
           phaseSeries(code, args.days, workdaySet, byDate, args.labels, projection),
         );
 
-  // Ngày thiếu snapshot chỉ tính LỖ THỦNG THẬT: ngày nằm trong tầm đã chốt sổ
-  // (≤ ngày snapshot cuối cùng) mà vẫn trống — dấu hiệu job đêm bỏ lỡ (E-12).
-  // Ngày SAU snapshot cuối là tương lai CHƯA TỚI (đường Kế hoạch còn chạy tiếp
-  // tới `plan_end`); kêu "thiếu snapshot" ở đó là báo động giả khiến PM tưởng
-  // job đêm hỏng trong khi mọi thứ vẫn ổn.
+  // Ngày thiếu snapshot chỉ tính LỖ THỦNG THẬT: ngày nằm TRONG tầm đã chốt sổ
+  // (từ snapshot ĐẦU TIÊN tới snapshot CUỐI CÙNG) mà vẫn trống — dấu hiệu job
+  // đêm bỏ lỡ (E-12).
+  //
+  // Hai đầu bị loại tường minh vì không phải lỗ thủng: ngày SAU snapshot cuối là
+  // tương lai CHƯA TỚI, còn ngày TRƯỚC snapshot đầu là quá khứ TRƯỚC KHI Epic bắt
+  // đầu được chốt sổ. Cả hai đều được đường Kế hoạch chiếu tiếp (xem `epicSeries`);
+  // kêu "thiếu snapshot" ở đó là báo động giả khiến PM tưởng job đêm hỏng trong
+  // khi mọi thứ vẫn ổn.
+  const firstSnapshotDate = projection.firstSnapshot?.snapshotDate ?? null;
   const lastSnapshotDate = projection.lastSnapshot?.snapshotDate ?? null;
   const missingSnapshotDays =
-    lastSnapshotDate === null
+    firstSnapshotDate === null || lastSnapshotDate === null
       ? []
-      : args.workdays.filter((d) => d <= lastSnapshotDate && !byDate.has(d));
+      : args.workdays.filter(
+          (d) => d >= firstSnapshotDate && d <= lastSnapshotDate && !byDate.has(d),
+        );
 
   return {
     epicKey: args.epicKey,
@@ -168,16 +176,21 @@ function point(
 }
 
 /**
- * Bối cảnh chiếu tiếp đường Kế hoạch cho những ngày SAU snapshot cuối cùng.
+ * Bối cảnh chiếu đường Kế hoạch cho những ngày NGOÀI khoảng snapshot — trước
+ * snapshot đầu tiên và sau snapshot cuối cùng.
  *
- * Đường Thực tế dừng ở hôm nay là đúng — tương lai chưa xảy ra. Nhưng đường Kế
- * hoạch mà cũng dừng theo thì PM không nhìn thấy kế hoạch dự kiến kết thúc khi
- * nào. Phần sau snapshot cuối được tính từ rollup hiện tại bằng đúng công thức
- * T-16 mà worker dùng khi dựng snapshot, nên nối liền mạch với điểm cuối.
+ * Đường Thực tế chỉ có ở những ngày đã chốt snapshot; ngoài khoảng đó nó để
+ * `null` — tương lai chưa xảy ra, quá khứ trước khi theo dõi thì không có số đo.
+ * Nhưng đường Kế hoạch mà cũng dừng theo thì PM không thấy kế hoạch dự kiến kết
+ * thúc khi nào (đuôi sau), lẫn kế hoạch của quãng trước khi Epic bắt đầu được
+ * chốt snapshot (đuôi trước). Cả hai đuôi tính từ rollup hiện tại bằng đúng công
+ * thức T-16 mà worker dùng khi dựng snapshot, nên nối liền mạch với điểm biên.
  */
 interface PlanProjection {
   readonly calendar: WorkCalendar;
   readonly rollups: readonly PhaseRollup[];
+  /** Snapshot SỚM NHẤT — mốc dưới của vùng chiếu ngược đường Kế hoạch. `null` = chưa có snapshot. */
+  readonly firstSnapshot: SnapshotRow | null;
   readonly lastSnapshot: SnapshotRow | null;
 }
 
@@ -189,9 +202,42 @@ function latestSnapshot(snapshots: readonly SnapshotRow[]): SnapshotRow | null {
   return latest;
 }
 
-/** Ngày này đã có snapshot chưa? Chưa có mà vẫn nằm TRƯỚC snapshot cuối là lỗ thủng thật. */
-function isAfterLastSnapshot(date: DateOnly, projection: PlanProjection): boolean {
-  return projection.lastSnapshot === null || date > projection.lastSnapshot.snapshotDate;
+function earliestSnapshot(snapshots: readonly SnapshotRow[]): SnapshotRow | null {
+  let earliest: SnapshotRow | null = null;
+  for (const s of snapshots) {
+    if (earliest === null || s.snapshotDate < earliest.snapshotDate) earliest = s;
+  }
+  return earliest;
+}
+
+/**
+ * Ngày này nằm NGOÀI khoảng đã có snapshot — trước cái đầu tiên hoặc sau cái
+ * cuối cùng — hay Epic chưa có snapshot nào?
+ *
+ * Ở vùng ngoài này đường Kế hoạch được CHIẾU từ rollup hiện tại (đường Thực tế
+ * để `null`): phía sau cho thấy kế hoạch dự kiến kết thúc khi nào, phía trước vẽ
+ * trọn kế hoạch của quãng trước khi Epic bắt đầu được chốt snapshot. Lỗ thủng
+ * GIỮA hai đầu snapshot thì KHÔNG chiếu đè — giữ nguyên `null` (E-12).
+ */
+function isOutsideSnapshotRange(date: DateOnly, projection: PlanProjection): boolean {
+  const { firstSnapshot, lastSnapshot } = projection;
+  if (firstSnapshot === null || lastSnapshot === null) return true;
+  return date < firstSnapshot.snapshotDate || date > lastSnapshot.snapshotDate;
+}
+
+/**
+ * Tổng phạm vi để chiếu đường Kế hoạch ở vùng ngoài snapshot.
+ *
+ * Lấy theo snapshot MỚI NHẤT để cả hai đuôi chiếu — trước cái đầu và sau cái
+ * cuối — cùng dựa trên một phạm vi: đường Kế hoạch phản ánh phạm vi HIỆN TẠI của
+ * Epic, không phải phạm vi tại một mốc lịch sử. Epic chưa có snapshot nào thì lấy
+ * tổng ước lượng từ rollup.
+ */
+function epicProjectionScope(projection: PlanProjection): number {
+  return (
+    projection.lastSnapshot?.totalScopeS ??
+    projection.rollups.reduce((sum, r) => sum + r.totalOriginalS, 0)
+  );
 }
 
 function epicSeries(
@@ -211,20 +257,27 @@ function epicSeries(
       const snap = byDate.get(date);
       if (snap !== undefined) return point(date, snap.plannedRemainingS, snap.actualRemainingS, isOffDay);
 
-      // Ngày thiếu snapshot GIỮA lịch sử trả `null` — LỖ THỦNG NHÌN THẤY ĐƯỢC.
-      // Nối tắt hai điểm bên cạnh trông đẹp hơn nhưng là bịa ra một tiến độ
+      // NGOÀI khoảng snapshot — TRƯỚC cái đầu tiên hoặc SAU cái cuối cùng: chiếu
+      // đường Kế hoạch từ rollup hiện tại, đường Thực tế để `null`. Phía sau cho
+      // PM thấy kế hoạch dự kiến kết thúc khi nào; phía trước vẽ trọn kế hoạch
+      // của quãng TRƯỚC snapshot đầu tiên — nếu bỏ trống, một Phase có plan_start
+      // sớm hơn snapshot đầu sẽ thành khoảng trống ngay mép trái trục (trục lấy
+      // MIN plan_start làm cận dưới, nhưng đường lại bắt đầu muộn hơn).
+      if (isOutsideSnapshotRange(date, projection)) {
+        const planned = computePlannedRemaining(
+          projection.rollups,
+          epicProjectionScope(projection),
+          date,
+          projection.calendar,
+        );
+        return point(date, planned.seconds, null, isOffDay);
+      }
+
+      // Thiếu snapshot GIỮA hai đầu đã chốt sổ trả `null` — LỖ THỦNG NHÌN THẤY
+      // ĐƯỢC. Nối tắt hai điểm bên cạnh trông đẹp hơn nhưng là bịa ra một tiến độ
       // không có thật. (Ngày nghỉ chưa có snapshot cũng trả `null`: tầng hiển
       // thị tự kéo phẳng, API không bịa số hộ.)
-      if (!isAfterLastSnapshot(date, projection)) return point(date, null, null, isOffDay);
-
-      // Sau snapshot cuối: chiếu tiếp đường Kế hoạch, đường Thực tế vẫn `null`.
-      // Phạm vi lấy theo snapshot cuối để nối liền mạch với điểm đã vẽ; Epic
-      // chưa có snapshot nào thì lấy tổng ước lượng từ rollup.
-      const scopeS =
-        projection.lastSnapshot?.totalScopeS ??
-        projection.rollups.reduce((sum, r) => sum + r.totalOriginalS, 0);
-      const planned = computePlannedRemaining(projection.rollups, scopeS, date, projection.calendar);
-      return point(date, planned.seconds, null, isOffDay);
+      return point(date, null, null, isOffDay);
     }),
   };
 }
@@ -255,20 +308,23 @@ function phaseSeries(
           : point(date, p.plannedRemainingS, p.remainingS, isOffDay);
       }
 
-      if (!isAfterLastSnapshot(date, projection) || rollup === null) {
-        return point(date, null, null, isOffDay);
+      // NGOÀI khoảng snapshot (trước cái đầu / sau cái cuối): mỗi Phase tự chiếu
+      // đường Kế hoạch trên phạm vi của chính nó, đúng cách worker tính
+      // `per_phase.plannedRemainingS` (T-17). Phía trước vẽ như phía sau — xem
+      // giải thích ở `epicSeries`.
+      if (rollup !== null && isOutsideSnapshotRange(date, projection)) {
+        const scopeS =
+          projection.lastSnapshot?.perPhase.find((x) => x.phaseCode === phaseCode)?.originalS ??
+          rollup.totalOriginalS;
+        const planned = computePlannedRemaining([rollup], scopeS, date, projection.calendar);
+        // Phase thiếu ngày kế hoạch → không đoán bừa (C-10), giữ nguyên `null`.
+        return planned.skippedPhases.length > 0
+          ? point(date, null, null, isOffDay)
+          : point(date, planned.seconds, null, isOffDay);
       }
 
-      // Sau snapshot cuối: mỗi Phase tự chiếu tiếp trên phạm vi của chính nó,
-      // đúng cách worker tính `per_phase.plannedRemainingS` (T-17).
-      const scopeS =
-        projection.lastSnapshot?.perPhase.find((x) => x.phaseCode === phaseCode)?.originalS ??
-        rollup.totalOriginalS;
-      const planned = computePlannedRemaining([rollup], scopeS, date, projection.calendar);
-      // Phase thiếu ngày kế hoạch → không đoán bừa (C-10), giữ nguyên `null`.
-      return planned.skippedPhases.length > 0
-        ? point(date, null, null, isOffDay)
-        : point(date, planned.seconds, null, isOffDay);
+      // Lỗ thủng GIỮA hai đầu snapshot, hoặc Phase không có rollup → `null`.
+      return point(date, null, null, isOffDay);
     }),
   };
 }

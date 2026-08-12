@@ -192,3 +192,106 @@ describe('SignboardScreen — một Sub-phase không lặp total', () => {
     expect(screen.queryByRole('columnheader', { name: 'Σ' })).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Chọn nhiều Phase + “Whole epic”
+// ---------------------------------------------------------------------------
+
+const PHASES_MULTI: SignboardPhasesResponse = {
+  epicKey: 'PAY-1',
+  phases: [
+    { phaseCode: 'DESIGN', label: 'Thiết kế', subtaskCount: 2 },
+    { phaseCode: 'CODING', label: 'Lập trình', subtaskCount: 1 },
+  ],
+};
+
+const BOARD_CODING: SignboardResponse = {
+  ...BOARD,
+  phaseCode: 'CODING',
+  columnGroups: [
+    { subPhaseKey: '', subPhaseLabel: 'Coding', taskColumns: [{ taskCode: 'CREATE', label: 'Create' }] },
+  ],
+  rows: [
+    { functionKey: 'report', functionName: 'Report', cells: [doneCell], subtotals: [doneCell], total: doneCell },
+  ],
+  summary: { byStatus: { COMPLETED: 1 }, emptyCells: 0, totalCells: 1 },
+};
+
+/** Định tuyến cho hai Phase DESIGN + CODING trong cùng một Epic. */
+function stubMultiRouted(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const body = url.endsWith('/phases')
+        ? PHASES_MULTI
+        : url.endsWith('/unparsed')
+          ? UNPARSED
+          : url.endsWith('/plan-conflicts')
+            ? CONFLICTS
+            : url.endsWith('/phase/DESIGN')
+              ? BOARD
+              : url.endsWith('/phase/CODING')
+                ? BOARD_CODING
+                : null;
+      if (body === null) return Promise.reject(new Error(`no mock for ${url}`));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }),
+  );
+}
+
+function renderAt(initial: string): void {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[initial]}>
+        <SignboardScreen />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('SignboardScreen — chọn nhiều Phase', () => {
+  it('chọn hai Phase thì hiện hai bảng, mỗi bảng có tiêu đề Phase riêng', async () => {
+    stubMultiRouted();
+    renderAt('/signboard?epic=PAY-1&phases=DESIGN,CODING');
+
+    // Bảng DESIGN có Function Login; bảng CODING có Function Report — hai bảng
+    // tách biệt, không trộn số liệu.
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+    expect(screen.getByText('Report')).toBeTruthy();
+
+    // Mỗi bảng có tiêu đề Phase (nhãn cấu hình + mã) để biết đang xem bảng nào.
+    expect(screen.getByRole('heading', { name: /Thiết kế/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Lập trình/ })).toBeTruthy();
+  });
+
+  it('bấm “Whole epic” mở MỌI Phase của Epic', async () => {
+    stubMultiRouted();
+    renderAt('/signboard?epic=PAY-1');
+
+    // Chưa chọn gì: có lời nhắc chọn Phase và nút “Whole epic”.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Whole epic' })).toBeTruthy());
+    expect(screen.getByText(/Pick one or more Phases/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Whole epic' }));
+
+    // Cả hai Phase hiện bảng.
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+    expect(screen.getByText('Report')).toBeTruthy();
+  });
+
+  it('chọn đúng MỘT Phase (qua nhiều-Phase) KHÔNG thêm tiêu đề — giữ khung nhìn cũ', async () => {
+    stubMultiRouted();
+    renderAt('/signboard?epic=PAY-1&phases=DESIGN');
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+    // Một Phase: không dựng tiêu đề Phase riêng (chỉ bảng trần như trước đây).
+    expect(screen.queryByRole('heading', { name: /Thiết kế/ })).toBeNull();
+  });
+});

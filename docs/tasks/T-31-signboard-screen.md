@@ -175,3 +175,18 @@ Trạng thái phụ thuộc "hôm nay". Người dùng mở tab từ hôm qua r�
 
 1. Những Sub-task này **vẫn được tính vào Burndown** — nhắc ở cả tiêu đề khu lẫn từng dòng. Giấu chúng đi cho bảng "sạch" là tự tạo ra một góc khuất, và tổng không khớp sẽ làm PM mất lòng tin vào cả hai màn hình.
 2. Loại task lạ xuất hiện ≥ 3 lần thì hiện gợi ý thêm cột, kèm liên kết mở thẳng màn hình cấu hình cột (T-32).
+
+## Bổ sung sau này — chọn NHIỀU Phase & "toàn bộ Epic"
+
+Bộ chọn Phase từ chỗ chọn MỘT nay chọn được NHIỀU Phase một lúc, kèm nút
+**Whole epic** mở mọi Phase đang có Sub-task. Lưu ở URL: `?phases=A,B` hoặc
+`?phases=__all__` (token bám theo danh sách Phase hiện tại, Epic thêm/bớt Phase
+không phải sửa link). Tham số cũ `?phase=A` **vẫn đọc được** nên link chia sẻ từ
+trước không gãy.
+
+Mỗi Phase được chọn dựng thành MỘT bảng riêng, xếp chồng theo `display_order`,
+**không trộn số liệu**: mỗi bảng giữ nguyên thanh tóm tắt, cột Sub-phase, banner
+cảnh báo và khu "chưa lên được bảng" của chính nó. Chọn đúng một Phase thì giữ
+nguyên khung nhìn cũ (không thêm tiêu đề). Dùng lại nguyên `SignboardBoard` của
+mỗi Phase — **không đụng API (T-28) hay engine**, chỉ là lớp chọn + xếp bảng ở
+`SignboardScreen`.

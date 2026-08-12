@@ -64,3 +64,40 @@ export async function markWorklogsDeleted(
   });
   return result.count;
 }
+
+/**
+ * ĐỐI SOÁT khi ĐỌC LẠI TOÀN BỘ (backfill / full resync): đặt cờ cho mọi worklog
+ * của Epic KHÔNG còn nằm trong `liveWorklogIds` — tập worklog CÒN SỐNG vừa lấy
+ * đầy đủ từ Jira. Song song với `markRemovedIssues` cho issue.
+ *
+ * Vì sao PHẢI có: API `/worklog/deleted` chỉ hỏi được khi có mốc `since`, nên
+ * lượt đọc lại toàn bộ (không có `since`) KHÔNG BAO GIỜ thấy worklog đã xoá qua
+ * đường đó — Jira đơn giản là không trả nó về nữa. Không đối soát ở đây thì một
+ * worklog xoá trên Jira sẽ mãi mãi `is_deleted = false` trong DB, và ngày
+ * BẮT ĐẦU / KẾT THÚC THỰC TẾ (suy ra từ worklog) không bao giờ tính lại đúng dù
+ * chạy full resync bao nhiêu lần: xoá worklog 11/8 rồi resync mà ngày kết thúc
+ * vẫn kẹt ở 11/8 thay vì lùi về 10/8.
+ *
+ * CHỈ AN TOÀN khi `liveWorklogIds` là tập ĐẦY ĐỦ (chế độ đọc lại toàn bộ). Ở chế
+ * độ tăng dần, danh sách worklog lấy về chỉ gồm bản VỪA ĐỔI, dùng nó để đối soát
+ * sẽ xoá nhầm sạch phần không đổi — việc xoá của chế độ tăng dần đã có
+ * `/worklog/deleted` lo (xem `fetchHistory`). Người gọi PHẢI tự chặn điều kiện này.
+ */
+export async function markWorklogsDeletedMissing(
+  prisma: PrismaClient,
+  epicKey: string,
+  liveWorklogIds: ReadonlySet<bigint>,
+): Promise<number> {
+  const result = await prisma.worklogEntry.updateMany({
+    where: {
+      epicKey,
+      isDeleted: false,
+      // Tập rỗng = lượt lấy đầy đủ không còn worklog nào sống → mọi dòng cũ đều
+      // đã bị xoá. Bỏ HẲN điều kiện thay vì viết `notIn: []`: không phụ thuộc vào
+      // cách Prisma diễn giải tập rỗng, và khớp đúng lối `markRemovedIssues` làm.
+      ...(liveWorklogIds.size > 0 ? { worklogId: { notIn: [...liveWorklogIds] } } : {}),
+    },
+    data: { isDeleted: true },
+  });
+  return result.count;
+}

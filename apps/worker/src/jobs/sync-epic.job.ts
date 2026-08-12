@@ -36,6 +36,12 @@ export interface WorklogWritePort {
   upsertMany(rows: readonly WorklogRecord[]): Promise<void>;
   /** Worklog bị xoá trên Jira: đặt cờ, KHÔNG xoá dòng (E-17). */
   markDeleted(worklogIds: readonly bigint[]): Promise<number>;
+  /**
+   * Đối soát khi ĐỌC LẠI TOÀN BỘ: đặt cờ cho worklog của Epic KHÔNG còn trong
+   * tập `liveWorklogIds` (tập đầy đủ vừa lấy từ Jira). CHỈ gọi khi không có mốc
+   * `since` — xem `markWorklogsDeletedMissing`.
+   */
+  markDeletedMissing(epicKey: string, liveWorklogIds: ReadonlySet<bigint>): Promise<number>;
 }
 
 export interface ChangelogWritePort {
@@ -187,9 +193,29 @@ export async function syncEpic(
     await deps.changelog.upsertMany(built.changelog);
     await deps.worklogs.upsertMany(built.worklogs);
 
-    const worklogsDeleted = await deps.worklogs.markDeleted(
+    let worklogsDeleted = await deps.worklogs.markDeleted(
       history.deletedWorklogIds.map((n) => BigInt(n)),
     );
+
+    // ĐỐI SOÁT worklog đã xoá — CHỈ khi đọc lại toàn bộ (`since === null`).
+    //
+    // Lượt đọc lại toàn bộ lấy ĐẦY ĐỦ worklog còn sống của từng issue, nên
+    // `history.worklogsByIssue` chính là bản đầy đủ để đối soát: worklog nào còn
+    // trong DB mà không còn ở đây thì đã bị xoá trên Jira. Phải làm ở đây vì
+    // `/worklog/deleted` chỉ chạy khi có `since` — không có bước này thì full
+    // resync KHÔNG bao giờ đánh dấu được worklog đã xoá, và ngày bắt đầu/kết thúc
+    // THỰC TẾ (suy từ worklog) kẹt ở giá trị cũ dù chạy lại bao nhiêu lần.
+    //
+    // KHÔNG chạy ở chế độ tăng dần: khi đó `worklogsByIssue` chỉ chứa worklog
+    // VỪA ĐỔI, đối soát sẽ xoá nhầm sạch phần không đổi. Deletion của chế độ tăng
+    // dần đã có `/worklog/deleted` + `markDeleted` lo ở trên.
+    if (since === null) {
+      const liveWorklogIds = new Set<bigint>();
+      for (const list of history.worklogsByIssue.values()) {
+        for (const w of list) liveWorklogIds.add(BigInt(w.id));
+      }
+      worklogsDeleted += await deps.worklogs.markDeletedMissing(epicKey, liveWorklogIds);
+    }
 
     // Chạy ở MỌI lần đồng bộ, kể cả tăng dần: `tree.liveKeys` đến từ một lần
     // quét key riêng KHÔNG có bộ lọc `updated`, nên nó luôn là danh sách đầy đủ

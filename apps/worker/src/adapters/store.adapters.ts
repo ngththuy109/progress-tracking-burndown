@@ -12,6 +12,7 @@ import {
   loadPhaseRollups,
   markRemovedIssues,
   markWorklogsDeleted,
+  markWorklogsDeletedMissing,
   previousTotalScope,
   startSyncRun,
   updateEpic,
@@ -82,6 +83,7 @@ export function createWorklogWritePort(prisma: PrismaClient): WorklogWritePort {
   return {
     upsertMany: (rows) => upsertWorklogs(prisma, rows),
     markDeleted: (ids) => markWorklogsDeleted(prisma, ids),
+    markDeletedMissing: (epicKey, liveIds) => markWorklogsDeletedMissing(prisma, epicKey, liveIds),
   };
 }
 
