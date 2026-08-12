@@ -271,3 +271,86 @@ describe('kiểm tra hợp lệ trước khi lưu', () => {
     expect(issues.some((i) => i.code === 'DUPLICATE_SUB_PHASE')).toBe(false);
   });
 });
+
+describe('tầng nhóm (dynamic tiers) — kế thừa + hợp lệ', () => {
+  const phaseTier = (over: Partial<import('@app/shared').GroupTier> = {}): import('@app/shared').GroupTier => ({
+    tierOrder: 1,
+    code: 'PHASE',
+    labelVi: 'Phase',
+    labelJa: null,
+    role: 'PHASE',
+    sourceType: 'PARENT_TASK_TITLE',
+    sourceConfig: null,
+    definitions: [{ groupCode: 'DESIGN', labelVi: 'Thiết kế', labelJa: null, colorHex: null, displayOrder: 1 }],
+    rules: [{ keyword: 'design', matchMode: 'CONTAINS', groupCode: 'DESIGN', matchPriority: 10 }],
+    titlePatterns: [],
+    displayOrder: 0,
+    ...over,
+  });
+
+  it('mergeInheritance mang theo tiers của GLOBAL khi project không khai', () => {
+    const tiers = [phaseTier()];
+    const eff = mergeInheritance({ ...GLOBAL, tiers }, null, V);
+    expect(eff.tiers).toEqual(tiers);
+  });
+
+  it('project khai tiers thì thắng GLOBAL', () => {
+    const gTiers = [phaseTier({ code: 'PHASE_G' })];
+    const pTiers = [phaseTier({ code: 'PHASE_P' })];
+    const eff = mergeInheritance(
+      { ...GLOBAL, tiers: gTiers },
+      { projectKey: 'SHOP', tiers: pTiers },
+      { globalVersion: 3, projectVersion: 1 },
+    );
+    expect(eff.tiers).toEqual(pTiers);
+  });
+
+  it('cả hai đều không có tiers ⇒ KHÔNG có khoá tiers (không trả [] rỗng)', () => {
+    const eff = mergeInheritance(GLOBAL, null, V);
+    expect('tiers' in eff).toBe(false);
+  });
+
+  it('payload không khai tiers ⇒ validate bỏ qua luật tầng (mirror luôn hợp lệ)', () => {
+    const issues = validateConfigPayload(GLOBAL);
+    expect(issues.some((i) => i.code.startsWith('NO_PHASE_TIER') || i.code === 'MULTIPLE_PHASE_TIERS')).toBe(false);
+  });
+
+  it('ERROR khi KHÔNG có tầng role=PHASE', () => {
+    const issues = validateConfigPayload({ ...GLOBAL, tiers: [phaseTier({ role: 'GROUP' })] });
+    const e = issues.find((i) => i.code === 'NO_PHASE_TIER');
+    expect(e?.level).toBe('ERROR');
+    expect(hasBlockingError(issues)).toBe(true);
+  });
+
+  it('ERROR khi có HAI tầng role=PHASE', () => {
+    const issues = validateConfigPayload({
+      ...GLOBAL,
+      tiers: [phaseTier({ tierOrder: 1, code: 'A' }), phaseTier({ tierOrder: 2, code: 'B' })],
+    });
+    expect(issues.find((i) => i.code === 'MULTIPLE_PHASE_TIERS')?.level).toBe('ERROR');
+  });
+
+  it('ERROR khi trùng mã tầng hoặc trùng tierOrder', () => {
+    const dupCode = validateConfigPayload({
+      ...GLOBAL,
+      tiers: [phaseTier({ tierOrder: 1, code: 'X', role: 'PHASE' }), phaseTier({ tierOrder: 2, code: 'X', role: 'GROUP' })],
+    });
+    expect(dupCode.some((i) => i.code === 'DUPLICATE_TIER_CODE')).toBe(true);
+
+    const dupOrder = validateConfigPayload({
+      ...GLOBAL,
+      tiers: [phaseTier({ tierOrder: 1, code: 'X', role: 'PHASE' }), phaseTier({ tierOrder: 1, code: 'Y', role: 'GROUP' })],
+    });
+    expect(dupOrder.some((i) => i.code === 'DUPLICATE_TIER_ORDER')).toBe(true);
+  });
+
+  it('WARNING (không chặn) khi luật trỏ vào group không khai', () => {
+    const issues = validateConfigPayload({
+      ...GLOBAL,
+      tiers: [phaseTier({ rules: [{ keyword: 'x', matchMode: 'CONTAINS', groupCode: 'GHOST', matchPriority: 10 }] })],
+    });
+    const w = issues.find((i) => i.code === 'ORPHAN_GROUP_CODE');
+    expect(w?.level).toBe('WARNING');
+    expect(hasBlockingError(issues)).toBe(false);
+  });
+});

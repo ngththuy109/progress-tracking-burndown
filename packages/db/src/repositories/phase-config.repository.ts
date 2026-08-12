@@ -7,6 +7,7 @@ import type {
   GroupTierRole,
 } from '@app/shared';
 import { deriveDefaultTiersFromPhase } from '@app/shared';
+import { Prisma } from '../client.js';
 import type { PrismaClient } from '../client.js';
 
 /**
@@ -50,11 +51,16 @@ function assembleTiers(row: {
   }));
 }
 
+/** Object JSON hoặc SQL NULL cho cột JSONB nullable (`source_config`). */
+function jsonOrNull(v: Record<string, unknown> | null | undefined) {
+  return v == null ? Prisma.DbNull : (v as Prisma.InputJsonValue);
+}
+
 /**
  * Dựng phần nested-create cho group_tier* từ danh sách tầng.
  *
- * `source_config` CHƯA ghi ở Vòng 1 (mọi tầng mirror có sourceConfig=null; Config API
- * cho tiers thuộc vòng sau). `compiled_regex` để rỗng — engine sinh sau (như phase_*).
+ * `source_config` (tham số của source: tên token, tiền tố label…) được ghi để Config
+ * API/UI round-trip đủ. `compiled_regex` để rỗng — engine sinh sau (như phase_*).
  */
 function tierCreateData(tiers: readonly GroupTier[]) {
   return {
@@ -66,6 +72,7 @@ function tierCreateData(tiers: readonly GroupTier[]) {
         labelJa: t.labelJa ?? null,
         role: t.role,
         sourceType: t.sourceType,
+        sourceConfig: jsonOrNull(t.sourceConfig),
         displayOrder: t.displayOrder,
       })),
     },
