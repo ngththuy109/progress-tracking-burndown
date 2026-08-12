@@ -7,10 +7,49 @@ oauth2-proxy cho Microsoft Entra ID) nằm ở [`config/auth-proxy/`](../config/
 
 ---
 
-## 1. Mô hình tổng quan (SSO "B1")
+## 1. Mô hình tổng quan — HAI CHẾ ĐỘ đăng nhập
 
-`apps/api` **không tự đăng nhập người dùng**. Một **auth proxy** đứng trước, đăng
-nhập bằng SSO (OpenID Connect) rồi bơm header danh tính cho API. Điểm mấu chốt:
+Hệ thống có hai chế độ xác thực; **vai trò luôn tra DB** ở cả hai (không bao giờ
+tin `role` từ bên ngoài) — vai trò vẫn là mô hình MỘT TẦNG `ADMIN` / `PM` /
+`VIEWER` ở bảng `app_user` (xem §2).
+
+### Chế độ LDAP in-app (khuyến nghị — cấu hình qua UI)
+
+App **tự đăng nhập bằng LDAP**: người dùng nhập username/password vào form của
+app, API bind vào LDAP server của công ty để xác thực. ADMIN vào **Admin →
+LDAP** cấu hình (server URL, cách xác định DN, bind password mã hóa AES-256-GCM
+bằng `APP_ENCRYPTION_KEY` — write-only như token Jira), bấm **Test** rồi bật.
+Không cần dựng oauth2-proxy nữa.
+
+```
+Trình duyệt ──POST /auth/login {username, password}──▶ API
+                 │  Direct bind:      bind(DN từ template, password)
+                 │  Search-then-bind: bind(tài khoản dịch vụ) → search user
+                 │                    theo filter → bind(DN tìm được, password)
+                 ▼
+   LDAP server (ldap:// hoặc ldaps://)
+                 │ bind OK → đọc attribute email (danh tính app_user)
+                 ▼
+   session Redis + cookie ptb_sess (HttpOnly) → API tra app_user → role + projects
+```
+
+- **Hai cách xác định DN** (chọn một ở màn hình cấu hình): *direct bind* bằng
+  template (`uid={username},ou=users,dc=congty,dc=vn` — hợp OpenLDAP) hoặc
+  *search-then-bind* bằng tài khoản dịch vụ (cách chuẩn với **Active
+  Directory**, filter kiểu `(sAMAccountName={username})`).
+- Server **từ chối bật LDAP** khi bài test CONNECT/BIND chưa pass — không thể
+  tự khóa mình bằng một cấu hình hỏng.
+- Đã bật LDAP thì header `x-user-id` bị **bỏ qua hoàn toàn** (chống giả mạo khi
+  app lộ ra ngoài không qua cổng). Thoát hiểm khi kẹt: env `AUTH_FORCE_HEADER=1`
+  (xem RUNBOOK).
+- Đăng nhập chỉ xác thực DANH TÍNH — người bind LDAP thành công nhưng chưa được
+  cấp quyền trong `app_user` vẫn rơi về `AUTH_DEFAULT_ROLE` (mặc định `VIEWER`),
+  đúng mô hình vai-trò-ở-DB.
+
+### Chế độ header qua cổng (legacy — vẫn hỗ trợ khi LDAP tắt)
+
+Khi LDAP chưa bật (mặc định sau nâng cấp), giữ nguyên mô hình cũ: một **auth
+proxy** đứng trước, đăng nhập bằng SSO rồi bơm header danh tính:
 
 - Cổng chỉ khẳng định **DANH TÍNH** — header `x-user-id` = email đã xác thực.
 - API **không tin `role` từ header** — vai trò tra bảng `app_user` trong DB.
@@ -24,10 +63,12 @@ Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)   [IdP: Micros
                          └──▶ API → tra app_user → role + projects
 ```
 
-Vì sao thiết kế thế này: dù cổng có lỡ để lọt một header `x-user-role: ADMIN`
-giả thì cũng vô hại — vai trò luôn đến từ database của hệ thống, không từ header.
+> Chế độ này cũng là đường chạy **local dev** (`VITE_DEV_USER` — Vite dev proxy
+> đóng vai cổng) và Basic Auth tạm — xem [`config/auth-proxy/`](../config/auth-proxy/)
+> (`nginx-basic-auth.conf.example`).
 
-> **Cổng nào cũng được — miễn đặt đúng `x-user-id`.** IdP/proxy là phần thay-thế-được; app chỉ cần một header danh tính tin cậy. Chưa có SSO Entra thì dùng **Basic Auth tạm** để test với vài người (cùng mô hình header, không sửa code) — xem [`config/auth-proxy/`](../config/auth-proxy/) (`nginx-basic-auth.conf.example`).
+Vì sao vai trò luôn ở DB: dù cổng/IdP có lỡ để lọt một header `x-user-role:
+ADMIN` giả thì cũng vô hại — vai trò chỉ đến từ database của hệ thống.
 
 ## 2. Ba vai trò
 

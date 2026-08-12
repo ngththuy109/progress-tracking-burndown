@@ -35,9 +35,13 @@ import {
   createTrackedEpicStore,
   type QueueLike,
 } from './adapters/epic-registry.adapters.js';
-import { createPrincipalResolver, type AuthConfig } from './adapters/principal.js';
+import { createAuthResolver, type AuthConfig } from './adapters/principal.js';
 import { createAppUserStore, createAppUserAdminStore } from './adapters/app-user.adapters.js';
 import { createProjectStore } from './adapters/project.adapters.js';
+import { registerAuthRoutes, type TokenBox } from './routes/auth.routes.js';
+import { createLdapConfigLoader, type LdapConfigStore } from './adapters/ldap-config.adapters.js';
+import { sessionIdOf, type SessionStore } from './adapters/session.adapters.js';
+import type { LdapClientFactory } from './services/ldap.service.js';
 
 /**
  * REST API — chỉ điều phối, không chứa logic nghiệp vụ.
@@ -75,6 +79,16 @@ export interface ServerDeps {
   readonly cache?: { del(pattern: string): Promise<void> };
   /** Cấu hình xác thực (danh tính do cổng SSO đặt, vai trò tra `app_user`). */
   readonly auth: AuthConfig;
+  /** Phiên đăng nhập LDAP in-app trên Redis (cookie `ptb_sess`). */
+  readonly sessions: SessionStore;
+  /** Đọc/ghi cấu hình LDAP (bảng một dòng `auth_ldap_config`). */
+  readonly ldapConfigs: LdapConfigStore;
+  /** Dựng kết nối ldapts theo yêu cầu — test tiêm client giả qua đây. */
+  readonly ldapClientFactory: LdapClientFactory;
+  /** env AUTH_FORCE_HEADER=1 — van thoát hiểm: ép chế độ header dù LDAP bật. */
+  readonly forceHeaderAuth: boolean;
+  /** Hộp seal/open bind password LDAP — `null` khi APP_ENCRYPTION_KEY chưa đặt. */
+  readonly tokenBox: TokenBox | null;
 }
 
 export function createServer(deps: ServerDeps): FastifyInstance {
@@ -93,9 +107,25 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   const registry = new MetricsRegistry();
   registerHttpMetrics(app, registry);
 
-  // Phân giải danh tính → principal một lần mỗi request. Danh tính đến từ header
-  // do cổng SSO đặt; vai trò tra bảng `app_user`. KHÔNG tin `role` từ header.
-  const resolvePrincipal = createPrincipalResolver(createAppUserStore(deps.prisma), deps.auth);
+  // Cấu hình LDAP đọc trên TỪNG request (hook bên dưới phải biết "LDAP bật
+  // chưa?") — đi qua loader cache ~10s; route admin vô hiệu cache khi lưu.
+  const ldapConfigLoader = createLdapConfigLoader(() => deps.ldapConfigs.find());
+
+  // Phân giải danh tính → principal một lần mỗi request, theo thứ tự:
+  //   (1) phiên đăng nhập LDAP (cookie `ptb_sess`) — thắng vô điều kiện;
+  //   (2) LDAP tắt hoặc AUTH_FORCE_HEADER=1 → header do cổng SSO đặt (như cũ);
+  //   (3) LDAP bật mà không có phiên → không có principal (KHÔNG tin header).
+  // Vai trò luôn tra `app_user`. KHÔNG tin `role` từ header.
+  const resolvePrincipal = createAuthResolver(createAppUserStore(deps.prisma), deps.auth, {
+    sessionUserId: async (req) => {
+      const sessionId = sessionIdOf(req);
+      if (sessionId === null) return null;
+      const found = await deps.sessions.find(sessionId);
+      return found?.userId ?? null;
+    },
+    ldapEnabled: async () => (await ldapConfigLoader.load())?.enabled === true,
+    forceHeader: deps.forceHeaderAuth,
+  });
   app.decorateRequest('principal', null);
   app.addHook('onRequest', async (req, reply) => {
     try {
@@ -110,6 +140,19 @@ export function createServer(deps: ServerDeps): FastifyInstance {
     }
   });
   const getPrincipal = (req: FastifyRequest): Principal | null => req.principal;
+
+  // Đăng nhập LDAP in-app: /api/auth/mode, /auth/login|logout (public) và
+  // /api/admin/auth/ldap[...] (ADMIN — tự kiểm principal trong handler).
+  registerAuthRoutes(app, {
+    resolvePrincipal: getPrincipal,
+    configs: deps.ldapConfigs,
+    loadConfig: () => ldapConfigLoader.load(),
+    invalidateConfig: () => ldapConfigLoader.invalidate(),
+    sessions: deps.sessions,
+    clientFactory: deps.ldapClientFactory,
+    tokenBox: deps.tokenBox,
+    forceHeader: deps.forceHeaderAuth,
+  });
 
   registerMeRoutes(app, { resolvePrincipal: getPrincipal });
 

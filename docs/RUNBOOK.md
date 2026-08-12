@@ -381,6 +381,22 @@ pnpm smoke
 
 Worker chờ tối đa 30 giây cho job đang chạy. Quá hạn nó thoát với mã khác 0 và ghi log rõ ràng.
 
+### 2b. Bật LDAP xong bị khóa ngoài (cấu hình sai / LDAP server hỏng)
+
+Server đã chặn trước phần lớn ca này (từ chối bật khi Test chưa pass), nhưng
+LDAP server vẫn có thể hỏng SAU khi bật (đổi mật khẩu tài khoản dịch vụ, đổi
+cấu trúc cây LDAP, server sập...). Khi không ai đăng nhập được nữa:
+
+```bash
+# 1. Tạm quay về chế độ header (cổng/dev):
+AUTH_FORCE_HEADER=1   # đặt vào env của API rồi khởi động lại
+# 2. Vào Admin → LDAP bằng đường header như trước, sửa cấu hình, Test pass, Lưu.
+# 3. BỎ AUTH_FORCE_HEADER đi và khởi động lại lần nữa.
+```
+
+`AUTH_FORCE_HEADER=1` chỉ dành cho khôi phục — để quên nó là mở lại đường
+header vĩnh viễn ngay cả khi LDAP đang bật.
+
 ### 3. Tắt khẩn cấp việc gọi Jira
 
 ```bash

@@ -171,3 +171,19 @@ export {
   loadSnapshots,
   type UpsertSnapshotResult,
 } from './repositories/snapshot.repository.js';
+
+export {
+  findLdapConfig,
+  upsertLdapConfig,
+  type LdapConfigRow,
+  type UpsertLdapConfigArgs,
+} from './repositories/auth-ldap.repository.js';
+
+export {
+  seal,
+  open,
+  parseEncryptionKey,
+  SecretBoxError,
+  SECRET_BOX_VERSION,
+  SECRET_KEY_BYTES,
+} from './crypto/secret-box.js';
