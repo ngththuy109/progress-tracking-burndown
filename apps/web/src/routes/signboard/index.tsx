@@ -22,15 +22,30 @@ import type { PlanConflict } from '@app/shared';
 const JIRA_BASE = jiraBaseUrl();
 
 /**
+ * Token URL cho “toàn bộ Epic”: `?phases=__all__`. Lưu token thay vì liệt kê mã
+ * để lựa chọn luôn bám theo DANH SÁCH Phase hiện tại — Epic thêm/bớt Phase thì
+ * “toàn bộ” vẫn đúng mà không phải sửa link.
+ */
+const ALL_TOKEN = '__all__';
+
+/**
  * Bảng Signboard — PRD §6.
  *
- * PM chọn một Phase và thấy ngay ma trận Function × loại task: function nào đang
- * trễ, trễ ở khâu nào.
+ * PM chọn MỘT hay NHIỀU Phase (hoặc “toàn bộ Epic”) và thấy ngay ma trận
+ * Function × loại task của từng Phase: function nào đang trễ, trễ ở khâu nào.
+ * Chọn nhiều Phase thì mỗi Phase là một bảng riêng, xếp chồng theo thứ tự cấu
+ * hình — mỗi bảng giữ nguyên thanh tóm tắt, cột Sub-phase và khu “chưa lên
+ * bảng” của chính nó, KHÔNG trộn số liệu giữa các Phase.
  */
 export function SignboardScreen() {
   const [params, setParams] = useSearchParams();
   const epicKey = params.get('epic');
-  const phaseCode = params.get('phase');
+
+  // Danh sách Phase có Sub-task — vừa là nguồn cho bộ chọn, vừa để giãn token
+  // “toàn bộ Epic” (__all__) ra đúng những Phase đang có dữ liệu, và lấy nhãn
+  // tiêu đề cho mỗi bảng. Gọi Ở ĐÂY (không nằm trong PhaseNav) để mọi phần dùng
+  // CHUNG một nguồn. `enabled` theo epicKey nên gọi vô điều kiện vẫn an toàn.
+  const phasesQuery = useSignboardPhases(epicKey);
 
   if (epicKey === null || epicKey === '') {
     return (
@@ -43,58 +58,163 @@ export function SignboardScreen() {
     );
   }
 
-  // Chọn Phase = ghi vào URL. Nhờ vậy chia sẻ link giữ nguyên Phase, và bấm một
-  // Phase khác trên thanh chọn là CHUYỂN được ngay — không phải tải lại trang.
-  const pickPhase = (code: string): void => setParams({ epic: epicKey, phase: code });
+  const allCodes = (phasesQuery.data?.phases ?? []).map((p) => p.phaseCode);
+  const rawPhases = params.get('phases');
+  // `phases` (danh sách hoặc token __all__) là nguồn chính; `phase` cũ (một mã)
+  // vẫn đọc được để link chia sẻ từ trước không gãy.
+  const selection = resolveSelection(rawPhases, params.get('phase'), allCodes);
+
+  // Chọn Phase = ghi vào URL, nên chia sẻ link giữ nguyên lựa chọn và bấm là
+  // đổi ngay, không tải lại trang. Chọn HẾT thì rút gọn về __all__ cho URL gọn
+  // và để nút “Whole epic” sáng lên.
+  const writeSelection = (codes: readonly string[]): void => {
+    const ordered = orderByList(codes, allCodes);
+    if (ordered.length === 0) {
+      setParams({ epic: epicKey });
+      return;
+    }
+    const isAll =
+      allCodes.length > 0 &&
+      ordered.length === allCodes.length &&
+      allCodes.every((c) => ordered.includes(c));
+    setParams({ epic: epicKey, phases: isAll ? ALL_TOKEN : ordered.join(',') });
+  };
+
+  const togglePhase = (code: string): void => {
+    const next = new Set(selection.codes);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    writeSelection([...next]);
+  };
+
+  const toggleWholeEpic = (): void => writeSelection(selection.wholeEpic ? [] : allCodes);
+
+  const labelOf = (code: string): string =>
+    phasesQuery.data?.phases.find((p) => p.phaseCode === code)?.label ?? code;
 
   return (
     <div className="stack">
       <div className="scope">
         <span className="scope__label">Epic:</span>
         <code>{epicKey}</code>
-        {/* Về lại bộ chọn Epic — xoá cả Epic lẫn Phase khỏi URL. Không có nút này
-            thì đổi Epic phải sửa URL tay. */}
+        {/* Về lại bộ chọn Epic — xoá cả Epic lẫn lựa chọn Phase khỏi URL. */}
         <button type="button" className="button" onClick={() => setParams({})}>
           Change Epic
         </button>
       </div>
 
-      {/* Thanh chọn Phase LUÔN hiện khi đã có Epic — kể cả lúc đang xem một
-          Phase — nên người dùng nhảy từ Testing sang Coding chỉ bằng một cú bấm. */}
-      <PhaseNav epicKey={epicKey} current={phaseCode} onPick={pickPhase} />
+      {/* Thanh chọn Phase LUÔN hiện khi đã có Epic — chọn được nhiều Phase một
+          lúc, hoặc “Whole epic” để mở tất cả chỉ bằng một cú bấm. */}
+      <PhaseNav
+        query={phasesQuery}
+        selectedCodes={selection.codes}
+        wholeEpic={selection.wholeEpic}
+        onToggle={togglePhase}
+        onToggleWholeEpic={toggleWholeEpic}
+      />
 
-      {phaseCode === null || phaseCode === '' ? (
-        <EmptyState
-          icon="🧭"
-          title="Pick a Phase"
-          description="Choose one of the Phases above to build its Signboard."
-        />
+      {selection.codes.length === 0 ? (
+        rawPhases === ALL_TOKEN && phasesQuery.isPending ? (
+          <LoadingState label="Loading this Epic's Phases…" rows={3} />
+        ) : (
+          <EmptyState
+            icon="🧭"
+            title="Pick one or more Phases"
+            description="Choose Phases above — or “Whole epic” — to build the Signboard."
+          />
+        )
+      ) : selection.codes.length === 1 ? (
+        // Một Phase: dựng bảng trực tiếp, không thêm tiêu đề (giữ nguyên khung
+        // nhìn quen thuộc). `key` theo Phase để đổi Phase là dựng lại sạch — ô
+        // tìm kiếm và bộ lọc của Phase cũ không dính sang Phase mới.
+        <SignboardBoard key={selection.codes[0]} epicKey={epicKey} phaseCode={selection.codes[0]!} />
       ) : (
-        // `key` theo Phase: đổi Phase thì bảng dựng lại sạch — ô tìm kiếm và bộ
-        // lọc trạng thái của Phase cũ không dính sang Phase mới.
-        <SignboardBoard key={phaseCode} epicKey={epicKey} phaseCode={phaseCode} />
+        // Nhiều Phase: mỗi Phase một bảng riêng, có tiêu đề để biết đang xem
+        // bảng nào. `key` theo mã Phase nên thêm/bớt một Phase KHÔNG dựng lại
+        // các bảng còn lại (giữ nguyên tìm kiếm/bộ lọc của chúng).
+        selection.codes.map((code) => (
+          <section key={code} className="stack signboard-phase" aria-label={`Phase ${labelOf(code)}`}>
+            <h2 className="signboard-phase__title">
+              {labelOf(code)} <Badge tone="muted">{code}</Badge>
+            </h2>
+            <SignboardBoard epicKey={epicKey} phaseCode={code} />
+          </section>
+        ))
       )}
     </div>
   );
 }
 
+/** Lựa chọn Phase đã giải mã từ URL. */
+interface PhaseSelection {
+  /** Mã Phase cần dựng bảng, đã sắp theo display_order và rút trùng. */
+  readonly codes: string[];
+  /** `true` khi đang xem “toàn bộ Epic” (mọi Phase được chọn). */
+  readonly wholeEpic: boolean;
+}
+
 /**
- * Thanh chọn Phase — thay cho ô gõ tay mã Phase trước đây.
+ * Giải mã lựa chọn Phase từ URL.
+ *
+ * `phases=__all__` → toàn bộ Epic (giãn ra mọi Phase đang có Sub-task).
+ * `phases=A,B`     → đúng các Phase đó (rút trùng, sắp theo display_order).
+ * `phase=A` (cũ)   → một Phase — vẫn đọc để link chia sẻ từ trước không gãy.
+ * Chọn trùng khít toàn bộ danh sách cũng coi là “toàn bộ Epic” để nút sáng lên.
+ */
+function resolveSelection(
+  rawPhases: string | null,
+  legacyPhase: string | null,
+  allCodes: readonly string[],
+): PhaseSelection {
+  if (rawPhases === ALL_TOKEN) return { codes: [...allCodes], wholeEpic: true };
+  if (rawPhases !== null && rawPhases !== '') {
+    const codes = orderByList(
+      rawPhases.split(',').map((s) => s.trim()).filter((s) => s !== ''),
+      allCodes,
+    );
+    const wholeEpic =
+      allCodes.length > 0 && codes.length === allCodes.length && allCodes.every((c) => codes.includes(c));
+    return { codes, wholeEpic };
+  }
+  if (legacyPhase !== null && legacyPhase !== '') return { codes: [legacyPhase], wholeEpic: false };
+  return { codes: [], wholeEpic: false };
+}
+
+/**
+ * Sắp mã Phase theo thứ tự danh sách (display_order của cấu hình) và rút trùng.
+ * Mã “lạ” (không có trong danh sách — link cũ, hoặc Sub-task vừa gỡ hết) vẫn
+ * giữ lại, xếp CUỐI theo thứ tự gặp, để không im lặng đánh rơi lựa chọn.
+ */
+function orderByList(codes: readonly string[], allCodes: readonly string[]): string[] {
+  const wanted = new Set(codes);
+  const known = allCodes.filter((c) => wanted.has(c));
+  const knownSet = new Set(allCodes);
+  const extras: string[] = [];
+  for (const c of codes) if (!knownSet.has(c) && !extras.includes(c)) extras.push(c);
+  return [...known, ...extras];
+}
+
+/**
+ * Thanh chọn Phase — cho chọn NHIỀU Phase và có nút “Whole epic”.
  *
  * Chỉ liệt kê Phase CÓ Sub-task (API đã lọc sẵn), nên PM không phải nhớ mã và
- * không mở nhầm Phase rỗng. Phase đang xem được tô đậm để biết mình ở đâu.
+ * không mở nhầm Phase rỗng. Phase đang chọn được tô đậm; “Whole epic” sáng lên
+ * khi mọi Phase đang được chọn. Nhận danh sách qua `query` (màn hình đã tải sẵn)
+ * để không gọi API trùng.
  */
 function PhaseNav({
-  epicKey,
-  current,
-  onPick,
+  query,
+  selectedCodes,
+  wholeEpic,
+  onToggle,
+  onToggleWholeEpic,
 }: {
-  readonly epicKey: string;
-  readonly current: string | null;
-  readonly onPick: (code: string) => void;
+  readonly query: ReturnType<typeof useSignboardPhases>;
+  readonly selectedCodes: readonly string[];
+  readonly wholeEpic: boolean;
+  readonly onToggle: (code: string) => void;
+  readonly onToggleWholeEpic: () => void;
 }) {
-  const query = useSignboardPhases(epicKey);
-
   if (query.isPending) return <LoadingState label="Finding Phases with sub-tasks…" rows={1} />;
   if (query.isError) {
     return (
@@ -108,12 +228,11 @@ function PhaseNav({
 
   const phases = query.data.phases;
   const codes = phases.map((p) => p.phaseCode);
-  // Phase đang xem mà KHÔNG còn trong danh sách (Sub-task vừa bị gỡ hết, hoặc mã
-  // cũ trên URL) vẫn phải hiện — nếu không người dùng kẹt lại đó, không có nút
-  // nào để chuyển đi.
-  const orphan = current !== null && current !== '' && !codes.includes(current) ? current : null;
+  // Mã đang chọn nhưng KHÔNG còn trong danh sách (Sub-task vừa bị gỡ hết, hoặc
+  // link cũ) vẫn phải hiện — nếu không người dùng không có nút nào để BỎ chọn nó.
+  const orphans = selectedCodes.filter((c) => !codes.includes(c));
 
-  if (phases.length === 0 && orphan === null) {
+  if (phases.length === 0 && orphans.length === 0) {
     return (
       <div className="notice notice--error" role="status">
         No sub-task in this Epic has a Phase yet. Sync the Epic on the Epics screen, then reload.
@@ -122,10 +241,21 @@ function PhaseNav({
   }
 
   return (
-    <div className="scope" role="group" aria-label="Select a Phase">
-      <span className="scope__label">Phase:</span>
+    <div className="scope" role="group" aria-label="Select Phases">
+      <span className="scope__label">Phases:</span>
+      {/* “Whole epic” = chọn hết mọi Phase đang có Sub-task; bấm lần nữa để bỏ. */}
+      <button
+        type="button"
+        className={`button${wholeEpic ? ' button--primary' : ''}`}
+        aria-pressed={wholeEpic}
+        title="Show every Phase that has sub-tasks"
+        onClick={onToggleWholeEpic}
+      >
+        Whole epic
+      </button>
       {phases.map((p) => {
-        const active = p.phaseCode === current;
+        // Đang xem “toàn bộ Epic” thì coi như MỌI Phase đều được chọn.
+        const active = wholeEpic || selectedCodes.includes(p.phaseCode);
         return (
           <button
             key={p.phaseCode}
@@ -133,23 +263,24 @@ function PhaseNav({
             className={`button${active ? ' button--primary' : ''}`}
             aria-pressed={active}
             title={p.label === null ? p.phaseCode : `${p.label} (${p.phaseCode})`}
-            onClick={() => onPick(p.phaseCode)}
+            onClick={() => onToggle(p.phaseCode)}
           >
             {p.label ?? p.phaseCode} <Badge tone="muted">{p.subtaskCount}</Badge>
           </button>
         );
       })}
-      {orphan !== null && (
+      {orphans.map((code) => (
         <button
+          key={code}
           type="button"
           className="button button--primary"
           aria-pressed={true}
           title="This Phase has no sub-tasks right now"
-          onClick={() => onPick(orphan)}
+          onClick={() => onToggle(code)}
         >
-          {orphan}
+          {code}
         </button>
-      )}
+      ))}
     </div>
   );
 }
