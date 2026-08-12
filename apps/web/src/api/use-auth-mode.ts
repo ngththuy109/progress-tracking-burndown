@@ -1,10 +1,11 @@
 import {
   useMutation,
   useQuery,
+  useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { authModeResponseSchema, type AuthModeResponse } from '@app/shared';
+import { authModeResponseSchema, type AuthModeResponse, type LoginRequest } from '@app/shared';
 import { apiClient, createApiClient, noContent, type ApiClient } from './client.js';
 
 /**
@@ -12,7 +13,7 @@ import { apiClient, createApiClient, noContent, type ApiClient } from './client.
  * trước khi đăng nhập).
  *
  *   HEADER — mô hình cổng/proxy cũ: web giữ nguyên hành vi hiện tại.
- *   OIDC   — app tự đăng nhập: 401 sẽ dẫn tới màn hình "Đăng nhập bằng SSO"
+ *   LDAP   — app tự đăng nhập: 401 sẽ dẫn tới form "Tên đăng nhập / Mật khẩu"
  *            (`auth/auth-gate.tsx`) thay vì trông chờ cổng bên ngoài.
  */
 export const authModeKey = ['auth', 'mode'] as const;
@@ -36,8 +37,31 @@ export function useAuthMode(
 const authRootClient = createApiClient({ baseUrl: '' });
 
 /**
- * Đăng xuất phiên OIDC: `POST /auth/logout` (204, xoá cookie `ptb_sess`) rồi
- * nạp lại trang từ `/` — mọi state trong bộ nhớ (cache query, form dở) thuộc về
+ * Đăng nhập LDAP: `POST /auth/login` với `{username, password}`.
+ *
+ * Thành công là 204 + Set-Cookie — KHÔNG có chuyển hướng nào cả. Việc còn lại
+ * chỉ là làm mới toàn bộ cache query: `/api/me` được nạp lại, `AuthGate` thấy
+ * đã đăng nhập và tự thay màn hình đăng nhập bằng app — người dùng vẫn đứng
+ * nguyên ở URL đang xem (quan trọng cho ca hết hạn giữa phiên).
+ *
+ * Lỗi giữ NGUYÊN `ApiError` (401 LOGIN_FAILED / 429 / 502...) cho màn hình
+ * đăng nhập tự dịch thành câu tiếng Việt — xem `loginErrorMessage`.
+ */
+export function useLogin(
+  client: ApiClient = authRootClient,
+): UseMutationResult<null, Error, LoginRequest> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LoginRequest) => client.post('/auth/login', body, noContent),
+    // Làm mới TẤT CẢ: mọi dữ liệu trong cache đều được tải dưới danh nghĩa
+    // "chưa đăng nhập" hoặc của phiên cũ — không cái nào đáng tin nữa.
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+}
+
+/**
+ * Đăng xuất phiên LDAP: `POST /auth/logout` (204, xoá cookie phiên) rồi nạp
+ * lại trang từ `/` — mọi state trong bộ nhớ (cache query, form dở) thuộc về
  * người vừa đăng xuất nên phải bỏ hết, không được giữ lại cho người kế tiếp.
  */
 export function useLogout(

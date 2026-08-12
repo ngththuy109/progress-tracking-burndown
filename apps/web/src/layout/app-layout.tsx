@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { ADMIN_NAV_ITEMS, DEFAULT_PROJECT_SUB, NAV_ITEMS } from './nav-items.js';
+import { useAuthMode, useLogout } from '../api/use-auth-mode.js';
 import { useMe } from '../api/use-me.js';
 import { projectPath, writeLastProject } from '../project/project-context.js';
 import { Badge, type BadgeTone } from '../components/ui/index.js';
@@ -28,6 +29,8 @@ export function AppLayout() {
   const currentSub = match?.params['*'] ?? '';
 
   const me = useMe();
+  const authMode = useAuthMode();
+  const logout = useLogout();
   const isAdmin = me.data?.isAdmin === true;
   const projects = me.data?.projects ?? [];
   const membership = projects.find((p) => p.projectKey === projectKey);
@@ -156,6 +159,18 @@ export function AppLayout() {
                 <Badge tone={ROLE_TONE['ADMIN'] ?? 'neutral'}>ADMIN</Badge>
               ) : (
                 role !== null && <Badge tone={ROLE_TONE[role] ?? 'neutral'}>{role}</Badge>
+              )}
+              {/* CHỈ ở mode LDAP mới có phiên trong app để mà đăng xuất; ở mode
+                  HEADER phiên do cổng/proxy giữ, nút này chỉ gây hiểu lầm. */}
+              {authMode.data?.mode === 'LDAP' && (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={logout.isPending}
+                  onClick={() => logout.mutate()}
+                >
+                  {logout.isPending ? 'Đang đăng xuất…' : 'Đăng xuất'}
+                </button>
               )}
             </div>
           )}

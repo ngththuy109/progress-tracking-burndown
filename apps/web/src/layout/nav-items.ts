@@ -110,6 +110,12 @@ export const ADMIN_NAV_ITEMS: readonly AdminNavItem[] = [
     icon: '👤',
     summary: 'Grant global Admin/Member access. Per-project roles live on the Projects screen.',
   },
+  {
+    path: '/admin/ldap',
+    label: 'LDAP',
+    icon: '🔐',
+    summary: 'Cấu hình đăng nhập LDAP trong app: máy chủ, cách xác định user, test kết nối.',
+  },
 ];
 
 /** Trang con mặc định khi mở một dự án (`/p/:key` → `/p/:key/epics`). */

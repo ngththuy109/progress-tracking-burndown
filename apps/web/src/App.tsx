@@ -28,8 +28,8 @@ export function App() {
         {({ reset }) => (
           <ErrorBoundary onReset={reset}>
             <BrowserRouter>
-              {/* Chế độ OIDC + chưa đăng nhập → thay cả app bằng màn hình
-                  "Đăng nhập bằng SSO". Chế độ HEADER giữ nguyên hành vi cũ. */}
+              {/* Chế độ LDAP + chưa đăng nhập → thay cả app bằng form đăng
+                  nhập tên/mật khẩu. Chế độ HEADER giữ nguyên hành vi cũ. */}
               <AuthGate>
                 <AppRoutes />
               </AuthGate>

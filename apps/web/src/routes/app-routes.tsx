@@ -14,6 +14,7 @@ import { HolidaysScreen } from './config-holidays/index.js';
 import { OpsScreen } from './ops/index.js';
 import { AdminUsersScreen } from './admin-users/index.js';
 import { AdminProjectsScreen } from './admin-projects/index.js';
+import { AdminLdapScreen } from './admin-ldap/index.js';
 
 /**
  * Bảng định tuyến — bản multi-tenant.
@@ -48,6 +49,7 @@ export function AppRoutes() {
 
         <Route path="admin/projects" element={<AdminProjectsScreen />} />
         <Route path="admin/users" element={<AdminUsersScreen />} />
+        <Route path="admin/ldap" element={<AdminLdapScreen />} />
 
         <Route
           path="*"
