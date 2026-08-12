@@ -160,3 +160,46 @@ describe('buildRecords — siết trường Sub-task cho vừa cột VARCHAR', (
     expect(stable(a.issues)).toBe(stable(b.issues));
   });
 });
+
+/**
+ * Vòng 2 (DYNAMIC-TIERS-DESIGN.md §5): ingest ghi thêm `group_path` cho LÁ. Với config
+ * mặc định (một tầng PHASE/PARENT_TASK_TITLE) thì `group_path = [phase_code]` — bằng
+ * chứng "không đổi hành vi": vectơ khoá chỉ mirror đúng `phase_code` sẵn có.
+ */
+describe('buildRecords — group_path cho lá', () => {
+  it('lá: group_path = [phase_code] (config mặc định 1 tầng)', () => {
+    const built = build([
+      mkIssue('2101', 'PAY-301', '[PAY][TeamA][Development][Login]_Create', 'PAY-101'),
+    ]);
+    const sub = bySub(built, 'PAY-301');
+    expect(sub.phaseCode).toBe('DEVELOPMENT');
+    expect(sub.groupPath).toEqual(['DEVELOPMENT']);
+  });
+
+  it('Epic và Task: group_path = null (chỉ lá mang vectơ)', () => {
+    const built = build([]);
+    expect(bySub(built, 'PAY-100').groupPath).toBeNull(); // Epic
+    expect(bySub(built, 'PAY-101').groupPath).toBeNull(); // Task
+  });
+
+  it('MỌI lá đều thoả group_path == [phase_code], kể cả lá UNPARSED', () => {
+    const built = build([
+      mkIssue('2102', 'PAY-302', '[PAY][TeamA][Development][Login]_Create', 'PAY-101'),
+      mkIssue('2103', 'PAY-303', 'tiêu đề đặt sai không theo mẫu', 'PAY-101'),
+    ]);
+    const leaves = built.issues.filter((i) => i.issueType === 'SUBTASK');
+    expect(leaves).toHaveLength(2);
+    for (const rec of leaves) {
+      expect(rec.groupPath).toEqual([rec.phaseCode]);
+    }
+  });
+
+  it('lá không có Task cha ⇒ [UNCLASSIFIED] (kế thừa Phase cha, KHÔNG lấy [phase] của chính lá)', () => {
+    const built = build([
+      mkIssue('2104', 'PAY-304', '[PAY][TeamA][Development][Login]_Create'), // không truyền parent
+    ]);
+    const sub = bySub(built, 'PAY-304');
+    expect(sub.phaseCode).toBe('UNCLASSIFIED');
+    expect(sub.groupPath).toEqual(['UNCLASSIFIED']);
+  });
+});

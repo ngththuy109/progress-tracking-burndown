@@ -37,6 +37,14 @@ export interface SubtaskRecord {
   readonly key: string;
   /** Phase LẤY TỪ TASK CHA, không lấy từ tiêu đề Sub-task (PRD §2.9.2). */
   readonly phaseCode: string;
+  /**
+   * Vectơ khoá nhóm theo tầng — `jira_issue.group_path` (DYNAMIC-TIERS-DESIGN.md).
+   *
+   * Một phần tử cho mỗi tầng nhóm, theo `tierOrder`; phần tử tại tầng `role=PHASE`
+   * BẰNG `phaseCode`. VẮNG (config mặc định 1 tầng, hoặc dữ liệu chưa backfill) ⇒
+   * engine tự suy `[phaseCode]` qua `groupPathOf`. Nhờ vậy mọi lối cũ vẫn chạy y hệt.
+   */
+  readonly groupPath?: readonly string[];
   readonly originalEstimateSeconds: number;
   readonly createdAtMs: number;
   /** null = còn trong Epic. */

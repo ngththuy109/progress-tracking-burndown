@@ -23,6 +23,7 @@ export * from './calendar.js';
 export * from './actual-dates.js';
 export * from './signboard.js';
 export * from './phase-rollup.js';
+export * from './group-rollup.js';
 export * from './snapshot.js';
 export * from './api-burndown.js';
 export * from './api-phase-subtasks.js';

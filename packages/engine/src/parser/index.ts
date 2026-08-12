@@ -20,3 +20,9 @@ export {
 } from './parse-task-title.js';
 export { toFunctionKey } from './function-key.js';
 export { SubtaskTitleParser } from './parse-subtask-title.js';
+export { groupPathOf, comparePaths } from './group-path.js';
+export {
+  GroupKeyResolver,
+  type ResolvedGroupKeys,
+  type ResolveGroupKeysInput,
+} from './resolve-group-keys.js';

@@ -1,6 +1,6 @@
 import type { EffectiveConfig, SubtaskParseResult } from '@app/shared';
 import { UNCLASSIFIED_PHASE } from '@app/shared';
-import { SubtaskTitleParser, TaskTitleParser } from '@app/engine';
+import { GroupKeyResolver, SubtaskTitleParser, TaskTitleParser } from '@app/engine';
 import { readWbsDates, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
 import type { EpicTree } from './fetch-epic-tree.js';
 
@@ -22,6 +22,12 @@ export interface IssueRecord {
   epicKey: string | null;
   summary: string;
   phaseCode: string | null;
+  /**
+   * Vectơ khoá nhóm theo tầng (DYNAMIC-TIERS-DESIGN.md §4.2) — chỉ LÁ mang, Epic/Task
+   * để `null`. Config mặc định 1 tầng ⇒ `[phaseCode]`. `phaseCode` giữ = phần tử tầng
+   * Phase để tương thích ngược (Signboard, lọc theo Phase, ~74 file tham chiếu).
+   */
+  groupPath: string[] | null;
   rawPhaseLabel: string | null;
   statusId: string;
   statusCategory: string;
@@ -182,6 +188,8 @@ export function buildRecords(args: {
 
   const taskParser = new TaskTitleParser(config);
   const subtaskParser = new SubtaskTitleParser(config);
+  // Suy vectơ khoá nhóm N tầng cho lá. Dựng SẴN một lần (biên dịch mẫu từng tầng).
+  const groupResolver = new GroupKeyResolver(config);
 
   const issues: IssueRecord[] = [];
   const phaseOfTask = new Map<string, string>();
@@ -207,16 +215,23 @@ export function buildRecords(args: {
     // của chính nó (PRD §2.9.2). Cây Jira là cấu trúc thật, tiêu đề chỉ là chữ.
     const parentKey = parentKeyOf(s.fields);
     const parentPhase = (parentKey ? phaseOfTask.get(parentKey) : undefined) ?? UNCLASSIFIED_PHASE;
+    const summary = stringField(s.fields['summary']);
 
-    const parsed = subtaskParser.parse(stringField(s.fields['summary']), parentPhase);
+    const parsed = subtaskParser.parse(summary, parentPhase);
     warnings.push(...parsed.warnings);
+
+    // Vectơ khoá nhóm N tầng (DYNAMIC-TIERS-DESIGN.md §5). Config mặc định (1 tầng
+    // PHASE/PARENT_TASK_TITLE) ⇒ groupPath = [parentPhase] và phaseCode = parentPhase —
+    // ĐÚNG bằng `parsed.phaseCode` hôm nay (Sub-task luôn kế thừa Phase của Task cha).
+    const keys = groupResolver.resolve({ parentPhase, leafTitle: summary });
 
     issues.push({
       ...baseRecord(s, ISSUE_TYPE.SUBTASK, epicKey, fields),
       // `UNPARSED` KHÔNG có nghĩa là bỏ qua Sub-task này. Nó vẫn được ghi đầy đủ
       // và vẫn cộng dồn vào Burndown (C-11, PRD E-27) — chỉ là không lên được
       // bảng Signboard.
-      phaseCode: parsed.phaseCode,
+      phaseCode: keys.phaseCode,
+      groupPath: keys.groupPath,
       rawPhaseLabel: null,
       // Sáu trường bóc từ tiêu đề được siết cho vừa cột VARCHAR NGAY TẠI ĐÂY.
       // Một tiêu đề dài bất thường mà không siết sẽ làm cả lượt đồng bộ Epic đổ
@@ -297,6 +312,8 @@ function baseRecord(
     epicKey,
     summary: stringField(f['summary']),
     phaseCode: null,
+    // Chỉ LÁ mang vectơ khoá nhóm; Epic/Task để `null` (vòng Sub-task ghi đè).
+    groupPath: null,
     rawPhaseLabel: null,
     statusId: status?.id ?? '',
     // CHỈ đọc `statusCategory.key` (C-4). `status.name` là tiếng Nhật và admin

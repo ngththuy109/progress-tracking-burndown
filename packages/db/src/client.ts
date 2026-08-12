@@ -2,7 +2,10 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
 export { PrismaClient };
-export type { Prisma } from '@prisma/client';
+// Value export (không phải `export type`): `Prisma` là namespace CÓ giá trị runtime
+// (`Prisma.DbNull`, `Prisma.JsonNull`…) cần khi ghi cột JSONB nullable. Mọi nơi dùng
+// nó như KIỂU vẫn `import type { Prisma }` như cũ — không phá vỡ gì.
+export { Prisma } from '@prisma/client';
 
 /**
  * Tạo một `PrismaClient` chạy qua **driver adapter `pg`** thay cho native query

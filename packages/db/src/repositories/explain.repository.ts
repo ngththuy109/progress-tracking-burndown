@@ -14,6 +14,8 @@ interface IssueRow {
   issue_key: string;
   summary: string | null;
   phase_code: string | null;
+  /** JSONB — driver `pg` trả về mảng đã parse (hoặc `null`). Vectơ khoá nhóm N tầng. */
+  group_path: unknown;
   original_estimate_seconds: bigint | number | null;
   created_at: Date;
   removed_at: Date | null;
@@ -56,7 +58,7 @@ export async function loadExplainBundle(
 ): Promise<ExplainBundle> {
   const [issues, changelog, worklogs] = await Promise.all([
     prisma.$queryRawUnsafe<IssueRow[]>(
-      `SELECT issue_key, summary, phase_code, original_estimate_s AS original_estimate_seconds,
+      `SELECT issue_key, summary, phase_code, group_path, original_estimate_s AS original_estimate_seconds,
               jira_created_at AS created_at, removed_at, wbs_start_date, wbs_end_date
          FROM jira_issue
         WHERE epic_key = $1 AND issue_type = 'SUBTASK'`,
@@ -119,9 +121,13 @@ export async function loadExplainBundle(
   const summaries: Record<string, string> = {};
   const subtasks: SubtaskRecord[] = issues.map((i) => {
     summaries[i.issue_key] = i.summary ?? i.issue_key;
+    const gp = i.group_path;
     return {
       key: i.issue_key,
       phaseCode: i.phase_code ?? 'UNCLASSIFIED',
+      // Vectơ khoá nhóm N tầng nếu đã backfill; vắng ⇒ engine tự suy `[phaseCode]`.
+      // `exactOptionalPropertyTypes`: chỉ đặt trường khi CÓ mảng, không đặt `undefined`.
+      ...(Array.isArray(gp) && gp.length > 0 ? { groupPath: gp as string[] } : {}),
       originalEstimateSeconds: n(i.original_estimate_seconds),
       createdAtMs: i.created_at.getTime(),
       removedAtMs: i.removed_at?.getTime() ?? null,

@@ -88,6 +88,8 @@ export function buildSubtask(spec: FixtureSubtask): SubtaskRecord {
 export interface MakeSubtaskOptions {
   readonly key?: string;
   readonly phaseCode?: string;
+  /** Vectơ khoá nhóm N tầng (test compute-group-rollups / build-tier-snapshot). */
+  readonly groupPath?: readonly string[];
   readonly originalEstimateSeconds?: number;
   readonly createdAt?: string;
   readonly removedAt?: string | null;
@@ -99,7 +101,7 @@ export interface MakeSubtaskOptions {
 
 /** Sub-task tối giản: có đủ trường bắt buộc, mọi thứ khác nhận mặc định. */
 export function makeSubtask(options: MakeSubtaskOptions = {}): SubtaskRecord {
-  return buildSubtask({
+  const base = buildSubtask({
     key: options.key ?? 'X-1',
     phaseCode: options.phaseCode ?? 'DESIGN',
     originalEstimateSeconds: options.originalEstimateSeconds ?? 28_800,
@@ -110,6 +112,9 @@ export function makeSubtask(options: MakeSubtaskOptions = {}): SubtaskRecord {
     ...(options.changelog === undefined ? {} : { changelog: options.changelog }),
     ...(options.worklogs === undefined ? {} : { worklogs: options.worklogs }),
   });
+  // `groupPath` không thuộc `FixtureSubtask` (golden JSON không mang tầng) — gắn thêm ở
+  // đây để test N tầng dựng được lá có vectơ khoá, mà không đụng kiểu fixture.
+  return options.groupPath === undefined ? base : { ...base, groupPath: options.groupPath };
 }
 
 /** Chuyển trạng thái: `status` từ id này sang id kia. */

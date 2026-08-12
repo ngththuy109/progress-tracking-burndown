@@ -10,10 +10,7 @@ import type {
 } from '@app/shared';
 import { endOfDayUtcMs } from '../calendar/end-of-day.js';
 import { computePlannedRemaining } from '../planned/compute-planned-remaining.js';
-import { resolveHistoricalRemaining } from '../remaining/resolve-historical-remaining.js';
-import { resolveOriginalEstimateAt } from '../remaining/resolve-original-estimate-at.js';
-import { totalSpentTill } from '../remaining/total-spent-till.js';
-import { resolveStatusCategoryAt } from '../status/resolve-status-category.js';
+import { accumulateLeafAtDay } from './accumulate-leaf.js';
 
 /**
  * Dựng một dòng `daily_snapshot` — PRD §2.4, §4.4.
@@ -91,10 +88,12 @@ export function buildSnapshotForDay(args: BuildSnapshotArgs): DailySnapshotData 
   let countDone = 0;
 
   for (const sub of active) {
-    const remaining = resolveHistoricalRemaining(sub, T, statusIdMap, args.onWarning).seconds;
-    const spent = totalSpentTill(sub, T);
-    const original = resolveOriginalEstimateAt(sub, T, args.onWarning).seconds;
-    const category = resolveStatusCategoryAt(sub.changelog, statusIdMap, T, args.onWarning);
+    const { remaining, spent, original, category } = accumulateLeafAtDay(
+      sub,
+      T,
+      statusIdMap,
+      args.onWarning,
+    );
 
     actualRemainingS += remaining;
     totalSpentS += spent;

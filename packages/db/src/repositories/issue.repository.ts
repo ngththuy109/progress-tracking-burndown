@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from '../client.js';
+import { Prisma } from '../client.js';
+import type { PrismaClient } from '../client.js';
 
 /**
  * Ghi cây issue — PRD §4.2.
@@ -15,6 +16,8 @@ export interface IssueUpsertRow {
   epicKey: string | null;
   summary: string;
   phaseCode: string | null;
+  /** Vectơ khoá nhóm N tầng cho LÁ (DYNAMIC-TIERS-DESIGN.md §4.2); `null` cho Epic/Task. */
+  groupPath: string[] | null;
   rawPhaseLabel: string | null;
   statusId: string;
   statusCategory: string;
@@ -58,6 +61,9 @@ export async function upsertIssues(
       epicKey: r.epicKey,
       summary: r.summary,
       phaseCode: r.phaseCode,
+      // Cột JSONB nullable: mảng ⇒ ghi thẳng; `null` ⇒ `Prisma.DbNull` (SQL NULL, KHÔNG
+      // phải JSON `null`). Truyền `null` trần vào cột Json nullable là lỗi kiểu ở Prisma.
+      groupPath: r.groupPath === null ? Prisma.DbNull : r.groupPath,
       rawPhaseLabel: r.rawPhaseLabel,
       statusId: r.statusId,
       statusCategory: r.statusCategory,
