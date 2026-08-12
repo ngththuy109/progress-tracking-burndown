@@ -230,6 +230,35 @@
   .mini-track { background: var(--surface-2); border-radius: 5px; height: 8px; overflow: hidden; }
   .mini-fill { height: 100%; border-radius: 5px; }
   .note { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; padding: 10px 13px; font-size: 12.5px; color: var(--ink); margin-top: 14px; }
+
+  /* ----- Guideline bar + modal ----- */
+  .glbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 12px; padding: 11px 15px; margin-bottom: 18px; font-size: 13px; }
+  .glbar .gi { font-size: 15px; }
+  .glbar b { font-weight: 640; }
+  .glbar .glspace { margin-left: auto; }
+  .gllink { font: inherit; font-size: 13px; font-weight: 620; color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 8px; padding: 7px 13px; cursor: pointer; white-space: nowrap; }
+  .gllink:hover { filter: brightness(1.06); }
+  .gllink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(8, 12, 18, .55); display: none; z-index: 60; padding: 22px; overflow-y: auto; }
+  .modal-backdrop.open { display: block; }
+  .modal { max-width: 720px; margin: 20px auto; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 70px -24px rgba(0, 0, 0, .55); overflow: hidden; }
+  .modal-hd { display: flex; align-items: center; gap: 12px; padding: 17px 22px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+  .modal-hd .eyebrow { margin-bottom: 2px; }
+  .modal-hd h3 { margin: 0; font-size: 16px; font-weight: 680; letter-spacing: -.01em; }
+  .modal-close { margin-left: auto; font: inherit; font-size: 18px; line-height: 1; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; flex: none; }
+  .modal-close:hover { color: var(--ink); }
+  .modal-bd { padding: 18px 22px 24px; }
+  .gl-intro { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+  .gl-step { display: grid; grid-template-columns: 30px 1fr; gap: 14px; padding: 13px 0; border-top: 1px solid var(--border); }
+  .gl-step:first-of-type { border-top: 0; }
+  .gl-num { font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--accent-ink); background: var(--accent); width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center; }
+  .gl-step h4 { margin: 2px 0 5px; font-size: 13.5px; font-weight: 640; }
+  .gl-step p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .gl-step code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; }
+  .gl-tip { border-left: 3px solid var(--st-dstart); background: color-mix(in srgb, var(--st-dstart) 10%, transparent); border-radius: 0 8px 8px 0; padding: 10px 13px; font-size: 12.5px; margin-top: 16px; }
+  .gl-ex { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; font-size: 12.5px; }
+  .gl-ex .row { display: flex; gap: 9px; align-items: baseline; }
+  .gl-ex .tag { flex: none; }
   .note b { font-weight: 640; }
   .foot { margin-top: 26px; color: var(--faint); font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
   .foot code { color: var(--muted); }
@@ -259,11 +288,8 @@
 <div class="shell">
   <nav class="side" id="side" aria-label="Điều hướng">
     <div class="navgroup">
-      <button class="navitem" data-nav="overview" aria-current="true"><span class="ic">◈</span> Tổng quan</button>
-    </div>
-    <div class="navgroup">
       <div class="gh"><span class="gn">1</span> Theo dõi tiến độ</div>
-      <button class="navitem" data-nav="epics"><span class="ic">▤</span> Epics · danh sách</button>
+      <button class="navitem" data-nav="epics" aria-current="true"><span class="ic">▤</span> Epics · danh sách</button>
       <button class="navitem" data-nav="burndown"><span class="ic">▧</span> Burndown</button>
       <button class="navitem" data-nav="signboard"><span class="ic">▦</span> Signboard</button>
       <button class="navitem" data-nav="monitoring"><span class="ic">◉</span> Monitoring</button>
@@ -279,52 +305,14 @@
   </nav>
   <main class="content">
 
-  <!-- ============ OVERVIEW ============ -->
-  <section class="view on" id="view-overview" role="tabpanel">
-    <div class="grid2">
-      <div class="card">
-        <div class="card-hd">
-          <div class="eyebrow">Nhìn tổng thể</div>
-          <h2 class="sec">Một mô hình, mọi màn hình treo vào đây</h2>
-          <p class="lead">Toàn bộ cấu hình của hệ thống quy về một cây: <b>scope → các tầng → lá</b>. Các màn hình quản trị hiện tại là <b>trình sửa của từng phần</b> trong cây này.</p>
-        </div>
-        <div class="card-bd">
-          <div class="map" id="mapBox"></div>
-        </div>
-      </div>
-
-      <div class="stack">
-        <div class="card">
-          <div class="card-hd">
-            <div class="eyebrow plain">Màn hình hiện tại nằm ở đâu</div>
-            <h2 class="sec">Ánh xạ hôm nay → mô hình mới</h2>
-          </div>
-          <div class="card-bd tbl-scroll">
-            <table class="t">
-              <thead><tr><th>Màn hình hiện tại</th><th>Trong mô hình N tầng</th></tr></thead>
-              <tbody>
-                <tr><td><b>Phase settings</b><div class="now">mẫu tiêu đề · danh sách Phase · luật từ khoá</div></td><td>Trình sửa của <b>một tầng</b>. Hôm nay chỉ có cho tầng Phase; giờ mỗi tầng đều có.</td></tr>
-                <tr><td><b>Signboard columns</b><div class="now">cột loại task · mẫu tiêu đề Sub-task · thứ tự Sub-phase</div></td><td>Vẫn gắn <b>tầng Phase</b> + parse lá (Signboard là tính năng của tầng Phase).</td></tr>
-                <tr><td><b>Burndown</b><div class="now">đường KH/thực tế, per-phase</div></td><td>Không đổi; thêm <b>drill-down</b> theo tầng bất kỳ.</td></tr>
-                <tr><td><b>Signboard</b><div class="now">bảng trạng thái</div></td><td>Không đổi khái niệm — lưới Phase × loại task.</td></tr>
-                <tr><td><b>Epics (sổ theo dõi)</b><div class="now">đăng ký Epic</div></td><td>Thành <b>tracked scope</b>: CONTAINER (issue) hoặc QUERY (JQL) + <code>leaf_issue_types</code>.</td></tr>
-                <tr><td><b>Monitoring</b><div class="now">sync runs · data quality</div></td><td>Chạy theo <b>tracked scope</b>; data-quality (UNCLASSIFIED) đo theo <b>từng tầng</b>.</td></tr>
-                <tr><td><b>Users &amp; roles</b><div class="now">ADMIN / PM / VIEWER</div></td><td>Gần như không đổi; thêm quyền <b>sửa cấu hình tầng</b> &amp; đăng ký scope.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-bd">
-            <div class="note"><b>Đọc demo:</b> đổi <b>dạng dự án</b> ở góc phải trên (3 tầng / 2 tầng / phẳng) — mọi màn hình bên dưới đổi theo. Mở lần lượt 6 tab để thấy cùng một cấu hình chảy từ lúc khai đến lúc vẽ.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ============ CONFIG (tiers) ============ -->
   <section class="view" id="view-config" role="tabpanel">
+    <div class="glbar">
+      <span class="gi">📖</span>
+      <span><b>Chưa biết bắt đầu từ đâu?</b> Xem hướng dẫn từng bước thiết lập cấu hình phân tầng cho một dự án.</span>
+      <span class="glspace"></span>
+      <button class="gllink" id="openGuide" type="button">Mở hướng dẫn cấu hình →</button>
+    </div>
     <div class="grid2">
       <div class="stack">
         <div class="card">
@@ -447,7 +435,7 @@
   </section>
 
   <!-- ============ EPICS / SCOPES ============ -->
-  <section class="view" id="view-epics" role="tabpanel">
+  <section class="view on" id="view-epics" role="tabpanel">
     <div class="card">
       <div class="card-hd">
         <div class="eyebrow">Vận hành · sổ theo dõi</div>
@@ -521,6 +509,45 @@
     <span>Cùng một engine cộng dồn (<code>groupBy(khoá tầng của lá)</code>) phục vụ cả 3 dạng — khác nhau chỉ ở <b>selector</b>, <b>số tầng</b>, <b>nguồn khoá</b>. Thiết kế: <code>docs/DYNAMIC-TIERS-DESIGN.md</code>.</span>
   </div>
   </main>
+</div>
+
+<div class="modal-backdrop" id="guideModal" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+  <div class="modal">
+    <div class="modal-hd">
+      <div>
+        <div class="eyebrow">Hướng dẫn</div>
+        <h3 id="guideTitle">Thiết lập cấu hình phân tầng cho dự án</h3>
+      </div>
+      <button class="modal-close" id="closeGuide" type="button" aria-label="Đóng">×</button>
+    </div>
+    <div class="modal-bd">
+      <p class="gl-intro">Cấu hình trả lời 3 câu: <b>theo dõi cái gì</b>, <b>gom nhóm theo mấy tầng</b>, và <b>mỗi tầng lấy khoá từ đâu</b>. Làm lần lượt:</p>
+
+      <div class="gl-step"><div class="gl-num">1</div><div><h4>Chọn phạm vi theo dõi (tracked scope)</h4><p>Có ticket cha → <code>CONTAINER</code> (dán key Epic/Task). Dự án phẳng, không cha → <code>QUERY</code> (viết JQL). Khai <code>loại issue lá</code> — tầng mang số liệu (est/worklog).</p></div></div>
+
+      <div class="gl-step"><div class="gl-num">2</div><div><h4>Khai các tầng nhóm (1..N), từ trên xuống</h4><p>Mỗi tầng đặt tên + chọn <b>nguồn khoá</b>: <code>title Task cha</code>, <code>title của lá</code>, <code>token tiêu đề</code>, hay <code>label</code>. Kéo–thả để đổi thứ tự. Ít nhất 1 tầng.</p></div></div>
+
+      <div class="gl-step"><div class="gl-num">3</div><div><h4>Đánh dấu đúng MỘT tầng là Phase</h4><p>Tầng Phase giữ các tính năng theo Phase: Signboard, đường kế hoạch per-phase, cảnh báo dịch chuyển kế hoạch. Các tầng khác chỉ để nhóm &amp; cộng dồn.</p></div></div>
+
+      <div class="gl-step"><div class="gl-num">4</div><div><h4>Với tầng lấy từ tiêu đề: thêm mẫu &amp; luật</h4><p>Khai <b>mẫu tiêu đề</b> (VD <code>[Phase] {name}</code>) và <b>luật từ khoá → mã</b>. Bật ô <i>fallback</i> để bắt tiêu đề không có tiền tố. Dùng <b>Xem thử</b> để kiểm ngay, không cần chờ sync.</p></div></div>
+
+      <div class="gl-step"><div class="gl-num">5</div><div><h4>Cấu hình Signboard columns (cho tầng Phase)</h4><p>Khai <b>loại task</b> (Create/Review/Fix…), phía làm <code>VN</code>/<code>JP</code>, <b>mẫu tiêu đề Sub-task</b> để bóc token, và <b>thứ tự Sub-phase</b>.</p></div></div>
+
+      <div class="gl-step"><div class="gl-num">6</div><div><h4>Gắn lịch làm việc</h4><p>Chọn lịch (VN/JP) cho scope ở màn <b>Ngày nghỉ</b>: ngày công, giờ/ngày, ngày nghỉ lễ, ngày làm bù — quyết định cách tính đường kế hoạch.</p></div></div>
+
+      <div class="gl-step"><div class="gl-num">7</div><div><h4>Xem thử → Lưu</h4><p>Đối chiếu <code>group_path</code> ở Xem thử. Lưu xong hệ thống tự backfill (tối đa ~1 giờ); muốn thấy ngay thì <b>Resync mức Toàn bộ</b> cho các scope liên quan.</p></div></div>
+
+      <div class="gl-tip"><b>Nguyên tắc vàng:</b> chỉ <b>tầng lá</b> mang số liệu thật (estimate/worklog/ngày). Tầng nhóm — kể cả Phase — không tự có số; số của chúng là <b>tổng cộng dồn</b> từ lá lên.</div>
+
+      <div class="gl-ex">
+        <div class="row"><span class="tag">3 tầng</span><span><code>CONTAINER(Epic)</code> · 1 tầng Phase (nguồn = title Task cha) · lá = Sub-task.</span></div>
+        <div class="row"><span class="tag">2 tầng</span><span><code>CONTAINER(Task)</code> · 1 tầng Phase (nguồn = title của lá) · lá = Sub-task.</span></div>
+        <div class="row"><span class="tag">Phẳng</span><span><code>QUERY(jql)</code> · 3 tầng Project/Phase/Sub-phase (đều bóc token từ title) · lá = Task.</span></div>
+      </div>
+
+      <p class="hint" style="margin-top:16px">Chi tiết kỹ thuật &amp; quyết định thiết kế: <code>docs/DYNAMIC-TIERS-DESIGN.md</code>.</p>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1005,13 +1032,13 @@
 
   // ---------- master ----------
   function renderAll() {
-    renderMap(); renderScope(); renderTiers(); renderPreview();
+    renderScope(); renderTiers(); renderPreview();
     renderTierEditSelect(); renderEditor(); renderSbCol();
     renderDrill(); var t = renderStats(); renderBurnChart(t.scope, t.rem); renderBars();
     renderSignboard();
     renderEpics(); renderMonitoring(); renderUsers(); renderHolidays();
   }
-  var VIEWS = ["overview", "config", "phase", "sbcol", "epics", "monitoring", "users", "holidays", "burndown", "signboard"];
+  var VIEWS = ["epics", "burndown", "signboard", "monitoring", "config", "phase", "sbcol", "holidays", "users"];
   function switchView(id) {
     state.tab = id;
     Array.prototype.forEach.call($("side").querySelectorAll(".navitem"), function (x) { x.setAttribute("aria-current", x.dataset.nav === id ? "true" : "false"); });
@@ -1028,6 +1055,11 @@
   $("drillSel").addEventListener("change", function () { state.drill = parseInt(this.value, 10); renderBars(); });
   $("tierEditSel").addEventListener("change", function () { state.editTier = parseInt(this.value, 10); renderEditor(); });
   $("calSel").addEventListener("change", function () { state.cal = this.value; renderHolidays(); });
+  function toggleGuide(open) { $("guideModal").classList.toggle("open", open); }
+  $("openGuide").addEventListener("click", function () { toggleGuide(true); });
+  $("closeGuide").addEventListener("click", function () { toggleGuide(false); });
+  $("guideModal").addEventListener("click", function (e) { if (e.target === this) toggleGuide(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") toggleGuide(false); });
   document.addEventListener("click", function (e) {
     var g = e.target.closest("[data-goto]"); if (!g) return;
     if (g.dataset.tier != null) state.editTier = parseInt(g.dataset.tier, 10);
