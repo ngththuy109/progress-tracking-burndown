@@ -697,6 +697,17 @@ fieldset.field > legend {
 
 /* --- Bảng Signboard ------------------------------------------------------ */
 
+/* Chọn nhiều Phase: mỗi Phase một bảng, có tiêu đề và vạch ngăn để tách rõ
+   ranh giới giữa các bảng khi xếp chồng. */
+.signboard-phase__title {
+  margin: 0;
+  font-size: 16px;
+}
+.signboard-phase + .signboard-phase {
+  border-top: 1px solid var(--border);
+  padding-top: var(--gap);
+}
+
 .signboard__sticky {
   position: sticky;
   left: 0;

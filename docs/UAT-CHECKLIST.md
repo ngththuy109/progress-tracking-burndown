@@ -53,6 +53,7 @@
 | # | User story | Thao tác | Đạt khi thấy | ☐ |
 |---|---|---|---|---|
 | 23 | **US-13** Xem bảng | Mở Signboard của một Phase | Ma trận Function × loại task; mỗi ô có ngày kế hoạch và **chữ** nói trạng thái | ☐ |
+| 23a | **US-13** Chọn nhiều Phase / toàn bộ Epic | Bấm thêm một Phase nữa, hoặc nút **Whole epic** | Mỗi Phase hiện MỘT bảng riêng có tiêu đề; **Whole epic** mở mọi Phase; mỗi bảng giữ thanh tóm tắt và khu *Not on the board* của CHÍNH nó, không trộn số liệu | ☐ |
 | 24 | **US-13** Lọc theo trạng thái | Bấm một mục trên thanh tóm tắt | Các ô khác **mờ đi**, kèm dòng chữ nói rõ *"không phải mất"*. Bấm lần nữa thì bỏ lọc | ☐ |
 | 25 | **US-14** Ô gộp nhiều ticket | Tìm ô có huy hiệu `≡N` | Rê chuột thấy danh sách từng ticket kèm trạng thái riêng; ô mang trạng thái **xấu nhất** | ☐ |
 | 26 | **US-15** Phân biệt ô trống và thiếu ngày | So một ô `—` với một ô *No planned dates* | Hai thứ **khác hẳn nhau**: ô trống là không có việc đó, ô kia là có việc nhưng thiếu ngày | ☐ |
