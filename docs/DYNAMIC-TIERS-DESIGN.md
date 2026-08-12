@@ -68,10 +68,12 @@ khoá theo thứ tự `groupKeys: string[]`**, và đánh dấu một phần t�
 
 ### 2.1. Bất biến (từ quyết định #2) — cố định VAI TRÒ, không cố định loại issue
 
-- **Gốc** = **đơn vị theo dõi được đăng ký** (issue Jira BẤT KỲ loại — Epic, hay
-  Task đóng vai "Project", hay Story…). Luôn trên cùng. Có `tracked_epic`, có
-  `daily_snapshot`, vẽ burndown. *Loại issue và **độ sâu vật lý** của cây Jira bên
-  dưới nó là linh động* — xem [§2.4](#24-ví-dụ-project-2-tầng-task--sub-task).
+- **Gốc** = **đơn vị theo dõi được đăng ký** — **hoặc** một issue container (Epic,
+  Task đóng vai "Project", Story…) mà lá là hậu duệ của nó, **hoặc** — khi cây
+  **phẳng** không có container — **một phạm vi truy vấn (JQL)** mà lá là các ticket
+  khớp. Luôn trên cùng. Có `daily_snapshot`, vẽ burndown. *Loại issue và **độ sâu
+  vật lý** của cây Jira là linh động* — xem [§2.4](#24-ví-dụ-project-2-tầng-task--sub-task)
+  và [§2.5](#25-ví-dụ-project-phẳng-chỉ-có-task-mọi-tầng-bóc-từ-title).
 - **Lá** = đơn vị mang số liệu (estimate/worklog/`wbs_*`/status). Luôn dưới cùng.
   Cộng dồn chảy **từ lá lên**. "Lá" = issue mang số liệu, xác định theo cấu hình
   (loại issue lá, hoặc "issue không có con") — KHÔNG cứng là "Sub-task".
@@ -162,6 +164,37 @@ và burndown-by-phase như thường. **Không cần Epic, không cần tầng T
 của thiết kế — chỉ cần ingest linh động độ sâu và cho đăng ký gốc là issue bất kỳ
 (xem [§6](#6-thay-đổi-ingestpipeline-appsworker)).
 
+### 2.5. Ví dụ: project phẳng (chỉ có Task, mọi tầng bóc từ title)
+
+Kịch bản: Jira **KHÔNG có phân cấp** — chỉ một rổ ticket **Task phẳng**. Mỗi Task tự
+mang số liệu (est/worklog) → **Task CHÍNH LÀ lá**. Project, Phase, Sub-phase đều bóc
+từ `summary` của cùng ticket đó. Tính toán gom nhóm theo **Phase**.
+
+```
+Title ví dụ:  "[PAY][Design][Screen] Vẽ màn hình thanh toán"
+
+tracked scope = QUERY( jql: "project = PAY AND type = Task" )   ← KHÔNG có issue container
+tiers = [
+  { tierOrder:1, code:"PROJECT",  role:GROUP, source:SELF_TITLE, token:{project}  },
+  { tierOrder:2, code:"PHASE",    role:PHASE, source:SELF_TITLE, token:{phase}    },
+  { tierOrder:3, code:"SUBPHASE", role:GROUP, source:SELF_TITLE, token:{subphase} },
+]
+leaf = Task   (loại issue lá khai trong config)
+```
+
+**Kết quả:** mỗi Task `groupKeys = ["PAY","DESIGN","SCREEN"]`. Engine `groupBy` tầng
+Phase → cộng dồn → Burndown; drill-down `PROJECT → PHASE → SUBPHASE`. **Không có Epic,
+không có bất kỳ ticket container nào** — phạm vi theo dõi định nghĩa bằng **JQL**.
+
+Khác biệt so với 2 ví dụ trên: gốc là **`QUERY` selector**, không phải một issue.
+Đây là mức tổng quát cao nhất trong ba case — và là lý do cần khái niệm **"tracked
+scope"** ở [§6](#6-thay-đổi-ingestpipeline-appsworker).
+
+> **Một quyết định phải chốt cho case phẳng** (câu hỏi mở #8): burndown vẽ theo đơn
+> vị nào? **(A)** một burndown / mỗi giá trị "Project" bóc từ title (tự tách, nếu 1
+> JQL chứa nhiều Project), hay **(B)** một burndown cho cả phạm vi, "Project" chỉ là
+> một tầng drill-down.
+
 ---
 
 ## 3. Ánh xạ 3-tầng-hiện-tại → cấu hình mặc định
@@ -240,17 +273,26 @@ thêm golden cho n=1 (phẳng) và n=3.
 
 ## 6. Thay đổi ingest/pipeline (`apps/worker`)
 
-- **Đăng ký gốc là issue BẤT KỲ loại.** `tracked_epic` hiện đăng ký một Epic; cần
-  cho đăng ký một issue bất kỳ (Epic, hay Task đóng vai Project — §2.4). Giữ tên
-  cột/bảng `tracked_epic`/`epic_key` cho tương thích, nhưng ngữ nghĩa là "tracked
-  root". `POST /api/epics/validate|browse` cũng phải chấp nhận loại issue theo cấu
-  hình project, không chỉ Epic.
-- **Ingest linh động độ sâu vật lý.** `fetch-epic-tree.ts` đang cứng 2 query giả
-  định đúng Epic→Task→Sub-task. Phải tổng quát: gom **gốc + toàn bộ hậu duệ**, rồi
-  **xác định LÁ** = issue mang số liệu theo cấu hình (loại issue lá đã khai, hoặc
-  "issue không có con"). Case 2 tầng: gốc Task → con trực tiếp chính là lá (bỏ query
-  tầng ba). Case 3 tầng: như hiện tại. Tầng issue vật lý ở giữa (nếu có) chỉ là
-  **một nguồn** khoá tầng (`PARENT_TASK_TITLE`), không bắt buộc.
+- **Khái niệm "tracked scope" với 2 kiểu selector** (thay cho "đăng ký một Epic"):
+  `tracked_epic` hiện chỉ nhận Epic key. Tổng quát thành một selector:
+  - `CONTAINER(issueKey)` — lá = hậu duệ của issue, mọi độ sâu (Epic 3 tầng §2.1,
+    Task 2 tầng §2.4).
+  - `QUERY(jql)` — lá = ticket khớp JQL, KHÔNG cần container (project phẳng §2.5).
+
+  Giữ tên cột/bảng `tracked_epic`/`epic_key` cho tương thích, nhưng ngữ nghĩa mở
+  rộng thành "scope id". `POST /api/epics/validate|browse` cũng nới để nhận cả loại
+  issue theo cấu hình lẫn JQL, không chỉ Epic.
+- **Ingest linh động theo selector.** `fetch-epic-tree.ts` đang cứng 2 query giả
+  định đúng Epic→Task→Sub-task. Phải tổng quát theo selector rồi **xác định LÁ** =
+  issue mang số liệu theo cấu hình (loại issue lá đã khai, hoặc "issue không có
+  con"):
+  - `CONTAINER`: gom gốc + toàn bộ hậu duệ. Case 2 tầng: con trực tiếp chính là lá
+    (bỏ query tầng ba); case 3 tầng: như hiện tại.
+  - `QUERY`: chạy JQL của scope, kết quả CHÍNH LÀ lá (cây phẳng, không có tầng vật
+    lý ở giữa).
+
+  Tầng issue vật lý ở giữa (nếu có) chỉ là **một nguồn** khoá tầng
+  (`PARENT_TASK_TITLE`), không bắt buộc — cây phẳng dùng `SELF_TITLE` cho mọi tầng.
 - `persist-issues.buildRecords`: thay việc gán một `phaseCode` bằng
   `resolveGroupKeys(leaf, ancestors, config)` → ghi `group_path`; `phase_code` =
   phần tử tầng Phase. `resolveGroupKeys` điều phối các `source` (title cha / title
@@ -316,7 +358,12 @@ Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh trước khi sang v
    quát hoá cho mọi tầng (khớp #3).
 6. **Đường Kế hoạch drill-down.** Cần đường Kế hoạch cho tầng ≠ Phase khi drill-down
    không, hay chỉ Epic + Phase như hôm nay? (ảnh hưởng có làm `group_rollup` hay không)
-7. **Xác nhận cách hiểu ở §0** (full re-architecture nhưng gốc/lá/Phase vẫn cố định).
+7. **Xác nhận cách hiểu ở §0** (full re-architecture; cố định VAI TRÒ gốc/lá/Phase,
+   nhưng loại issue gốc + độ sâu + selector CONTAINER/QUERY thì linh động).
+8. **Đơn vị burndown ở case phẳng (§2.5).** **(A)** một burndown / mỗi giá trị tầng
+   trên cùng ("Project" bóc từ title, tự tách), hay **(B)** một burndown cho cả phạm
+   vi QUERY, "Project" chỉ là tầng drill-down? Ảnh hưởng: (A) cần "auto-split theo
+   tầng trên cùng" khi key snapshot; (B) mỗi scope = một burndown, đơn giản hơn.
 
 ---
 
@@ -337,3 +384,8 @@ Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh trước khi sang v
   sổ đăng ký `tracked_epic` (đang cứng Epic) phải tổng quát hoá. Rủi ro chính: query
   Jira đọc **thiếu lá** một cách im lặng nếu suy sai đâu là lá (E-nhóm liveKeys/xoá
   mềm). → có test riêng cho cây 2 tầng, và đối chiếu số lá đọc được với `/search`.
+- **R-F. `QUERY` selector cho project phẳng (case §2.5).** Đọc lá bằng JQL thay vì
+  `parent = key` là đường ingest MỚI hẳn: phân trang JQL, xoá mềm khi ticket rời
+  khỏi tập kết quả, và (nếu chọn phương án 8-A) tách một scope thành nhiều burndown
+  theo tầng trên cùng. Đây là phần nặng nhất của việc tổng quát hoá — cân nhắc tách
+  thành vòng riêng, không nhồi chung Vòng 2.
