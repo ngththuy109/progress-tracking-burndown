@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CONFIG_SCOPE, MATCH_MODE } from './enums.js';
 import { WORK_SIDE } from './api-calendar.js';
+import { groupTierSchema } from './group-config.js';
 
 /**
  * Cấu hình nhận diện Phase — PRD §2.2.
@@ -80,6 +81,10 @@ export const configPayloadSchema = z.object({
   signboardColumns: z.array(signboardColumnSchema),
   // `.default([])` để payload cũ (lưu trước khi có phần này) vẫn đọc được.
   subPhaseOrders: z.array(subPhaseOrderSchema).default([]),
+  // Phân tầng linh động N tầng (DYNAMIC-TIERS-DESIGN.md). `.optional()`: payload cũ
+  // và mọi literal cũ vẫn hợp lệ (không phải sửa test); repository sinh mirror từ
+  // phase_* khi vắng → không đổi hành vi.
+  tiers: z.array(groupTierSchema).optional(),
 });
 
 export type TitlePattern = z.infer<typeof titlePatternSchema>;
@@ -105,6 +110,7 @@ export const EMPTY_CONFIG_PAYLOAD: ConfigPayload = {
   matchRules: [],
   signboardColumns: [],
   subPhaseOrders: [],
+  tiers: [],
 };
 
 export interface ConfigSetMeta {

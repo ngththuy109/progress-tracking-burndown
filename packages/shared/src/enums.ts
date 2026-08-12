@@ -149,3 +149,28 @@ export const WARNING_CODE = [
   'FIELD_TRUNCATED',
 ] as const;
 export type WarningCode = (typeof WARNING_CODE)[number];
+
+// ---------------------------------------------------------------------------
+// Phân tầng linh động N tầng — DYNAMIC-TIERS-DESIGN.md
+//
+// Tổng quát hoá bộ phase_* (một tầng "Phase") thành 1..N tầng nhóm logic. Mã cứng
+// duy nhất vẫn là UNCLASSIFIED_PHASE (dùng chung cho tầng chưa nhận diện được).
+// ---------------------------------------------------------------------------
+
+/** Vai trò của một tầng. Đúng MỘT tầng mỗi cấu hình là PHASE (giữ Signboard/per-phase). */
+export const GROUP_TIER_ROLE = ['PHASE', 'GROUP'] as const;
+export type GroupTierRole = (typeof GROUP_TIER_ROLE)[number];
+
+/** Cách bóc khoá nhóm cho một tầng. */
+export const GROUP_SOURCE_TYPE = [
+  'PARENT_TASK_TITLE',
+  'SELF_TITLE',
+  'SUBTASK_TITLE_TOKEN',
+  'LABEL',
+  'CUSTOM_FIELD',
+] as const;
+export type GroupSourceType = (typeof GROUP_SOURCE_TYPE)[number];
+
+/** Cách một tracked scope chọn tập lá: theo issue container hay theo JQL. */
+export const SCOPE_TYPE = ['CONTAINER', 'QUERY'] as const;
+export type ScopeType = (typeof SCOPE_TYPE)[number];

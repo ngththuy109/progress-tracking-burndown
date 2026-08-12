@@ -1,5 +1,109 @@
-import type { ConfigPayload, ConfigSet, EffectiveConfig } from '@app/shared';
+import type {
+  ConfigPayload,
+  ConfigSet,
+  EffectiveConfig,
+  GroupSourceType,
+  GroupTier,
+  GroupTierRole,
+} from '@app/shared';
+import { deriveDefaultTiersFromPhase } from '@app/shared';
 import type { PrismaClient } from '../client.js';
+
+/**
+ * Gom các hàng group_tier* (phẳng, keyed theo tier_order) thành vectơ `GroupTier`.
+ * Dùng chung cho `findActiveConfigSet` và `rollbackToVersion`.
+ */
+function assembleTiers(row: {
+  readonly groupTiers: readonly {
+    tierOrder: number; code: string; labelVi: string; labelJa: string | null;
+    role: string; sourceType: string; sourceConfig: unknown; displayOrder: number;
+  }[];
+  readonly groupTierDefinitions: readonly {
+    tierOrder: number; groupCode: string; labelVi: string; labelJa: string | null;
+    colorHex: string | null; displayOrder: number;
+  }[];
+  readonly groupTierRules: readonly {
+    tierOrder: number; keyword: string; matchMode: string; groupCode: string; matchPriority: number;
+  }[];
+  readonly groupTierTitlePatterns: readonly {
+    tierOrder: number; patternText: string; sortOrder: number;
+  }[];
+}): GroupTier[] {
+  return row.groupTiers.map((t) => ({
+    tierOrder: t.tierOrder,
+    code: t.code,
+    labelVi: t.labelVi,
+    labelJa: t.labelJa,
+    role: t.role as GroupTierRole,
+    sourceType: t.sourceType as GroupSourceType,
+    sourceConfig: (t.sourceConfig as Record<string, unknown> | null) ?? null,
+    definitions: row.groupTierDefinitions
+      .filter((d) => d.tierOrder === t.tierOrder)
+      .map((d) => ({ groupCode: d.groupCode, labelVi: d.labelVi, labelJa: d.labelJa, colorHex: d.colorHex, displayOrder: d.displayOrder })),
+    rules: row.groupTierRules
+      .filter((r) => r.tierOrder === t.tierOrder)
+      .map((r) => ({ keyword: r.keyword, matchMode: r.matchMode as 'CONTAINS' | 'REGEX', groupCode: r.groupCode, matchPriority: r.matchPriority })),
+    titlePatterns: row.groupTierTitlePatterns
+      .filter((p) => p.tierOrder === t.tierOrder)
+      .map((p) => ({ patternText: p.patternText, sortOrder: p.sortOrder })),
+    displayOrder: t.displayOrder,
+  }));
+}
+
+/**
+ * Dựng phần nested-create cho group_tier* từ danh sách tầng.
+ *
+ * `source_config` CHƯA ghi ở Vòng 1 (mọi tầng mirror có sourceConfig=null; Config API
+ * cho tiers thuộc vòng sau). `compiled_regex` để rỗng — engine sinh sau (như phase_*).
+ */
+function tierCreateData(tiers: readonly GroupTier[]) {
+  return {
+    groupTiers: {
+      create: tiers.map((t) => ({
+        tierOrder: t.tierOrder,
+        code: t.code,
+        labelVi: t.labelVi,
+        labelJa: t.labelJa ?? null,
+        role: t.role,
+        sourceType: t.sourceType,
+        displayOrder: t.displayOrder,
+      })),
+    },
+    groupTierDefinitions: {
+      create: tiers.flatMap((t) =>
+        t.definitions.map((d) => ({
+          tierOrder: t.tierOrder,
+          groupCode: d.groupCode,
+          labelVi: d.labelVi,
+          labelJa: d.labelJa ?? null,
+          colorHex: d.colorHex ?? null,
+          displayOrder: d.displayOrder,
+        })),
+      ),
+    },
+    groupTierRules: {
+      create: tiers.flatMap((t) =>
+        t.rules.map((r) => ({
+          tierOrder: t.tierOrder,
+          keyword: r.keyword,
+          matchMode: r.matchMode,
+          groupCode: r.groupCode,
+          matchPriority: r.matchPriority,
+        })),
+      ),
+    },
+    groupTierTitlePatterns: {
+      create: tiers.flatMap((t) =>
+        t.titlePatterns.map((p) => ({
+          tierOrder: t.tierOrder,
+          patternText: p.patternText,
+          compiledRegex: '',
+          sortOrder: p.sortOrder,
+        })),
+      ),
+    },
+  };
+}
 
 /**
  * Kho cấu hình nhận diện Phase — PRD §2.2.
@@ -33,6 +137,10 @@ export async function findActiveConfigSet(
       matchRules: { orderBy: { matchPriority: 'asc' } },
       signboardColumns: { orderBy: { displayOrder: 'asc' } },
       subPhaseOrders: { orderBy: [{ phaseCode: 'asc' }, { displayOrder: 'asc' }] },
+      groupTiers: { orderBy: { tierOrder: 'asc' } },
+      groupTierDefinitions: { orderBy: [{ tierOrder: 'asc' }, { displayOrder: 'asc' }] },
+      groupTierRules: { orderBy: [{ tierOrder: 'asc' }, { matchPriority: 'asc' }] },
+      groupTierTitlePatterns: { orderBy: [{ tierOrder: 'asc' }, { sortOrder: 'asc' }] },
     },
   });
   if (!row) return null;
@@ -81,6 +189,7 @@ export async function findActiveConfigSet(
       subPhaseCode: s.subPhaseCode,
       displayOrder: s.displayOrder,
     })),
+    tiers: assembleTiers(row),
   };
 }
 
@@ -106,6 +215,10 @@ export async function saveNewVersion(
   cache?: ConfigCache,
 ): Promise<{ version: number; id: number }> {
   const { scope, projectKey, payload, createdBy } = args;
+
+  // Vắng/rỗng → sinh MIRROR "một tầng Phase" từ phase config (Vòng 1: không đổi hành vi).
+  const tiers =
+    payload.tiers && payload.tiers.length > 0 ? payload.tiers : deriveDefaultTiersFromPhase(payload);
 
   const result = await prisma.$transaction(async (tx) => {
     const max = await tx.phaseConfigSet.aggregate({
@@ -177,6 +290,7 @@ export async function saveNewVersion(
             displayOrder: s.displayOrder,
           })),
         },
+        ...tierCreateData(tiers),
       },
     });
 
@@ -212,6 +326,10 @@ export async function rollbackToVersion(
       matchRules: { orderBy: { matchPriority: 'asc' } },
       signboardColumns: { orderBy: { displayOrder: 'asc' } },
       subPhaseOrders: { orderBy: [{ phaseCode: 'asc' }, { displayOrder: 'asc' }] },
+      groupTiers: { orderBy: { tierOrder: 'asc' } },
+      groupTierDefinitions: { orderBy: [{ tierOrder: 'asc' }, { displayOrder: 'asc' }] },
+      groupTierRules: { orderBy: [{ tierOrder: 'asc' }, { matchPriority: 'asc' }] },
+      groupTierTitlePatterns: { orderBy: [{ tierOrder: 'asc' }, { sortOrder: 'asc' }] },
     },
   });
 
@@ -264,6 +382,7 @@ export async function rollbackToVersion(
           subPhaseCode: s.subPhaseCode,
           displayOrder: s.displayOrder,
         })),
+        tiers: assembleTiers(old),
       },
     },
     cache,

@@ -88,6 +88,53 @@ BEGIN
     (set_id, 'JMReview', 'JM review', 'JMレビュー', 'JP', 4),
     (set_id, 'FixCommentJM', 'Sửa comment JM', 'JM指摘対応', 'VN', 5);
 
+  -- Tầng nhóm (mirror phase_*) — cài mới có sẵn group_tier* (DYNAMIC-TIERS-DESIGN.md).
+  INSERT INTO group_tier (config_set_id, tier_order, code, label_vi, label_ja, role, source_type, display_order) VALUES
+    (set_id, 1, 'PHASE', 'Phase', NULL, 'PHASE', 'PARENT_TASK_TITLE', 0);
+
+  INSERT INTO group_tier_definition (config_set_id, tier_order, group_code, label_vi, label_ja, color_hex, display_order) VALUES
+    (set_id, 1, 'REQUIREMENT', 'Yêu cầu', '要件定義', '#6B7280', 1),
+    (set_id, 1, 'DESIGN', 'Thiết kế', '設計', '#4A90D9', 2),
+    (set_id, 1, 'DEVELOPMENT', 'Phát triển', '開発', '#2E9E5B', 3),
+    (set_id, 1, 'TESTING', 'Kiểm thử', 'テスト', '#E8A33D', 4),
+    (set_id, 1, 'UAT', 'Nghiệm thu', '受入テスト', '#B45FD4', 5),
+    (set_id, 1, 'RELEASE', 'Triển khai', 'リリース', '#D9534F', 6);
+
+  INSERT INTO group_tier_rule (config_set_id, tier_order, keyword, match_mode, group_code, match_priority) VALUES
+    (set_id, 1, 'Requirement', 'CONTAINS', 'REQUIREMENT', 50),
+    (set_id, 1, '要件定義', 'CONTAINS', 'REQUIREMENT', 50),
+    (set_id, 1, 'Yêu cầu', 'CONTAINS', 'REQUIREMENT', 50),
+    (set_id, 1, 'Design Review', 'CONTAINS', 'TESTING', 10),
+    (set_id, 1, 'Design', 'CONTAINS', 'DESIGN', 50),
+    (set_id, 1, '基本設計', 'CONTAINS', 'DESIGN', 50),
+    (set_id, 1, '詳細設計', 'CONTAINS', 'DESIGN', 50),
+    (set_id, 1, '設計', 'CONTAINS', 'DESIGN', 60),
+    (set_id, 1, 'Thiết kế', 'CONTAINS', 'DESIGN', 50),
+    (set_id, 1, 'Development', 'CONTAINS', 'DEVELOPMENT', 50),
+    (set_id, 1, 'Implementation', 'CONTAINS', 'DEVELOPMENT', 50),
+    (set_id, 1, 'Dev', 'CONTAINS', 'DEVELOPMENT', 70),
+    (set_id, 1, '開発', 'CONTAINS', 'DEVELOPMENT', 50),
+    (set_id, 1, '実装', 'CONTAINS', 'DEVELOPMENT', 50),
+    (set_id, 1, 'Phát triển', 'CONTAINS', 'DEVELOPMENT', 50),
+    (set_id, 1, '受入テスト', 'CONTAINS', 'UAT', 20),
+    (set_id, 1, 'UAT', 'CONTAINS', 'UAT', 20),
+    (set_id, 1, 'Nghiệm thu', 'CONTAINS', 'UAT', 20),
+    (set_id, 1, 'Testing', 'CONTAINS', 'TESTING', 50),
+    (set_id, 1, 'Test', 'CONTAINS', 'TESTING', 70),
+    (set_id, 1, 'QA', 'CONTAINS', 'TESTING', 50),
+    (set_id, 1, 'テスト', 'CONTAINS', 'TESTING', 60),
+    (set_id, 1, '試験', 'CONTAINS', 'TESTING', 50),
+    (set_id, 1, 'Kiểm thử', 'CONTAINS', 'TESTING', 50),
+    (set_id, 1, 'Release', 'CONTAINS', 'RELEASE', 50),
+    (set_id, 1, 'Deployment', 'CONTAINS', 'RELEASE', 50),
+    (set_id, 1, 'リリース', 'CONTAINS', 'RELEASE', 50),
+    (set_id, 1, '本番', 'CONTAINS', 'RELEASE', 50),
+    (set_id, 1, 'Triển khai', 'CONTAINS', 'RELEASE', 50);
+
+  INSERT INTO group_tier_title_pattern (config_set_id, tier_order, pattern_text, compiled_regex, sort_order) VALUES
+    (set_id, 1, '[Phase] {name}', '', 1),
+    (set_id, 1, '【{name}】', '', 2);
+
   RAISE NOTICE '[seed] Đã tạo bộ Mặc định (GLOBAL) version %.', next_version;
 END $$;
 

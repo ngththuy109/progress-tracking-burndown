@@ -1,3 +1,4 @@
+import { deriveDefaultTiersFromPhase } from '@app/shared';
 import { DEFAULT_CALENDARS } from './work-calendar.seed.js';
 import { DEFAULT_PHASE_CONFIG } from './default-phase-config.js';
 
@@ -57,6 +58,39 @@ export function renderDefaultConfigSql(): string {
     .map(
       (col) =>
         `    (set_id, ${q(col.taskCode)}, ${q(col.labelVi)}, ${qOrNull(col.labelJa)}, ${q(col.side)}, ${col.displayOrder})`,
+    )
+    .join(',\n');
+
+  // Tầng nhóm — mirror "một tầng Phase" từ phase_* (DYNAMIC-TIERS-DESIGN.md), cùng
+  // nguồn với repository/backfill để ba nơi luôn khớp. Mặc định luôn có ≥1 Phase.
+  const tiers = deriveDefaultTiersFromPhase(c);
+  const groupTierRows = tiers
+    .map(
+      (t) =>
+        `    (set_id, ${t.tierOrder}, ${q(t.code)}, ${q(t.labelVi)}, ${qOrNull(t.labelJa)}, ${q(t.role)}, ${q(t.sourceType)}, ${t.displayOrder})`,
+    )
+    .join(',\n');
+  const groupDefRows = tiers
+    .flatMap((t) =>
+      t.definitions.map(
+        (d) =>
+          `    (set_id, ${t.tierOrder}, ${q(d.groupCode)}, ${q(d.labelVi)}, ${qOrNull(d.labelJa)}, ${qOrNull(d.colorHex)}, ${d.displayOrder})`,
+      ),
+    )
+    .join(',\n');
+  const groupRuleRows = tiers
+    .flatMap((t) =>
+      t.rules.map(
+        (r) =>
+          `    (set_id, ${t.tierOrder}, ${q(r.keyword)}, ${q(r.matchMode)}, ${q(r.groupCode)}, ${r.matchPriority})`,
+      ),
+    )
+    .join(',\n');
+  const groupPatternRows = tiers
+    .flatMap((t) =>
+      t.titlePatterns.map(
+        (p) => `    (set_id, ${t.tierOrder}, ${q(p.patternText)}, '', ${p.sortOrder})`,
+      ),
     )
     .join(',\n');
 
@@ -131,6 +165,19 @@ ${ruleRows};
 
   INSERT INTO signboard_column (config_set_id, task_code, label_vi, label_ja, side, display_order) VALUES
 ${columnRows};
+
+  -- Tầng nhóm (mirror phase_*) — cài mới có sẵn group_tier* (DYNAMIC-TIERS-DESIGN.md).
+  INSERT INTO group_tier (config_set_id, tier_order, code, label_vi, label_ja, role, source_type, display_order) VALUES
+${groupTierRows};
+
+  INSERT INTO group_tier_definition (config_set_id, tier_order, group_code, label_vi, label_ja, color_hex, display_order) VALUES
+${groupDefRows};
+
+  INSERT INTO group_tier_rule (config_set_id, tier_order, keyword, match_mode, group_code, match_priority) VALUES
+${groupRuleRows};
+
+  INSERT INTO group_tier_title_pattern (config_set_id, tier_order, pattern_text, compiled_regex, sort_order) VALUES
+${groupPatternRows};
 ${subPhaseInsert}
   RAISE NOTICE '[seed] Đã tạo bộ Mặc định (GLOBAL) version %.', next_version;
 END $$;
