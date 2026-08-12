@@ -381,6 +381,40 @@ pnpm smoke
 
 Worker chờ tối đa 30 giây cho job đang chạy. Quá hạn nó thoát với mã khác 0 và ghi log rõ ràng.
 
+### 2a. Bật đăng nhập LDAP (lần đầu)
+
+Chuyển từ chế độ header (cổng SSO) sang app tự đăng nhập bằng LDAP. Toàn bộ cấu
+hình nằm trên UI (bảng `auth_ldap_config`), không sửa file. Chi tiết mô hình: xem
+[AUTH.md §1](./AUTH.md).
+
+Nếu dùng **search-then-bind** (có tài khoản dịch vụ), đặt khoá mã hoá bind password
+cho CẢ api lẫn worker trước — direct bind thì bỏ qua bước này:
+
+```bash
+# Sinh khoá 32 byte, đặt vào APP_ENCRYPTION_KEY rồi khởi động lại api + worker.
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Sau đó, **vẫn đang ở chế độ header** (đăng nhập bằng cổng/dev như thường):
+
+1. Đăng nhập bằng tài khoản **ADMIN**, vào **Admin → LDAP**.
+2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn ĐÚNG MỘT cách xác định DN:
+   - **Direct bind (template DN)** — `Template DN` chứa `{username}`, ví dụ
+     `uid={username},ou=users,dc=cty,dc=vn` (hợp OpenLDAP).
+   - **Search rồi bind (Active Directory)** — `Bind DN` + `Bind password` tài khoản
+     dịch vụ, `Search base`, và `User filter` chứa `{username}` (ví dụ
+     `(sAMAccountName={username})` cho Active Directory).
+3. Đặt `Thuộc tính email` (mặc định `mail`) — danh tính trong hệ thống là email đọc
+   từ thuộc tính này, phải khớp `user_id` trong `app_user`.
+4. Bấm **Test** cho tới khi cả ba bước (CONNECT → BIND → SEARCH) đều xanh.
+5. Tick **Bật đăng nhập LDAP** rồi bấm **Lưu**. Server **từ chối bật** nếu Test
+   chưa pass — không thể tự khoá mình bằng cấu hình hỏng.
+
+> **Đừng tự khoá:** trước khi bật, bảo đảm CÓ ÍT NHẤT một ADMIN mà email khớp
+> attribute email LDAP sẽ trả về (admin mồi `AUTH_BOOTSTRAP_ADMINS` hoặc dòng trong
+> `app_user`). Ngay khi bật, header danh tính bị bỏ qua — chỉ đăng nhập bằng LDAP
+> mới vào được. Lỡ hỏng thì khôi phục theo 2b.
+
 ### 2b. Bật LDAP xong bị khóa ngoài (cấu hình sai / LDAP server hỏng)
 
 Server đã chặn trước phần lớn ca này (từ chối bật khi Test chưa pass), nhưng
