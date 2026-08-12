@@ -138,6 +138,13 @@ export {
 } from './repositories/phase-rollup.repository.js';
 
 export {
+  upsertGroupRollups,
+  loadGroupRollups,
+  deleteObsoleteGroupRollups,
+  groupKeyOf,
+} from './repositories/group-rollup.repository.js';
+
+export {
   loadSnapshotsForChart,
   latestSnapshotDate,
   loadDataQualityRatios,

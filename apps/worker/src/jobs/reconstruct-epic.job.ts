@@ -1,6 +1,7 @@
 import type {
   DailySnapshotData,
   DateOnly,
+  GroupRollup,
   PhaseRollup,
   PlanShiftRecord,
   StatusIdMap,
@@ -10,6 +11,8 @@ import type {
 } from '@app/shared';
 import {
   buildSnapshotForDay,
+  buildTierSnapshotForDay,
+  computeGroupRollups,
   computePhaseRollups,
   detectPlanShift,
   listCalendarDays,
@@ -43,6 +46,13 @@ export interface ReconstructPorts {
   savePhaseRollups(epicKey: string, rollups: readonly PhaseRollup[]): Promise<void>;
   /** Xoá bản rollup của Phase không còn Sub-task nào (E-24). */
   deleteObsoleteRollups(epicKey: string, livePhaseCodes: readonly string[]): Promise<number>;
+  /** Ghi rollup N tầng (DYNAMIC-TIERS §4.3). Danh sách RỖNG với Epic 1 tầng. */
+  saveGroupRollups(epicKey: string, rollups: readonly GroupRollup[]): Promise<void>;
+  /** Xoá nút rollup N tầng không còn; `liveGroupPaths` rỗng ⇒ xoá sạch (về 1 tầng). */
+  deleteObsoleteGroupRollups(
+    epicKey: string,
+    liveGroupPaths: readonly (readonly string[])[],
+  ): Promise<number>;
   /** Ghi ngày thực tế CHI TIẾT theo từng Sub-task cho Signboard (PRD §2.7.2). */
   saveSubtaskActualDates(rows: readonly SubtaskActualRecord[]): Promise<void>;
   savePlanShifts(epicKey: string, shifts: readonly PlanShiftRecord[]): Promise<{ skippedNullBoundary: number }>;
@@ -133,6 +143,24 @@ export async function reconstructEpic(
       rollups.map((r) => r.phaseCode),
     );
 
+    // Tổng hợp N tầng (DYNAMIC-TIERS-DESIGN §4.3): CHỈ khi có lá mang vectơ khoá >1 phần
+    // tử. Epic 1 tầng ⇒ danh sách rỗng, ghi rỗng + xoá sạch group_rollup cũ (nếu vừa
+    // chuyển từ đa tầng về 1 tầng) — phase_rollup/per_phase vẫn là nguồn như cũ.
+    const multiTier = subtasks.some((s) => (s.groupPath?.length ?? 1) > 1);
+    const groupRollups = multiTier
+      ? computeGroupRollups({
+          subtasks,
+          calendar: deps.calendar,
+          statusIdMap: deps.statusIdMap,
+          asOfMs: deps.now().getTime(),
+        })
+      : [];
+    await deps.ports.saveGroupRollups(epicKey, groupRollups);
+    await deps.ports.deleteObsoleteGroupRollups(
+      epicKey,
+      groupRollups.map((r) => r.groupPath),
+    );
+
     // Ngày thực tế CHI TIẾT theo ticket cho Signboard. Engine đã tính đúng giá
     // trị này ở trên để tổng hợp rollup (MIN/MAX) rồi bỏ đi — ở đây giữ lại bản
     // per Sub-task. Cùng nguồn sự thật nên bảng chi tiết và bản tổng hợp luôn khớp.
@@ -183,7 +211,22 @@ export async function reconstructEpic(
         previousTotalScopeS: previousScope,
         onWarning: deps.onWarning,
       });
-      snapshots.push(snap);
+      // Cây tổng hợp theo tầng CHỈ khi đa tầng (gắn thêm, không đụng phần Phase của snap).
+      snapshots.push(
+        multiTier
+          ? {
+              ...snap,
+              perTier: buildTierSnapshotForDay({
+                subtasks,
+                groupRollups,
+                dateStr,
+                calendar: deps.calendar,
+                statusIdMap: deps.statusIdMap,
+                onWarning: deps.onWarning,
+              }),
+            }
+          : snap,
+      );
       // Ngày sau so với ngày vừa dựng, không phải với snapshot cũ trong DB.
       previousScope = snap.totalScopeS;
     }

@@ -1,8 +1,10 @@
 import type { PrismaClient } from '@app/db';
 import {
+  deleteObsoleteGroupRollups,
   deleteObsoleteRollups,
   finishSyncRun,
   findByKey,
+  groupKeyOf,
   insertPlanShifts,
   knownIdToKey,
   listSnapshotDates,
@@ -14,6 +16,7 @@ import {
   startSyncRun,
   updateEpic,
   upsertChangelog,
+  upsertGroupRollups,
   upsertIssues,
   upsertPhaseRollups,
   upsertSnapshots,
@@ -200,6 +203,9 @@ export function createReconstructPorts(
     savePhaseRollups: (epicKey, rollups) => upsertPhaseRollups(prisma, epicKey, rollups, now()),
     deleteObsoleteRollups: (epicKey, livePhaseCodes) =>
       deleteObsoleteRollups(prisma, epicKey, livePhaseCodes),
+    saveGroupRollups: (epicKey, rollups) => upsertGroupRollups(prisma, epicKey, rollups, now()),
+    deleteObsoleteGroupRollups: (epicKey, liveGroupPaths) =>
+      deleteObsoleteGroupRollups(prisma, epicKey, liveGroupPaths.map(groupKeyOf)),
     saveSubtaskActualDates: (rows) => upsertSubtaskActualDates(prisma, rows, now()),
     savePlanShifts: async (epicKey, shifts) => {
       const r = await insertPlanShifts(prisma, epicKey, shifts, now());

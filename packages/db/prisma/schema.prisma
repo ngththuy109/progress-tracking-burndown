@@ -210,6 +210,7 @@ model TrackedEpic {
 
   calendar     WorkCalendar @relation(fields: [calendarId], references: [calendarId])
   phaseRollups PhaseRollup[]
+  groupRollups GroupRollup[]
 
   @@index([projectKey], map: "idx_tracked_project")
   @@map("tracked_epic")
@@ -241,6 +242,8 @@ model DailySnapshot {
   countDone       Int @default(0) @map("count_done")
 
   perPhase     Json     @map("per_phase")
+  // Cây tổng hợp theo tầng (song song per_phase). NULL với Epic 1 tầng (DYNAMIC-TIERS §4.3).
+  perTier      Json?    @map("per_tier")
   isRecomputed Boolean  @default(false) @map("is_recomputed")
   computedAt   DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
 
@@ -631,6 +634,40 @@ model PhaseRollup {
 
   @@id([epicKey, phaseCode])
   @@map("phase_rollup")
+}
+
+// ============================================================================
+// Bảng 7L: Rollup N tầng (tổng quát phase_rollup cho mọi nút prefix của group_path)
+//
+// DYNAMIC-TIERS-DESIGN §4.3, Vòng 4. Chỉ ghi khi cấu hình ĐA TẦNG — Epic 1 tầng
+// dùng phase_rollup như cũ nên bảng này để trống, hành vi không đổi.
+// ============================================================================
+model GroupRollup {
+  epicKey   String @map("epic_key") @db.VarChar(32)
+  // JSON.stringify(group_path) — khoá tự nhiên ổn định để UPSERT (JSONB không so = được).
+  groupKey  String @map("group_key")
+  tierOrder Int    @map("tier_order")
+  groupPath Json   @map("group_path")
+
+  planStart    DateTime? @map("plan_start") @db.Date
+  planEnd      DateTime? @map("plan_end") @db.Date
+  planWorkdays Int?      @map("plan_workdays")
+
+  actualStart            DateTime? @map("actual_start") @db.Date
+  actualEnd              DateTime? @map("actual_end") @db.Date
+  actualEndIsProvisional Boolean   @default(false) @map("actual_end_is_provisional")
+
+  totalOriginalS   BigInt @default(0) @map("total_original_s")
+  subtaskCount     Int    @default(0) @map("subtask_count")
+  missingDateCount Int    @default(0) @map("missing_date_count")
+
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  epic TrackedEpic @relation(fields: [epicKey], references: [epicKey], onDelete: Cascade)
+
+  @@id([epicKey, groupKey])
+  @@index([epicKey, tierOrder], map: "idx_group_rollup_epic")
+  @@map("group_rollup")
 }
 
 // ============================================================================

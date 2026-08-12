@@ -1,4 +1,5 @@
 import type { DateOnly } from './calendar.js';
+import type { TierNodeSnapshot } from './group-rollup.js';
 
 /**
  * Snapshot chốt sổ một ngày — PRD §2.4, §4.4.
@@ -44,6 +45,15 @@ export interface DailySnapshotData {
   readonly countDone: number;
 
   readonly perPhase: readonly PhaseSnapshot[];
+
+  /**
+   * Cây tổng hợp theo tầng (DYNAMIC-TIERS-DESIGN §4.3) — mọi nút prefix của group_path.
+   *
+   * VẮNG với Epic 1 tầng (per_phase đã đủ). Do JOB gắn vào (buildTierSnapshotForDay),
+   * KHÔNG do buildSnapshotForDay — nên 20 golden dataset không đổi. Chỉ để persist +
+   * drill-down đọc.
+   */
+  readonly perTier?: readonly TierNodeSnapshot[];
 
   /**
    * Mốc job ĐỌC dữ liệu từ Jira — khác với lúc TÍNH xong.

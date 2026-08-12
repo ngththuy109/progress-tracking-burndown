@@ -51,15 +51,16 @@ export async function upsertSnapshots(
           total_scope_s, total_spent_s,
           scope_added_s, scope_removed_s,
           count_todo, count_in_progress, count_done,
-          per_phase, is_recomputed, computed_at, source_read_at
+          per_phase, per_tier, is_recomputed, computed_at, source_read_at
         ) VALUES (
           ${s.epicKey}, ${toDate(s.snapshotDate)}::date, ${new Date(s.snapshotAtUtcMs)},
           ${BigInt(Math.round(s.plannedRemainingS))}, ${BigInt(Math.round(s.actualRemainingS))},
           ${BigInt(Math.round(s.totalScopeS))}, ${BigInt(Math.round(s.totalSpentS))},
           ${BigInt(Math.round(s.scopeAddedS))}, ${BigInt(Math.round(s.scopeRemovedS))},
           ${s.countTodo}, ${s.countInProgress}, ${s.countDone},
-          ${JSON.stringify(s.perPhase)}::jsonb, false, ${computedAt},
-          ${new Date(s.sourceReadAtMs)}
+          ${JSON.stringify(s.perPhase)}::jsonb,
+          ${s.perTier === undefined ? null : JSON.stringify(s.perTier)}::jsonb,
+          false, ${computedAt}, ${new Date(s.sourceReadAtMs)}
         )
         ON CONFLICT (epic_key, snapshot_date) DO UPDATE SET
           snapshot_at_utc     = EXCLUDED.snapshot_at_utc,
@@ -73,6 +74,7 @@ export async function upsertSnapshots(
           count_in_progress   = EXCLUDED.count_in_progress,
           count_done          = EXCLUDED.count_done,
           per_phase           = EXCLUDED.per_phase,
+          per_tier            = EXCLUDED.per_tier,
           is_recomputed       = true,
           computed_at         = EXCLUDED.computed_at,
           source_read_at      = EXCLUDED.source_read_at

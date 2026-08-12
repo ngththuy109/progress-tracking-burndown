@@ -3,6 +3,7 @@ import {
   DEFAULT_WORKDAYS_MASK,
   type ChangelogEvent,
   type DailySnapshotData,
+  type GroupRollup,
   type PhaseRollup,
   type PlanShiftRecord,
   type StatusIdMap,
@@ -62,6 +63,8 @@ class FakePorts implements ReconstructPorts {
   readonly savedShifts: PlanShiftRecord[] = [];
   readonly savedActualDates: SubtaskActualRecord[] = [];
   savedRollups: PhaseRollup[] = [];
+  savedGroupRollups: GroupRollup[] = [];
+  obsoleteGroupRemoved = 0;
   readonly dirty = new Set<string>();
   cacheInvalidations = 0;
   obsoleteRemoved = 0;
@@ -91,6 +94,17 @@ class FakePorts implements ReconstructPorts {
   deleteObsoleteRollups(): Promise<number> {
     this.callOrder.push('deleteObsoleteRollups');
     return Promise.resolve(this.obsoleteRemoved);
+  }
+
+  saveGroupRollups(_epicKey: string, rollups: readonly GroupRollup[]): Promise<void> {
+    this.callOrder.push('saveGroupRollups');
+    this.savedGroupRollups = [...rollups];
+    return Promise.resolve();
+  }
+
+  deleteObsoleteGroupRollups(): Promise<number> {
+    this.callOrder.push('deleteObsoleteGroupRollups');
+    return Promise.resolve(this.obsoleteGroupRemoved);
   }
 
   saveSubtaskActualDates(rows: readonly SubtaskActualRecord[]): Promise<void> {
@@ -395,5 +409,42 @@ describe('idempotency', () => {
     await run(second);
 
     expect(JSON.stringify(second.savedSnapshots)).toBe(JSON.stringify(first.savedSnapshots));
+  });
+});
+
+describe('tổng hợp N tầng (DYNAMIC-TIERS-DESIGN §4.3)', () => {
+  it('Epic 1 tầng (không groupPath) ⇒ KHÔNG ghi group_rollup, snapshot không có perTier', async () => {
+    const ports = new FakePorts([sub('A'), sub('B', { phaseCode: 'DEV' })]);
+    await run(ports);
+
+    expect(ports.savedGroupRollups).toHaveLength(0);
+    // Vẫn xoá sạch (dọn tàn dư nếu từng đa tầng) — cổng vẫn được gọi.
+    expect(ports.callOrder).toContain('saveGroupRollups');
+    expect(ports.callOrder).toContain('deleteObsoleteGroupRollups');
+    expect(ports.savedSnapshots.every((s) => s.perTier === undefined)).toBe(true);
+  });
+
+  it('Epic đa tầng ⇒ ghi group_rollup theo prefix + snapshot có perTier cộng dồn', async () => {
+    const ports = new FakePorts([
+      sub('L1', { phaseCode: 'DESIGN', groupPath: ['SA', 'DESIGN'] }),
+      sub('L2', { phaseCode: 'DESIGN', groupPath: ['SA', 'DESIGN'] }),
+      sub('L3', { phaseCode: 'DEV', groupPath: ['SB', 'DEV'] }),
+    ]);
+    await run(ports);
+
+    // Nút prefix: [SA],[SB] (tầng 1) + [SA,DESIGN],[SB,DEV] (tầng 2) = 4 nút.
+    expect(ports.savedGroupRollups).toHaveLength(4);
+    const byPath = (p: string[]) =>
+      ports.savedGroupRollups.find((r) => JSON.stringify(r.groupPath) === JSON.stringify(p));
+    expect(byPath(['SA'])?.subtaskCount).toBe(2);
+    expect(byPath(['SA', 'DESIGN'])?.subtaskCount).toBe(2);
+    expect(byPath(['SB'])?.subtaskCount).toBe(1);
+
+    // Mọi snapshot mang cây perTier; tổng nút cha = Σ nút con.
+    expect(ports.savedSnapshots.every((s) => s.perTier !== undefined)).toBe(true);
+    const someDay = ports.savedSnapshots.find((s) => (s.perTier?.length ?? 0) > 0)!;
+    const node = (p: string[]) =>
+      someDay.perTier!.find((t) => JSON.stringify(t.groupPath) === JSON.stringify(p))!;
+    expect(node(['SA']).originalS).toBe(node(['SA', 'DESIGN']).originalS);
   });
 });
