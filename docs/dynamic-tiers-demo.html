@@ -1,0 +1,692 @@
+<title>Phân tầng linh động</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  /* ===== Tokens: 3 trạng thái theme (bare :root = light, prefers-dark, [data-theme]) ===== */
+  :root {
+    --ground: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --ink: #151a21;
+    --muted: #5c6675;
+    --faint: #8a94a2;
+    --border: #e2e6eb;
+    --border-strong: #ccd2da;
+    --accent: #0d7a83;
+    --accent-ink: #ffffff;
+    --accent-soft: #dceff0;
+    --accent-line: #0d7a83;
+    /* tầng / categorical */
+    --t-project: #4b63d8;
+    --t-phase: #0d7a83;
+    --t-sub: #b06a12;
+    /* phase definitions */
+    --p-design: #4b63d8;
+    --p-dev: #0d7a83;
+    --p-test: #b06a12;
+    /* semantic (Signboard) */
+    --st-done: #3f9c5a;
+    --st-onsch: #2f6fb0;
+    --st-nys: #7c8797;
+    --st-dstart: #d98324;
+    --st-dend: #ce4a54;
+    --st-noplan: #8a5fc7;
+    --shadow: 0 1px 2px rgba(20, 26, 33, .05), 0 8px 24px -12px rgba(20, 26, 33, .12);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1218;
+      --surface: #161c25;
+      --surface-2: #1d2530;
+      --ink: #e7ecf2;
+      --muted: #9aa5b3;
+      --faint: #6b7684;
+      --border: #262f3b;
+      --border-strong: #333e4d;
+      --accent: #24a3ac;
+      --accent-ink: #04181a;
+      --accent-soft: #103237;
+      --accent-line: #2bb6c0;
+      --t-project: #8093f2;
+      --t-phase: #2bb6c0;
+      --t-sub: #d8994a;
+      --p-design: #8093f2;
+      --p-dev: #2bb6c0;
+      --p-test: #d8994a;
+      --st-done: #55b571;
+      --st-onsch: #4f8fd0;
+      --st-nys: #8b97a7;
+      --st-dstart: #e39a44;
+      --st-dend: #e0656f;
+      --st-noplan: #a37ddc;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1218;
+    --surface: #161c25;
+    --surface-2: #1d2530;
+    --ink: #e7ecf2;
+    --muted: #9aa5b3;
+    --faint: #6b7684;
+    --border: #262f3b;
+    --border-strong: #333e4d;
+    --accent: #24a3ac;
+    --accent-ink: #04181a;
+    --accent-soft: #103237;
+    --accent-line: #2bb6c0;
+    --t-project: #8093f2;
+    --t-phase: #2bb6c0;
+    --t-sub: #d8994a;
+    --p-design: #8093f2;
+    --p-dev: #2bb6c0;
+    --p-test: #d8994a;
+    --st-done: #55b571;
+    --st-onsch: #4f8fd0;
+    --st-nys: #8b97a7;
+    --st-dstart: #e39a44;
+    --st-dend: #e0656f;
+    --st-noplan: #a37ddc;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 20px 72px; }
+
+  /* ===== Header ===== */
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: saturate(1.4) blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .top-inner { max-width: 1100px; margin: 0 auto; padding: 14px 20px; display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: center; }
+  .brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+  .brand .mark {
+    font-family: var(--mono); font-weight: 700; font-size: 13px; letter-spacing: .04em;
+    color: var(--accent-ink); background: var(--accent); padding: 3px 8px; border-radius: 6px;
+    align-self: center;
+  }
+  .brand h1 { font-size: 18px; font-weight: 680; margin: 0; letter-spacing: -.01em; }
+  .brand .sub { font-size: 12.5px; color: var(--muted); }
+
+  .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button {
+    font: inherit; font-size: 12.5px; font-weight: 560; color: var(--muted);
+    background: transparent; border: 0; padding: 6px 11px; border-radius: 6px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .seg button .n { font-family: var(--mono); font-size: 11px; opacity: .8; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* prototype ribbon */
+  .ribbon {
+    max-width: 1100px; margin: 0 auto; padding: 9px 20px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .ribbon .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--st-dstart); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-dstart) 22%, transparent); }
+  .ribbon b { color: var(--ink); font-weight: 620; }
+
+  /* ===== Tabs ===== */
+  .tabs { display: flex; gap: 4px; margin: 22px 0 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tabs button {
+    font: inherit; font-size: 14px; font-weight: 560; color: var(--muted);
+    background: transparent; border: 0; padding: 10px 4px; margin-right: 18px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    display: inline-flex; align-items: center; gap: 9px;
+  }
+  .tabs button .ti { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  .view { display: none; animation: fade .25s ease; }
+  .view.on { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .view, .seg button, * { animation: none !important; transition: none !important; } }
+
+  /* ===== Cards ===== */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .eyebrow { font-size: 11.5px; font-weight: 680; letter-spacing: .09em; text-transform: uppercase; color: var(--accent); }
+  .eyebrow.plain { color: var(--faint); }
+  h2.sec { font-size: 15.5px; font-weight: 660; margin: 4px 0 0; letter-spacing: -.01em; }
+  .lead { color: var(--muted); font-size: 13px; margin: 6px 0 0; max-width: 62ch; }
+  .card-hd { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  .card-bd { padding: 16px 18px; }
+
+  /* scope selector */
+  .scope-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pill {
+    font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--border-strong); color: var(--muted); background: var(--surface-2);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .pill.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 12px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .code-chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+
+  /* tiers builder */
+  .tiers { display: flex; flex-direction: column; gap: 10px; }
+  .tier {
+    display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start;
+    padding: 13px 14px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface);
+    position: relative;
+  }
+  .tier .ord {
+    font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--accent-ink);
+    background: var(--tier-c, var(--accent)); width: 26px; height: 26px; border-radius: 7px;
+    display: grid; place-items: center;
+  }
+  .tier .tt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tier .tname { font-weight: 640; font-size: 14px; }
+  .tier .role { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; }
+  .role.phase { color: var(--accent-ink); background: var(--t-phase); }
+  .role.group { color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); }
+  .tier .src { margin-top: 7px; font-size: 12.5px; color: var(--muted); display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .tier .defs { margin-top: 9px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 11.5px; font-weight: 560; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--chip-b, var(--border)); color: var(--chip-c, var(--ink)); background: var(--chip-bg, var(--surface-2)); }
+  .connector { height: 10px; margin-left: 15px; border-left: 2px dotted var(--border-strong); }
+  .add-tier { border: 1px dashed var(--border-strong); border-radius: 11px; padding: 11px; text-align: center; color: var(--faint); font-size: 12.5px; }
+
+  /* preview table */
+  .tbl-scroll { overflow-x: auto; }
+  table.preview { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 420px; }
+  table.preview th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+  table.preview td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.preview tr:last-child td { border-bottom: 0; }
+  .tkey { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .ttitle { font-family: var(--mono); font-size: 12px; }
+  .gpath { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .gnode { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 5px; border: 1px solid transparent; }
+  .gnode.is-phase { box-shadow: 0 0 0 2px color-mix(in srgb, var(--t-phase) 45%, transparent); }
+  .arrow { color: var(--faint); font-size: 11px; }
+
+  /* burndown */
+  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .field { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  select {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 8px; padding: 6px 28px 6px 10px; cursor: pointer;
+    appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%; background-size: 5px 5px; background-repeat: no-repeat;
+  }
+  select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .stat-row { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 4px; }
+  .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .stat .val { font-size: 22px; font-weight: 680; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .stat .val small { font-size: 12px; font-weight: 500; color: var(--muted); }
+
+  .chart-wrap { overflow-x: auto; }
+  svg.burn { display: block; width: 100%; height: auto; min-width: 460px; }
+  .burn .grid-line { stroke: var(--border); stroke-width: 1; }
+  .burn .axis-txt { fill: var(--faint); font-size: 10px; font-family: var(--mono); }
+  .burn .area { fill: color-mix(in srgb, var(--accent) 13%, transparent); stroke: none; }
+  .burn .planned { fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-dasharray: 5 4; }
+  .burn .actual { fill: none; stroke: var(--accent-line); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+  .burn .today-line { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+  .burn .note-txt { fill: var(--muted); font-size: 9.5px; font-family: var(--mono); }
+  .burn .plan-txt { fill: var(--faint); font-size: 9.5px; font-family: var(--mono); }
+  .burn .dot { fill: var(--accent-line); stroke: var(--surface); stroke-width: 2; }
+
+  .bars { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .bar-row { display: grid; grid-template-columns: 128px 1fr 64px; gap: 12px; align-items: center; }
+  @media (max-width: 620px) { .bar-row { grid-template-columns: 96px 1fr 54px; } }
+  .bar-lbl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 560; }
+  .bar-lbl .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .bar-track { background: var(--surface-2); border-radius: 6px; height: 22px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; }
+  .bar-val { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); }
+
+  /* signboard */
+  .legend { display: flex; gap: 12px 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .sb-scroll { overflow-x: auto; }
+  .sb { display: flex; flex-direction: column; gap: 10px; min-width: 480px; }
+  .sb-row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; align-items: center; }
+  .sb-phase { display: inline-flex; align-items: center; gap: 8px; font-weight: 620; font-size: 13px; }
+  .sb-phase .sw { width: 11px; height: 11px; border-radius: 3px; }
+  .sb-cells { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cell {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 5px 9px; border-radius: 7px;
+    color: #fff; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .cell .st-name { font-family: var(--sans); font-weight: 500; opacity: .92; font-size: 10.5px; }
+
+  .foot { margin-top: 26px; color: var(--faint); font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
+  .foot code { color: var(--muted); }
+  .hint { font-size: 12px; color: var(--faint); margin-top: 12px; }
+  .hi { color: var(--accent); font-weight: 600; }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <span class="mark">1..N</span>
+      <div>
+        <h1>Phân tầng linh động</h1>
+        <div class="sub">Cấu hình burndown theo 1..N tầng — mỗi dự án một kiểu</div>
+      </div>
+    </div>
+    <div class="seg" id="scenarioSeg" role="group" aria-label="Chọn dạng dự án">
+      <button data-sc="A" aria-pressed="true"><span class="n">3</span> tầng (mặc định)</button>
+      <button data-sc="B" aria-pressed="false"><span class="n">2</span> tầng (Task→Sub)</button>
+      <button data-sc="C" aria-pressed="false"><span class="n">1</span> phẳng (chỉ Task)</button>
+    </div>
+  </div>
+  <div class="ribbon">
+    <span class="dot"></span>
+    <span><b>Prototype tương tác</b> — minh hoạ UX sau thay đổi. Hiện đã có <b>schema (Vòng 1)</b>; Config API &amp; màn hình thật thuộc Vòng 3. Số liệu là mẫu.</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="tabs" id="tabs" role="tablist">
+    <button role="tab" data-tab="config" aria-selected="true"><span class="ti">01</span> Tạo cấu hình phân tầng</button>
+    <button role="tab" data-tab="burndown" aria-selected="false"><span class="ti">02</span> Burndown</button>
+    <button role="tab" data-tab="signboard" aria-selected="false"><span class="ti">03</span> Signboard</button>
+  </div>
+
+  <!-- ================= CONFIG ================= -->
+  <section class="view on" id="view-config" role="tabpanel">
+    <div class="grid2">
+      <div style="display:flex; flex-direction:column; gap:18px;">
+        <div class="card">
+          <div class="card-hd">
+            <div class="eyebrow">Bước 1 · Phạm vi theo dõi</div>
+            <h2 class="sec">Tracked scope</h2>
+            <p class="lead" id="scopeLead"></p>
+          </div>
+          <div class="card-bd">
+            <div class="scope-row">
+              <span class="pill" id="pillContainer">CONTAINER</span>
+              <span class="pill" id="pillQuery">QUERY</span>
+            </div>
+            <dl class="kv" id="scopeKv"></dl>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd">
+            <div class="eyebrow">Bước 2 · Các tầng nhóm</div>
+            <h2 class="sec">Cấu trúc phân tầng <span id="tierCount" class="mono" style="color:var(--faint);font-size:12px"></span></h2>
+            <p class="lead">Kéo–thả để đổi thứ tự; mỗi tầng chọn <b>nguồn khoá</b> và đánh dấu <b>đúng một</b> tầng là <span class="hi">Phase</span>.</p>
+          </div>
+          <div class="card-bd">
+            <div class="tiers" id="tiersList"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="position:sticky; top:150px;">
+        <div class="card-hd">
+          <div class="eyebrow plain">Xem thử · không cần chờ sync</div>
+          <h2 class="sec">Ticket mẫu → <code>group_path</code></h2>
+          <p class="lead">Mỗi lá được phân loại thành một <b>vectơ khoá</b> theo tầng. Ô có viền = phần tử tầng <span class="hi">Phase</span> (dùng cho Signboard &amp; per-phase).</p>
+        </div>
+        <div class="card-bd">
+          <div class="tbl-scroll">
+            <table class="preview">
+              <thead><tr><th>Ticket</th><th>Tiêu đề (summary)</th><th>group_path</th></tr></thead>
+              <tbody id="previewBody"></tbody>
+            </table>
+          </div>
+          <p class="hint" id="previewHint"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= BURNDOWN ================= -->
+  <section class="view" id="view-burndown" role="tabpanel">
+    <div class="card">
+      <div class="card-hd">
+        <div class="eyebrow">Chức năng chính · Biểu đồ</div>
+        <h2 class="sec">Burndown của scope</h2>
+        <p class="lead">Cộng dồn từ lá lên. Engine gom nhóm theo tầng <span class="hi">Phase</span>; bạn có thể <b>drill-down</b> sang tầng khác để soi khối lượng còn lại.</p>
+      </div>
+      <div class="card-bd">
+        <div class="toolbar">
+          <label class="field">Nhóm theo tầng
+            <select id="drillSel"></select>
+          </label>
+          <span class="hint" id="drillNote" style="margin:0"></span>
+        </div>
+
+        <div class="stat-row" style="margin-bottom:14px">
+          <div class="stat"><div class="lbl">Tổng scope</div><div class="val" id="stScope"></div></div>
+          <div class="stat"><div class="lbl">Còn lại (actual)</div><div class="val" id="stRem"></div></div>
+          <div class="stat"><div class="lbl">Đã log</div><div class="val" id="stSpent"></div></div>
+          <div class="stat"><div class="lbl">Số lá</div><div class="val" id="stLeaves"></div></div>
+        </div>
+
+        <div class="chart-wrap">
+          <svg class="burn" id="burnSvg" viewBox="0 0 720 240" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Biểu đồ burndown kế hoạch và thực tế"></svg>
+        </div>
+
+        <div style="margin-top:20px">
+          <div class="eyebrow plain" style="margin-bottom:12px">Khối lượng còn lại theo tầng <span id="drillLbl" class="mono" style="color:var(--t-phase)"></span></div>
+          <div class="bars" id="barsBox"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SIGNBOARD ================= -->
+  <section class="view" id="view-signboard" role="tabpanel">
+    <div class="card">
+      <div class="card-hd">
+        <div class="eyebrow">Chức năng chính · Bảng trạng thái</div>
+        <h2 class="sec">Signboard — theo tầng Phase</h2>
+        <p class="lead">Signboard vẫn gắn với tầng <span class="hi">Phase</span> (quyết định #3). Mỗi lá là một ô, tô màu theo trạng thái kế hoạch↔thực tế.</p>
+      </div>
+      <div class="card-bd">
+        <div class="legend" id="sbLegend"></div>
+        <div class="sb-scroll">
+          <div class="sb" id="sbBox"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>ⓘ</span>
+    <span>Cùng một engine cộng dồn (<code>groupBy(khoá tầng của lá)</code>) phục vụ cả 3 dạng dự án — khác nhau chỉ ở <b>selector</b> (CONTAINER/QUERY), <b>số tầng</b>, và <b>nguồn khoá</b>. Xem <code>docs/DYNAMIC-TIERS-DESIGN.md</code>.</span>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var PHASE_COLOR = { DESIGN: "var(--p-design)", DEV: "var(--p-dev)", TEST: "var(--p-test)" };
+  var TIER_COLOR = { PROJECT: "var(--t-project)", PHASE: "var(--t-phase)", SUBPHASE: "var(--t-sub)" };
+  var ST = {
+    COMPLETED: { c: "var(--st-done)", label: "Xong" },
+    ON_SCHEDULE: { c: "var(--st-onsch)", label: "Đúng hạn" },
+    NYS: { c: "var(--st-nys)", label: "Chưa bắt đầu" },
+    DELAY_START: { c: "var(--st-dstart)", label: "Trễ bắt đầu" },
+    DELAY_END: { c: "var(--st-dend)", label: "Trễ kết thúc" },
+    NO_PLAN: { c: "var(--st-noplan)", label: "Chưa có kế hoạch" }
+  };
+
+  // ---- 3 kịch bản ----
+  var SC = {
+    A: {
+      name: "3 tầng (mặc định)",
+      scope: { type: "CONTAINER", container: "Epic PAY-100", leaf: "Sub-task",
+               lead: "Đăng ký một Epic. Lá = Sub-task, là hậu duệ của Epic. Đây là mô hình 3 tầng gốc." },
+      tiers: [
+        { order: 1, code: "PHASE", name: "Phase", role: "PHASE", source: "PARENT_TASK_TITLE",
+          srcNote: "bóc từ tiêu đề Task cha", defs: ["DESIGN", "DEV", "TEST"] }
+      ],
+      phaseTier: 0,
+      leaves: [
+        { key: "PAY-111", title: "Vẽ màn hình thanh toán", parent: "[Phase] Design", path: ["DESIGN"], est: 16, rem: 4, status: "ON_SCHEDULE" },
+        { key: "PAY-112", title: "Thiết kế cơ sở dữ liệu", parent: "[Phase] Design", path: ["DESIGN"], est: 24, rem: 0, status: "COMPLETED" },
+        { key: "PAY-121", title: "API tạo giao dịch", parent: "[Phase] Development", path: ["DEV"], est: 40, rem: 28, status: "DELAY_START" },
+        { key: "PAY-122", title: "Tích hợp cổng thanh toán", parent: "[Phase] Development", path: ["DEV"], est: 80, rem: 60, status: "ON_SCHEDULE" },
+        { key: "PAY-131", title: "Viết test case", parent: "[Phase] Testing", path: ["TEST"], est: 40, rem: 40, status: "NYS" }
+      ],
+      hint: "Sub-task kế thừa Phase từ Task cha — <code>source = PARENT_TASK_TITLE</code>. group_path chỉ 1 phần tử."
+    },
+    B: {
+      name: "2 tầng (Task → Sub-task)",
+      scope: { type: "CONTAINER", container: "Task PAY (vai Project)", leaf: "Sub-task",
+               lead: "Không có Epic. Đăng ký một Task đóng vai Project; lá = Sub-task con trực tiếp. Ingest bỏ query tầng ba." },
+      tiers: [
+        { order: 1, code: "PHASE", name: "Phase", role: "PHASE", source: "SELF_TITLE",
+          srcNote: "bóc từ tiêu đề của CHÍNH sub-task", defs: ["DESIGN", "DEV", "TEST"] }
+      ],
+      phaseTier: 0,
+      leaves: [
+        { key: "PAY-201", title: "[Design] Vẽ màn hình", path: ["DESIGN"], est: 16, rem: 6, status: "ON_SCHEDULE" },
+        { key: "PAY-202", title: "[Design] Thiết kế DB", path: ["DESIGN"], est: 24, rem: 0, status: "COMPLETED" },
+        { key: "PAY-203", title: "[Dev] API giao dịch", path: ["DEV"], est: 40, rem: 30, status: "ON_SCHEDULE" },
+        { key: "PAY-204", title: "[Test] Viết test case", path: ["TEST"], est: 40, rem: 40, status: "NYS" }
+      ],
+      hint: "Phase lấy từ tiêu đề của lá — <code>source = SELF_TITLE</code>. Gốc là Task, không cần Epic."
+    },
+    C: {
+      name: "Phẳng (chỉ Task)",
+      scope: { type: "QUERY", jql: "project = PAY AND type = Task", leaf: "Task",
+               lead: "Jira phẳng, không có container. Phạm vi = một JQL; lá = chính các Task khớp. Mọi tầng bóc từ title." },
+      tiers: [
+        { order: 1, code: "PROJECT", name: "Project", role: "GROUP", source: "SELF_TITLE",
+          srcNote: "token {project}", defs: ["PAY"] },
+        { order: 2, code: "PHASE", name: "Phase", role: "PHASE", source: "SELF_TITLE",
+          srcNote: "token {phase}", defs: ["DESIGN", "DEV", "TEST"] },
+        { order: 3, code: "SUBPHASE", name: "Sub-phase", role: "GROUP", source: "SELF_TITLE",
+          srcNote: "token {subphase}", defs: ["SCREEN", "DB", "API", "UI", "UNIT"] }
+      ],
+      phaseTier: 1,
+      leaves: [
+        { key: "PAY-1001", title: "[PAY][Design][Screen] Vẽ màn hình thanh toán", path: ["PAY", "DESIGN", "SCREEN"], est: 16, rem: 4, status: "ON_SCHEDULE" },
+        { key: "PAY-1002", title: "[PAY][Design][DB] Thiết kế cơ sở dữ liệu", path: ["PAY", "DESIGN", "DB"], est: 24, rem: 0, status: "COMPLETED" },
+        { key: "PAY-1003", title: "[PAY][Dev][API] API tạo giao dịch", path: ["PAY", "DEV", "API"], est: 40, rem: 30, status: "DELAY_END" },
+        { key: "PAY-1004", title: "[PAY][Dev][UI] Màn hình lịch sử", path: ["PAY", "DEV", "UI"], est: 32, rem: 20, status: "ON_SCHEDULE" },
+        { key: "PAY-1005", title: "[PAY][Test][Unit] Viết unit test", path: ["PAY", "TEST", "UNIT"], est: 40, rem: 40, status: "NYS" }
+      ],
+      hint: "3 tầng logic, tất cả <code>source = SELF_TITLE</code> bóc token khác nhau từ MỘT title. Selector = QUERY."
+    }
+  };
+
+  var state = { sc: "A", tab: "config", drill: 0 };
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function tierColorVar(code) { return TIER_COLOR[code] || "var(--accent)"; }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]; }); }
+
+  function renderScope() {
+    var s = SC[state.sc], sc = s.scope;
+    $("scopeLead").textContent = sc.lead;
+    $("pillContainer").className = "pill" + (sc.type === "CONTAINER" ? " on" : "");
+    $("pillQuery").className = "pill" + (sc.type === "QUERY" ? " on" : "");
+    var kv = $("scopeKv"); kv.innerHTML = "";
+    function row(k, v, mono) { kv.appendChild(el("dt", null, k)); kv.appendChild(el("dd", null, mono ? '<span class="code-chip">' + esc(v) + "</span>" : esc(v))); }
+    row("selector", sc.type, true);
+    if (sc.type === "CONTAINER") row("container", sc.container); else row("scope_jql", sc.jql, true);
+    row("leaf_issue_type", sc.leaf, true);
+  }
+
+  function renderTiers() {
+    var s = SC[state.sc];
+    $("tierCount").textContent = "· " + s.tiers.length + (s.tiers.length === 1 ? " tầng" : " tầng");
+    var box = $("tiersList"); box.innerHTML = "";
+    s.tiers.forEach(function (t, i) {
+      var card = el("div", "tier");
+      card.style.setProperty("--tier-c", tierColorVar(t.code));
+      var defs = t.defs.map(function (d) {
+        var isPhaseTier = (t.role === "PHASE");
+        var col = isPhaseTier ? (PHASE_COLOR[d] || "var(--t-phase)") : tierColorVar(t.code);
+        return '<span class="chip" style="--chip-c:' + col + ';--chip-b:color-mix(in srgb,' + col + ' 40%,transparent);--chip-bg:color-mix(in srgb,' + col + ' 12%,transparent)">' + esc(d) + "</span>";
+      }).join("");
+      card.innerHTML =
+        '<div class="ord">' + t.order + "</div>" +
+        '<div><div class="tt"><span class="tname">' + esc(t.name) + "</span>" +
+        '<span class="role ' + (t.role === "PHASE" ? "phase" : "group") + '">' + t.role + "</span>" +
+        '<span class="code-chip">' + esc(t.code) + "</span></div>" +
+        '<div class="src">nguồn: <span class="code-chip">' + esc(t.source) + "</span> <span style=\"color:var(--faint)\">" + esc(t.srcNote) + "</span></div>" +
+        '<div class="defs">' + defs + "</div></div>";
+      box.appendChild(card);
+      if (i < s.tiers.length - 1) box.appendChild(el("div", "connector"));
+    });
+    var add = el("div", "add-tier", "+ Thêm tầng (kéo–thả đổi thứ tự)");
+    box.appendChild(add);
+  }
+
+  function renderPreview() {
+    var s = SC[state.sc], body = $("previewBody"); body.innerHTML = "";
+    s.leaves.forEach(function (lf) {
+      var tr = el("tr");
+      var nodes = lf.path.map(function (code, idx) {
+        var tier = s.tiers[idx];
+        var isPhase = tier && tier.role === "PHASE";
+        var col = isPhase ? (PHASE_COLOR[code] || "var(--t-phase)") : tierColorVar(tier ? tier.code : "");
+        var node = '<span class="gnode' + (isPhase ? " is-phase" : "") + '" style="color:' + col + ';background:color-mix(in srgb,' + col + ' 13%,transparent)">' + esc(code) + "</span>";
+        return node + (idx < lf.path.length - 1 ? '<span class="arrow">›</span>' : "");
+      }).join("");
+      tr.innerHTML =
+        '<td><span class="tkey">' + esc(lf.key) + "</span></td>" +
+        '<td><span class="ttitle">' + esc(lf.title) + "</span></td>" +
+        '<td><span class="gpath">' + nodes + "</span></td>";
+      body.appendChild(tr);
+    });
+    $("previewHint").innerHTML = s.hint;
+  }
+
+  // ---------- Burndown ----------
+  function fmtH(n) { return n + "<small>h</small>"; }
+  function renderDrill() {
+    var s = SC[state.sc], sel = $("drillSel"); sel.innerHTML = "";
+    s.tiers.forEach(function (t, i) {
+      var o = el("option"); o.value = i; o.textContent = t.name + (t.role === "PHASE" ? " (Phase)" : "");
+      sel.appendChild(o);
+    });
+    if (state.drill >= s.tiers.length) state.drill = s.phaseTier;
+    sel.value = state.drill;
+    $("drillNote").innerHTML = s.tiers.length === 1
+      ? "Dạng này chỉ 1 tầng nhóm nên không có tầng khác để drill-down."
+      : "Đổi tầng để xem cộng dồn theo Project / Phase / Sub-phase.";
+  }
+
+  function renderStats() {
+    var s = SC[state.sc];
+    var scope = 0, rem = 0;
+    s.leaves.forEach(function (l) { scope += l.est; rem += l.rem; });
+    $("stScope").innerHTML = fmtH(scope);
+    $("stRem").innerHTML = fmtH(rem);
+    $("stSpent").innerHTML = fmtH(scope - rem);
+    $("stLeaves").textContent = s.leaves.length;
+    return { scope: scope, rem: rem };
+  }
+
+  function renderBurnChart(scope, rem) {
+    var W = 720, H = 240, ml = 44, mr = 16, mt = 16, mb = 30;
+    var x0 = ml, x1 = W - mr, y0 = mt, y1 = H - mb;
+    var days = 10, todayD = 6;
+    if (scope <= 0) scope = 1;
+    function X(d) { return (x0 + (x1 - x0) * d / days).toFixed(1); }
+    function Y(v) { return (y1 - (y1 - y0) * v / scope).toFixed(1); }
+    var planned = "M" + X(0) + "," + Y(scope) + " L" + X(days) + "," + Y(0);
+    var pts = [scope, scope * 0.88, scope * 0.74, scope * 0.66, scope * 0.6, (scope + rem) / 2 * 0.98, rem];
+    var actual = pts.map(function (v, i) { return (i === 0 ? "M" : "L") + X(i) + "," + Y(v); }).join(" ");
+    var area = actual + " L" + X(todayD) + "," + Y(0) + " L" + X(0) + "," + Y(0) + " Z";
+    var s = "";
+    for (var g = 0; g <= 4; g++) {
+      var yy = (y0 + (y1 - y0) * g / 4).toFixed(1);
+      s += '<line class="grid-line" x1="' + x0 + '" y1="' + yy + '" x2="' + x1 + '" y2="' + yy + '"/>';
+      s += '<text class="axis-txt" x="' + (x0 - 8) + '" y="' + (parseFloat(yy) + 4) + '" text-anchor="end">' + Math.round(scope * (1 - g / 4)) + "</text>";
+    }
+    for (var d = 0; d <= days; d += 2) s += '<text class="axis-txt" x="' + X(d) + '" y="' + (y1 + 18) + '" text-anchor="middle">N' + d + "</text>";
+    var tx = X(todayD);
+    s += '<path class="area" d="' + area + '"/>';
+    s += '<line class="today-line" x1="' + tx + '" y1="' + y0 + '" x2="' + tx + '" y2="' + y1 + '"/>';
+    s += '<text class="note-txt" x="' + (parseFloat(tx) + 5) + '" y="' + (y0 + 11) + '">hôm nay</text>';
+    s += '<path class="planned" d="' + planned + '"/>';
+    s += '<text class="plan-txt" x="' + x1 + '" y="' + (parseFloat(Y(0)) - 6) + '" text-anchor="end">Kế hoạch</text>';
+    s += '<path class="actual" d="' + actual + '"/>';
+    s += '<circle class="dot" cx="' + X(todayD) + '" cy="' + Y(rem) + '" r="4"/>';
+    $("burnSvg").innerHTML = s;
+  }
+
+  function renderBars() {
+    var s = SC[state.sc], tier = s.tiers[state.drill];
+    $("drillLbl").textContent = tier.name;
+    var groups = {}, order = [];
+    s.leaves.forEach(function (l) {
+      var k = l.path[state.drill];
+      if (!(k in groups)) { groups[k] = { rem: 0, est: 0 }; order.push(k); }
+      groups[k].rem += l.rem; groups[k].est += l.est;
+    });
+    var max = 0; order.forEach(function (k) { if (groups[k].est > max) max = groups[k].est; });
+    var box = $("barsBox"); box.innerHTML = "";
+    order.forEach(function (k) {
+      var isPhase = tier.role === "PHASE";
+      var col = isPhase ? (PHASE_COLOR[k] || "var(--t-phase)") : tierColorVar(tier.code);
+      var row = el("div", "bar-row");
+      var remPct = max ? (groups[k].rem / max * 100) : 0;
+      var estPct = max ? (groups[k].est / max * 100) : 0;
+      row.innerHTML =
+        '<div class="bar-lbl"><span class="sw" style="background:' + col + '"></span>' + esc(k) + "</div>" +
+        '<div class="bar-track" title="còn ' + groups[k].rem + "h / " + groups[k].est + 'h">' +
+          '<div style="position:absolute;inset:0;width:' + estPct + '%;background:color-mix(in srgb,' + col + ' 16%,transparent);border-radius:6px"></div>' +
+          '<div class="bar-fill" style="width:' + remPct + '%;background:' + col + '"></div>' +
+        "</div>" +
+        '<div class="bar-val"><b style="color:var(--ink);font-weight:600">' + groups[k].rem + "h</b> / " + groups[k].est + "h</div>";
+      box.appendChild(row);
+    });
+  }
+
+  // ---------- Signboard ----------
+  function renderSignboard() {
+    var s = SC[state.sc];
+    var leg = $("sbLegend"); leg.innerHTML = "";
+    Object.keys(ST).forEach(function (k) {
+      leg.appendChild(el("span", null, '<span class="sw" style="background:' + ST[k].c + '"></span>' + ST[k].label));
+    });
+    var pIdx = s.phaseTier, byPhase = {}, order = [];
+    s.leaves.forEach(function (l) {
+      var p = l.path[pIdx];
+      if (!(p in byPhase)) { byPhase[p] = []; order.push(p); }
+      byPhase[p].push(l);
+    });
+    var box = $("sbBox"); box.innerHTML = "";
+    order.forEach(function (p) {
+      var col = PHASE_COLOR[p] || "var(--t-phase)";
+      var row = el("div", "sb-row");
+      var cells = byPhase[p].map(function (l) {
+        return '<span class="cell" style="background:' + ST[l.status].c + '">' + esc(l.key) +
+          ' <span class="st-name">' + ST[l.status].label + "</span></span>";
+      }).join("");
+      row.innerHTML =
+        '<div class="sb-phase"><span class="sw" style="background:' + col + '"></span>' + esc(p) + "</div>" +
+        '<div class="sb-cells">' + cells + "</div>";
+      box.appendChild(row);
+    });
+  }
+
+  function renderAll() {
+    renderScope(); renderTiers(); renderPreview();
+    renderDrill();
+    var t = renderStats();
+    renderBurnChart(t.scope, t.rem); renderBars();
+    renderSignboard();
+  }
+
+  // ---- events ----
+  $("scenarioSeg").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    state.sc = b.dataset.sc; state.drill = SC[state.sc].phaseTier;
+    Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+    renderAll();
+  });
+  $("tabs").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    state.tab = b.dataset.tab;
+    Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.setAttribute("aria-selected", x === b ? "true" : "false"); });
+    ["config", "burndown", "signboard"].forEach(function (v) { $("view-" + v).classList.toggle("on", v === state.tab); });
+  });
+  $("drillSel").addEventListener("change", function () { state.drill = parseInt(this.value, 10); renderBars(); });
+
+  renderAll();
+})();
+</script>
