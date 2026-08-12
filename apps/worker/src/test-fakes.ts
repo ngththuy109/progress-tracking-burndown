@@ -321,6 +321,17 @@ export class FakeStore implements SyncRunPort, EpicStatePort, DirtyEpicQueuePort
     return Promise.resolve(n);
   }
 
+  markDeletedMissing(epicKey: string, liveWorklogIds: ReadonlySet<bigint>): Promise<number> {
+    let n = 0;
+    for (const [key, row] of this.worklogRows) {
+      // Đặt cờ cho worklog của Epic không còn trong tập sống — KHÔNG xoá dòng (E-17).
+      if (row.epicKey !== epicKey || row.isDeleted || liveWorklogIds.has(row.worklogId)) continue;
+      this.worklogRows.set(key, { ...row, isDeleted: true });
+      n += 1;
+    }
+    return Promise.resolve(n);
+  }
+
   // --- changelog ---
   upsertManyChangelog(rows: readonly ChangelogRecord[]): Promise<void> {
     for (const r of rows) {
@@ -409,6 +420,7 @@ export function portsOf(store: FakeStore) {
     worklogs: {
       upsertMany: (r: readonly WorklogRecord[]) => store.upsertManyWorklogs(r),
       markDeleted: (ids: readonly bigint[]) => store.markDeleted(ids),
+      markDeletedMissing: (e: string, ids: ReadonlySet<bigint>) => store.markDeletedMissing(e, ids),
     } satisfies WorklogWritePort,
     changelog: {
       upsertMany: (r: readonly ChangelogRecord[]) => store.upsertManyChangelog(r),

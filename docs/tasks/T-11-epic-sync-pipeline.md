@@ -57,7 +57,7 @@ GIAI ĐOẠN 4 (tổng hợp ngày Phase) và 5 (dựng lịch sử) do **T-15**
 - Đồng bộ tăng dần: chỉ tải issue có `updated >= watermark`
 - Phân tách tiêu đề Task và Sub-task, ghi kết quả vào `jira_issue`
 - UPSERT idempotent vào 4 bảng: `jira_issue`, `issue_changelog_event`, `worklog_entry`, `sync_run`
-- Phát hiện worklog bị xoá qua `/worklog/deleted`, đặt `is_deleted = true`
+- Phát hiện worklog bị xoá, đặt `is_deleted = true`: đồng bộ tăng dần dùng `/worklog/deleted`; đọc lại toàn bộ **đối soát** tập worklog đầy đủ vừa lấy với các dòng trong DB (`/worklog/deleted` cần watermark nên không dùng được ở lượt full)
 - Phát hiện log giờ lùi ngày (`started < created - 1 ngày`) → đẩy Epic vào `dirty:epics`
 - Ghi `sync_run`: số lần gọi API, số lần 429, thời lượng, kết quả
 - Cập nhật `tracked_epic.last_synced_at` và chuyển `BACKFILLING → ACTIVE`
@@ -94,7 +94,9 @@ GIAI ĐOẠN 4 (tổng hợp ngày Phase) và 5 (dựng lịch sử) do **T-15**
    - `issue_changelog_event` theo `(issue_key, jira_history_id, field_name)`
    - `worklog_entry` theo `worklog_id`
    - Issue biến mất khỏi kết quả truy vấn → đặt `removed_at`, **không xoá cứng**
-6. `/worklog/deleted` từ watermark → đặt `is_deleted = true`.
+6. Đánh dấu worklog đã xoá bằng **hai đường**, tuỳ chế độ:
+   - Tăng dần: `/worklog/deleted` từ watermark → đặt `is_deleted = true`.
+   - Đọc lại toàn bộ (không có watermark, `/worklog/deleted` không dùng được): đối soát tập worklog **đầy đủ** vừa lấy với các dòng còn `is_deleted = false` trong DB — dòng nào không còn trên Jira thì đặt `is_deleted = true` (song song với `removed_at` cho issue). Thiếu bước này thì full resync không bao giờ gỡ được worklog đã xoá, và ngày bắt đầu/kết thúc **thực tế** (suy từ worklog) kẹt ở giá trị cũ.
 7. Phát hiện log lùi ngày: query index `idx_worklog_retro`, có kết quả → `SADD dirty:epics`.
 8. Ghi `sync_run` đủ các cột thống kê. Lỗi → `status = FAILED`, ghi `error_message`, chuyển Epic sang `ERROR`.
 
