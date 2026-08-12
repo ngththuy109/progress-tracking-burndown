@@ -47,6 +47,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     builtBy: 'Phase tickets',
   },
   {
+    path: '/config/tiers',
+    label: 'Cấu trúc tầng',
+    icon: '🏗️',
+    summary: 'Khai 1..N tầng nhóm logic cho dự án; đánh dấu đúng một tầng là Phase.',
+    builtBy: 'Dynamic tiers',
+  },
+  {
     path: '/config/signboard',
     label: 'Signboard columns',
     icon: '🧩',

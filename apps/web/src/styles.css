@@ -490,6 +490,29 @@ code {
   color: var(--text-muted);
 }
 
+/* Màn "Cấu trúc tầng": khối con (giá trị/luật/mẫu) trong mỗi thẻ tầng. */
+.subsection {
+  border: 1px solid var(--border, #e2e4e8);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 10px;
+}
+.subsection > legend {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 6px;
+}
+.field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.button--small {
+  padding: 3px 10px;
+  font-size: 0.85rem;
+}
+
 .button--icon {
   padding: 4px 8px;
 }

@@ -8,6 +8,7 @@ import { BurndownScreen } from './burndown/index.js';
 import { SignboardScreen } from './signboard/index.js';
 import { PhaseSubtasksScreen } from './phase-subtasks/index.js';
 import { SignboardColumnScreen } from './config-signboard/index.js';
+import { TierStructureScreen } from './config-tiers/index.js';
 import { HolidaysScreen } from './config-holidays/index.js';
 import { OpsScreen } from './ops/index.js';
 import { AdminUsersScreen } from './admin-users/index.js';
@@ -30,6 +31,7 @@ export function AppRoutes() {
         <Route path="burndown" element={<BurndownScreen />} />
         <Route path="signboard" element={<SignboardScreen />} />
         <Route path="phase-subtasks" element={<PhaseSubtasksScreen />} />
+        <Route path="config/tiers" element={<TierStructureScreen />} />
         <Route path="config/phase" element={<ConfigPhaseScreen />} />
         <Route path="config/signboard" element={<SignboardColumnScreen />} />
         <Route path="config/holidays" element={<HolidaysScreen />} />
