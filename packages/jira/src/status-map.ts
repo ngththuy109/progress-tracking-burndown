@@ -20,6 +20,22 @@ export interface StatusMapCache {
 export const STATUS_MAP_CACHE_KEY = 'meta:statuscategory';
 export const STATUS_MAP_TTL_SECONDS = 24 * 60 * 60;
 
+/**
+ * Khoá cache theo DỰ ÁN: `meta:statuscategory:<projectKey>`.
+ *
+ * Đa tenant thì status ID dạng số ĐỤNG NHAU giữa các site Jira — dùng chung một
+ * khoá toàn cục sẽ cho dự án này đọc nhầm bảng tra của site khác. Khoá mặc định
+ * (không hậu tố) vẫn giữ nguyên cho đường legacy đơn site.
+ */
+export function statusMapCacheKey(projectKey: string): string {
+  return `${STATUS_MAP_CACHE_KEY}:${projectKey}`;
+}
+
+export interface StatusMapLoadOptions {
+  /** Khoá cache tuỳ chọn — mặc định là khoá toàn cục `meta:statuscategory`. */
+  readonly cacheKey?: string;
+}
+
 const VALID: readonly string[] = ['new', 'indeterminate', 'done'];
 
 /**
@@ -31,9 +47,11 @@ const VALID: readonly string[] = ['new', 'indeterminate', 'done'];
 export async function loadStatusIdMap(
   client: JiraClient,
   cache?: StatusMapCache,
+  opts: StatusMapLoadOptions = {},
 ): Promise<Map<string, StatusCategoryKey>> {
+  const cacheKey = opts.cacheKey ?? STATUS_MAP_CACHE_KEY;
   if (cache) {
-    const cached = await cache.get(STATUS_MAP_CACHE_KEY);
+    const cached = await cache.get(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached) as Record<string, string>;
       return toMap(parsed);
@@ -47,7 +65,7 @@ export async function loadStatusIdMap(
   }
 
   if (cache) {
-    await cache.set(STATUS_MAP_CACHE_KEY, JSON.stringify(plain), STATUS_MAP_TTL_SECONDS);
+    await cache.set(cacheKey, JSON.stringify(plain), STATUS_MAP_TTL_SECONDS);
   }
 
   return toMap(plain);

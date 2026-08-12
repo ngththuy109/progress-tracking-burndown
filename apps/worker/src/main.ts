@@ -1,10 +1,31 @@
 // PHẢI đứng TRƯỚC mọi import khác: nạp `.env` ở gốc repo vào process.env trước
 // khi @app/db… (hoặc bất kỳ module nào) đọc env. Xem load-env.ts.
 import './load-env.js';
-import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 import { Redis } from 'ioredis';
-import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
-import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
+import {
+  TokenBucketRateLimiter,
+  createJiraRegistry,
+  fieldMappingConfigSchema,
+  siteRateLimitKey,
+  type FieldMappingConfig,
+  type JiraEnvFallback,
+  type RateLimiter,
+  type StatusMapCache,
+  type TokenBucketStore,
+} from '@app/jira';
+import {
+  assertEncryptionKeyUsable,
+  assertMigrationsApplied,
+  disconnectPrisma,
+  findProjectConnection,
+  getPrisma,
+  open,
+  parseEncryptionKey,
+} from '@app/db';
 import { withTimeout, TimeoutError } from '@app/shared';
 import { RedisTokenBucketStore, type EvalRedis } from './queue/redis-token-bucket.js';
 import { createShutdown, registerSignalHandlers } from './queue/shutdown.js';
@@ -59,9 +80,15 @@ const BOOTSTRAP_TIMEOUT_MS = readTimeoutMs('BOOTSTRAP_TIMEOUT_MS', 60_000);
 export interface RuntimeEnv {
   readonly redisUrl: string;
   readonly databaseUrl: string;
-  readonly jiraBaseUrl: string;
-  readonly jiraEmail: string;
-  readonly jiraApiToken: string;
+  /**
+   * Bộ ba JIRA_* giờ là TUỲ CHỌN (multi-tenant): mỗi project mang kết nối
+   * riêng trong DB; env chỉ còn là đường fallback cho project legacy. `null`
+   * nghĩa là không có fallback — project thiếu kết nối riêng sẽ bị registry
+   * chặn với thông báo rõ ràng.
+   */
+  readonly jiraBaseUrl: string | null;
+  readonly jiraEmail: string | null;
+  readonly jiraApiToken: string | null;
 }
 
 export class MissingEnvError extends Error {
@@ -77,6 +104,9 @@ export class MissingEnvError extends Error {
 const REQUIRED_ENV = {
   redisUrl: 'REDIS_URL',
   databaseUrl: 'DATABASE_URL',
+} as const;
+
+const OPTIONAL_JIRA_ENV = {
   jiraBaseUrl: 'JIRA_BASE_URL',
   jiraEmail: 'JIRA_EMAIL',
   jiraApiToken: 'JIRA_API_TOKEN',
@@ -87,16 +117,33 @@ const REQUIRED_ENV = {
  *
  * Gom TẤT CẢ biến thiếu rồi báo một lần. Báo từng cái một khiến người dựng môi
  * trường phải chạy đi chạy lại năm lần mới biết còn thiếu những gì.
+ *
+ * Bộ ba JIRA_* là tuỳ chọn nhưng phải ĐỦ CẢ BA hoặc VẮNG CẢ BA: đặt nửa vời là
+ * cấu hình hỏng (cùng quy tắc với kết nối per-project trong registry) — báo
+ * thiếu ngay thay vì để job đêm chết khó hiểu.
  */
 export function readEnv(source: Readonly<Record<string, string | undefined>>): RuntimeEnv {
   const missing: string[] = [];
-  const values: Record<string, string> = {};
+  const values: Record<string, string | null> = {};
 
   for (const [field, name] of Object.entries(REQUIRED_ENV)) {
     const raw = source[name]?.trim();
     if (raw === undefined || raw === '') missing.push(name);
     else values[field] = raw;
   }
+
+  const jiraMissing: string[] = [];
+  for (const [field, name] of Object.entries(OPTIONAL_JIRA_ENV)) {
+    const raw = source[name]?.trim();
+    if (raw === undefined || raw === '') {
+      jiraMissing.push(name);
+      values[field] = null;
+    } else {
+      values[field] = raw;
+    }
+  }
+  // Nửa vời (1–2 trên 3) mới là lỗi; vắng cả ba là "không có fallback", hợp lệ.
+  if (jiraMissing.length > 0 && jiraMissing.length < 3) missing.push(...jiraMissing);
 
   if (missing.length > 0) throw new MissingEnvError(missing);
 
@@ -113,6 +160,7 @@ export function loggableEnv(env: RuntimeEnv): Record<string, unknown> {
   return {
     jiraBaseUrl: env.jiraBaseUrl,
     jiraEmail: env.jiraEmail,
+    jiraEnvFallback: env.jiraApiToken !== null,
     redisHost: safeHost(env.redisUrl),
     databaseHost: safeHost(env.databaseUrl),
   };
@@ -191,10 +239,67 @@ export interface RateLimiterBuild {
  * request/giây riêng; bốn worker thành 160 request/giây và Jira sẽ chặn cả tổ
  * chức (R-04, ảnh hưởng "Rất cao"). Test đơn tiến trình không bao giờ phát hiện
  * được điều đó, nên hàm này cố ý KHÔNG nhận tham số cho phép chọn bản in-memory.
+ *
+ * `siteHost` (multi-tenant): khoá bucket THEO SITE Jira —
+ * `ratelimit:jira:tokens:<host>`, đúng khuôn `siteRateLimitKey` bên `@app/jira`
+ * — để N dự án cùng site chia nhau đúng một hạn mức, còn hai site khác nhau
+ * không bóp lẫn nhau. Không truyền thì dùng khoá legacy đơn site.
  */
-export function buildJiraRateLimiter(redis: EvalRedis, now?: () => number): RateLimiterBuild {
+export function buildJiraRateLimiter(
+  redis: EvalRedis,
+  now?: () => number,
+  siteHost?: string,
+): RateLimiterBuild {
   const store = new RedisTokenBucketStore(redis, now);
-  return { store, limiter: new TokenBucketRateLimiter({ store }) };
+  return {
+    store,
+    limiter: new TokenBucketRateLimiter({
+      store,
+      // Đi vòng qua `siteRateLimitKey` (nhận URL) để KHÔNG chép tay tiền tố
+      // khoá — lệch một ký tự là hai đường (api test-connection / worker sync)
+      // đếm hạn mức trên hai bucket khác nhau.
+      ...(siteHost !== undefined ? { key: siteRateLimitKey(`https://${siteHost}`) } : {}),
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Registry client Jira theo dự án (multi-tenant)
+// ---------------------------------------------------------------------------
+
+/**
+ * Nạp `config/jira-fields.yaml` — giờ CHỈ dùng làm `fieldsConfig` của đường
+ * fallback env; dự án có `jiraFieldsJson` riêng trong DB thì không đụng tới.
+ */
+export function loadFieldMappingConfig(): FieldMappingConfig {
+  const override = process.env['JIRA_FIELDS_CONFIG'];
+  const path = override
+    ? resolve(override)
+    : resolve(dirname(fileURLToPath(import.meta.url)), '../../../config/jira-fields.yaml');
+  return fieldMappingConfigSchema.parse(parseYaml(readFileSync(path, 'utf8')));
+}
+
+/**
+ * Đường fallback JIRA_* cho dự án legacy. Vắng cả ba biến → `null` — lúc đó
+ * KHÔNG cần cả file YAML: mọi dự án buộc phải có kết nối riêng trong DB.
+ */
+export function buildEnvFallback(env: RuntimeEnv): JiraEnvFallback | null {
+  if (env.jiraBaseUrl === null || env.jiraEmail === null || env.jiraApiToken === null) return null;
+  return {
+    baseUrl: env.jiraBaseUrl,
+    email: env.jiraEmail,
+    apiToken: env.jiraApiToken,
+    fieldsConfig: loadFieldMappingConfig(),
+  };
+}
+
+function createStatusMapCache(redis: Redis): StatusMapCache {
+  return {
+    get: (key) => redis.get(key),
+    set: async (key, value, ttlSeconds) => {
+      await redis.set(key, value, 'EX', ttlSeconds);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -222,8 +327,8 @@ async function bootstrap(): Promise<void> {
   }
 
   // CHẶN ca Redis "treo" (accept TCP nhưng không trả lời lệnh): không có hạn chót
-  // thì `loadStatusIdMap` → `redis.get()` trên `general` chờ MÃI và worker nằm im
-  // mà không phát ra lỗi nào. Ping có hạn chót để thoát sớm với thông báo rõ.
+  // thì lệnh Redis đầu tiên (BullMQ scheduler, token bucket…) chờ MÃI và worker
+  // nằm im mà không phát ra lỗi nào. Ping có hạn chót để thoát sớm với thông báo rõ.
   await withTimeout(redis.general.ping(), REDIS_READY_TIMEOUT_MS, 'Redis (ping lúc khởi động)');
 
   // Kiểm DB ngay lúc khởi động: thà chết sớm với lỗi rõ còn hơn để mọi job đổ vì
@@ -238,20 +343,52 @@ async function bootstrap(): Promise<void> {
     onSkip: (reason, dir) => log({ event: 'migrations.check.skipped', reason, dir }),
   });
 
-  // JiraClient dùng token bucket Redis DÙNG CHUNG (C-7): 40 req/s toàn hệ thống,
-  // chứ không phải mỗi worker một hạn riêng — nếu không bốn worker thành 160 req/s
-  // và Jira chặn cả tổ chức (R-04).
-  const { limiter } = buildJiraRateLimiter(redis.general as unknown as EvalRedis);
-  const jira = new JiraClient({ rateLimiter: limiter, logger: (e) => log(e) });
+  // CHẶN khởi động nếu DB đã có token Jira mã hoá mà APP_ENCRYPTION_KEY thiếu
+  // hoặc sai khoá: thà chết ở đây còn hơn một nửa số tenant chết im lặng lúc
+  // 2h sáng. Chưa tenant nào nhập token thì KHÔNG bắt buộc đặt khoá.
+  await assertEncryptionKeyUsable(prisma, process.env['APP_ENCRYPTION_KEY']);
 
-  // Nạp field mapping + status map, dựng bảng điều phối, chạy Worker cho cả ba
-  // hàng đợi. Ném lỗi (→ worker.fatal) nếu Jira sai/không tới được.
+  // Khoá mã hoá chỉ được parse LƯỜI, khi một hàng project thật sự mang token:
+  // hệ thống legacy toàn env JIRA_* không đặt khoá vẫn phải chạy được (ca cấu
+  // hình sai thật sự đã bị assertEncryptionKeyUsable ở trên chặn từ lúc boot).
+  let cachedEncryptionKey: Buffer | null = null;
+  const encryptionKey = (): Buffer =>
+    (cachedEncryptionKey ??= parseEncryptionKey(process.env['APP_ENCRYPTION_KEY']));
+
+  // Registry client Jira THEO DỰ ÁN. Khởi động KHÔNG chạm Jira — client, field
+  // mapping và status map của từng tenant được dựng lười ở job đầu tiên.
+  //
+  // Rate limiter khoá THEO SITE trên Redis DÙNG CHUNG (C-7): 40 req/s cho mỗi
+  // site trên TOÀN hệ thống, chứ không phải mỗi worker/mỗi dự án một hạn riêng
+  // — nếu không bốn worker thành 160 req/s và Jira chặn cả tổ chức (R-04).
+  const registry = createJiraRegistry({
+    loadConnection: async (projectKey) => {
+      const row = await findProjectConnection(prisma, projectKey);
+      if (row === null) return null;
+      return {
+        projectKey: row.projectKey,
+        baseUrl: row.jiraBaseUrl,
+        email: row.jiraEmail,
+        // Giải mã NGAY TẠI BIÊN này; plaintext chỉ sống trong RAM của registry.
+        apiTokenPlain: row.jiraTokenEnc === null ? null : open(row.jiraTokenEnc, encryptionKey()),
+        fieldsConfig: row.jiraFieldsJson,
+        resolvedFields: row.jiraResolvedJson,
+      };
+    },
+    envFallback: buildEnvFallback(env),
+    createRateLimiter: (siteHost) =>
+      buildJiraRateLimiter(redis.general as unknown as EvalRedis, undefined, siteHost).limiter,
+    statusCache: createStatusMapCache(redis.general),
+    logger: (e) => log(e),
+  });
+
+  // Dựng bảng điều phối, chạy Worker cho cả ba hàng đợi.
   const { workers, queues } = await wireWorker({
     prisma,
     queueConn: redis.queue,
     workerConn: redis.worker,
     generalConn: redis.general,
-    jira,
+    registry,
     log,
     nightlyCron: NIGHTLY_CRON,
     weeklyReconcileCron: WEEKLY_RECONCILE_CRON,

@@ -5,7 +5,6 @@ import {
   type ConfigSet,
   type ConfigVersion,
   type EffectiveConfig,
-  type Principal,
   type PreviewRequest,
   type PreviewResponse,
   type UnmatchedLabel,
@@ -80,29 +79,6 @@ export class ApiError extends Error {
 const scopeOf = (projectKey: string | null): 'GLOBAL' | 'PROJECT' =>
   projectKey === null ? 'GLOBAL' : 'PROJECT';
 
-/**
- * Ai được sửa cấu hình nào.
- *
- * Bộ Mặc định (GLOBAL) chỉ Admin được đụng: nó ảnh hưởng tới MỌI project đang
- * kế thừa, nên một PM sửa nhầm sẽ làm đổi phân loại của cả những project họ
- * không phụ trách.
- */
-export function assertCanWrite(principal: Principal, projectKey: string | null): void {
-  if (principal.role === 'ADMIN') return;
-
-  if (projectKey === null) {
-    throw new ApiError(
-      403,
-      'FORBIDDEN',
-      'Only Admins can edit the Default settings, because they affect every project.',
-    );
-  }
-
-  if (principal.role === 'PM' && principal.projects.includes(projectKey)) return;
-
-  throw new ApiError(403, 'FORBIDDEN', `You do not have permission to edit the settings for project ${projectKey}.`);
-}
-
 /** Cấu hình đang hiệu lực, đã gộp kế thừa, kèm cờ `inherited` từng phần. */
 export async function getEffective(
   deps: PhaseConfigDeps,
@@ -158,14 +134,18 @@ export async function preview(
   });
 }
 
-/** Lưu version mới rồi đánh dấu Epic cần tính lại. */
+/**
+ * Lưu version mới rồi đánh dấu Epic cần tính lại.
+ *
+ * KHÔNG kiểm quyền ở đây nữa: từ Phase B (multi-tenant) quyền được kiểm TẬP
+ * TRUNG ở guard `requireProject('PM')` / `requireAdmin` (adapters/project-scope)
+ * trước khi handler chạy. Service chỉ nhận `createdBy` để ghi sổ.
+ */
 export async function save(
   deps: PhaseConfigDeps,
-  principal: Principal,
+  createdBy: string,
   args: { projectKey: string | null; payload: ConfigPayload; note: string | null },
 ): Promise<{ version: number; affectedEpics: number; estimatedRecomputeSeconds: number }> {
-  assertCanWrite(principal, args.projectKey);
-
   const issues = validateConfigPayload(args.payload);
   if (hasBlockingError(issues)) {
     // Ném TRƯỚC khi gọi `store.save`. Nếu kiểm tra sau thì đã có version mới
@@ -177,7 +157,7 @@ export async function save(
     scope: scopeOf(args.projectKey),
     projectKey: args.projectKey,
     payload: args.payload,
-    createdBy: principal.userId,
+    createdBy,
     note: args.note,
   });
 
@@ -193,16 +173,14 @@ export async function save(
 /** Quay về version cũ. Cũng phải đánh dấu tính lại y như lưu mới. */
 export async function rollback(
   deps: PhaseConfigDeps,
-  principal: Principal,
+  createdBy: string,
   args: { projectKey: string | null; version: number },
 ): Promise<{ version: number; affectedEpics: number; estimatedRecomputeSeconds: number }> {
-  assertCanWrite(principal, args.projectKey);
-
   const { version } = await deps.store.rollback({
     scope: scopeOf(args.projectKey),
     projectKey: args.projectKey,
     version: args.version,
-    createdBy: principal.userId,
+    createdBy,
   });
 
   const affected = await markDirty(deps, args.projectKey);

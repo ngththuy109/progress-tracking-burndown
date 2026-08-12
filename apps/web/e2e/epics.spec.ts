@@ -56,6 +56,19 @@ async function installApi(
       const path = new URL(route.request().url()).pathname;
       const method = route.request().method();
 
+      // Multi-tenant: /api/me nuôi ProjectProvider — thiếu nó là bị đá về `/`
+      // trước khi màn hình Epics kịp render.
+      if (path === '/api/me') {
+        await route.fulfill(
+          json({
+            userId: 'pm@example.com',
+            isAdmin: false,
+            projects: [{ projectKey: 'PAY', displayName: 'Payments', role: 'PM' }],
+          }),
+        );
+        return;
+      }
+
       if (path.endsWith('/epics/validate')) {
         const body = route.request().postDataJSON() as { keys: string[] };
         calls.validated.push(body.keys);
@@ -141,7 +154,7 @@ async function installApi(
 
 test('dán 3 mã rồi bấm Kiểm tra thì thấy cái nào thêm được, và CHƯA thêm gì cả', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByLabel('Epic keys').fill('PAY-100, PAY-200, XXX-1');
   await page.getByRole('button', { name: /Check 3 keys/ }).click();
@@ -159,7 +172,7 @@ test('dán 3 mã rồi bấm Kiểm tra thì thấy cái nào thêm được, v�
 
 test('mã không tồn tại hiện LÝ DO đọc được, không hiện mã lỗi', async ({ page }) => {
   await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByLabel('Epic keys').fill('XXX-1');
   await page.getByRole('button', { name: /Check/ }).click();
@@ -170,7 +183,7 @@ test('mã không tồn tại hiện LÝ DO đọc được, không hiện mã l�
 
 test('màn hình nói rõ thời gian ước tính TRƯỚC khi bấm thêm', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByLabel('Epic keys').fill('PAY-100, PAY-200');
   await page.getByRole('button', { name: /Check/ }).click();
@@ -189,7 +202,7 @@ test('Epic chưa từng đồng bộ hiện "đang dựng lịch sử lần đ�
   await installApi(page, {
     epics: [EPIC({ status: 'BACKFILLING', lastSyncedAt: null })],
   });
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await expect(page.getByRole('cell', { name: 'building history for the first time' })).toBeVisible();
   await expect(page.getByText('building history', { exact: true })).toBeVisible();
@@ -199,14 +212,14 @@ test('Epic đang lỗi hiện NGUYÊN VĂN thông báo lỗi', async ({ page }) 
   await installApi(page, {
     epics: [EPIC({ status: 'ERROR', lastError: 'Jira trả 401: token hết hạn' })],
   });
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await expect(page.getByText('Jira trả 401: token hết hạn')).toBeVisible();
 });
 
 test('nhãn nói rõ Tạm dừng giữ dữ liệu còn Bỏ theo dõi xoá dữ liệu', async ({ page }) => {
   await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await expect(page.getByRole('button', { name: 'Pause (keep data)' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Untrack (delete data)' })).toBeVisible();
@@ -214,7 +227,7 @@ test('nhãn nói rõ Tạm dừng giữ dữ liệu còn Bỏ theo dõi xoá d�
 
 test('tạm dừng gửi đúng trạng thái PAUSED', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByRole('button', { name: 'Pause (keep data)' }).click();
 
@@ -226,14 +239,14 @@ test('nút Đồng bộ lại tồn tại đúng tên mà runbook và màn hình
   // "bấm Đồng bộ lại ở màn hình Epic". Trước đây nút đó KHÔNG tồn tại — hướng
   // dẫn chỉ tới hư không.
   await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await expect(page.getByRole('button', { name: 'Resync' })).toBeVisible();
 });
 
 test('hộp thoại cho chọn đủ BA mức, mặc định là mức rẻ nhất', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByRole('button', { name: 'Resync' }).click();
 
@@ -252,7 +265,7 @@ test('hộp thoại cho chọn đủ BA mức, mặc định là mức rẻ nh�
 
 test('mức Toàn bộ gửi full = true và cảnh báo về hạn mức Jira', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByRole('button', { name: 'Resync' }).click();
   const dialog = page.getByRole('dialog', { name: 'Choose resync depth' });
@@ -267,7 +280,7 @@ test('mức Toàn bộ gửi full = true và cảnh báo về hạn mức Jira',
 
 test('mức Dải ngày chặn dải ngược và gửi đúng hai đầu', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByRole('button', { name: 'Resync' }).click();
   const dialog = page.getByRole('dialog', { name: 'Choose resync depth' });
@@ -295,14 +308,14 @@ test('Epic đang tạm dừng thì không bấm Đồng bộ lại được', as
   // Đánh thức một Epic đã cố ý tạm dừng sẽ vô hiệu hoá chính nút Tạm dừng; API
   // trả 409, nên nút phải mờ đi thay vì để người dùng bấm rồi nhận lỗi.
   await installApi(page, { epics: [EPIC({ status: 'PAUSED' })] });
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await expect(page.getByRole('button', { name: 'Resync' })).toBeDisabled();
 });
 
 test('bỏ theo dõi BẮT gõ lại mã Epic trước khi cho bấm', async ({ page }) => {
   const calls = await installApi(page);
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByRole('button', { name: 'Untrack (delete data)' }).click();
 
@@ -327,7 +340,7 @@ test('Epic có Sub-task thiếu ngày hiện số lượng và bấm vào xem đ
   await installApi(page, {
     epics: [EPIC({ dataHealth: { ...EPIC().dataHealth, missingWbsDateCount: 3 } })],
   });
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await page.getByRole('button', { name: '3', exact: true }).click();
 
@@ -338,7 +351,7 @@ test('Epic có Sub-task thiếu ngày hiện số lượng và bấm vào xem đ
 
 test('chưa theo dõi Epic nào thì hướng dẫn bước tiếp theo, không để trang trắng', async ({ page }) => {
   await installApi(page, { epics: [] });
-  await page.goto('/epics');
+  await page.goto('/p/PAY/epics');
 
   await expect(page.getByRole('heading', { name: 'No Epics tracked yet' })).toBeVisible();
   await expect(page.getByText(/click Check to get started/)).toBeVisible();

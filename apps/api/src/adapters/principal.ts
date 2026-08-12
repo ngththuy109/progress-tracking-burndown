@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import type { Principal, UserRole } from '@app/shared';
+import type { GlobalRole, Principal, ProjectRole } from '@app/shared';
 
 /**
  * Xác định người gọi từ DANH TÍNH do cổng SSO xác thực — mô hình B1.
@@ -10,16 +10,33 @@ import type { Principal, UserRole } from '@app/shared';
  * config/auth-proxy/). API chỉ được nhận request qua cổng này, không bao giờ
  * trực tiếp từ Internet.
  *
- * KHÁC BẢN CŨ (và cố ý an toàn hơn): API **không đọc `role`/`projects` từ
- * header**. Nó chỉ tin DANH TÍNH, rồi tra vai trò ở bảng `app_user`. Nhờ vậy dù
- * cổng có lỡ để lọt một header `x-user-role: ADMIN` giả từ client thì cũng vô
- * hại — vai trò luôn đến từ database của chính hệ thống.
+ * API **không đọc `role` từ header**. Nó chỉ tin DANH TÍNH, rồi tra quyền ở
+ * bảng `app_user` + `project_member`. Nhờ vậy dù cổng có lỡ để lọt một header
+ * `x-user-role: ADMIN` giả từ client thì cũng vô hại.
+ *
+ * THAY ĐỔI PHÁ VỠ (multi-tenant, Phase B): `Principal` không còn
+ * `role: ADMIN|PM|VIEWER` toàn cục nữa mà là hai tầng —
+ * `isAdmin` (toàn cục) + `memberships` (projectKey → PM|VIEWER).
+ *
+ *   - `AUTH_DEFAULT_ROLE=ADMIN` vẫn nghĩa là "ai đăng nhập được đều là admin"
+ *     (chỉ dành cho môi trường dev).
+ *   - Các giá trị cũ `VIEWER`/`PM` (và giá trị mới `MEMBER`) giờ đều cho ra
+ *     MEMBER-không-membership: đăng nhập được nhưng KHÔNG NHÌN THẤY dự án nào
+ *     cho tới khi được thêm vào `project_member`. Trước đây `VIEWER` xem được
+ *     tất cả — hành vi đó đã bỏ có chủ đích: tenant nào chỉ thấy tenant đó.
+ *   - `NONE` vẫn là từ chối hẳn (không có principal).
  */
 
-/** Cổng đọc vai trò từ nguồn sự thật (bảng `app_user`). */
+/** Cổng đọc quyền từ nguồn sự thật (`app_user` + `project_member`). */
 export interface AppUserStore {
-  find(userId: string): Promise<{ role: UserRole; projects: readonly string[] } | null>;
+  find(userId: string): Promise<{
+    role: GlobalRole;
+    memberships: Readonly<Record<string, ProjectRole>>;
+  } | null>;
 }
+
+/** Quyền mặc định cho người đã đăng nhập nhưng CHƯA có trong `app_user`. */
+export type DefaultGrant = 'ADMIN' | 'MEMBER';
 
 export interface AuthConfig {
   /** Tên header danh tính do cổng đặt. Khác nhau theo proxy nên cấu hình được. */
@@ -27,11 +44,11 @@ export interface AuthConfig {
   /** Email luôn được coi là ADMIN — dùng để mồi admin đầu tiên (chống deadlock). */
   readonly bootstrapAdmins: ReadonlySet<string>;
   /**
-   * Vai trò cho người đã đăng nhập nhưng CHƯA được cấp quyền trong `app_user`.
-   * `VIEWER` = ai qua được SSO đều xem được (đúng tinh thần đọc-mở/ghi-chặn).
-   * `null` = chưa cấp quyền thì coi như không có principal (chặn cả xem).
+   * Quyền cho người đã đăng nhập nhưng CHƯA được cấp trong `app_user`.
+   * `MEMBER` = vào được nhưng chưa thấy dự án nào (mặc định an toàn).
+   * `null` = chưa cấp quyền thì coi như không có principal (chặn hẳn).
    */
-  readonly defaultRole: UserRole | null;
+  readonly defaultGrant: DefaultGrant | null;
 }
 
 /** Email không phân biệt hoa thường; chuẩn hoá để tra cứu và so khớp bootstrap. */
@@ -64,31 +81,47 @@ export function createPrincipalResolver(
     // Admin mồi: cấp qua env, xác định trước cả database — để lần đầu triển khai
     // vẫn có người thêm được người khác vào `app_user`.
     if (config.bootstrapAdmins.has(userId)) {
-      return { userId, role: 'ADMIN', projects: [] };
+      return { userId, isAdmin: true, memberships: {} };
     }
 
     const found = await store.find(userId);
     if (found !== null) {
-      return { userId, role: found.role, projects: [...found.projects] };
+      return {
+        userId,
+        isAdmin: found.role === 'ADMIN',
+        memberships: { ...found.memberships },
+      };
     }
 
-    // Đã xác thực nhưng chưa được cấp quyền: mặc định VIEWER (hoặc từ chối, tuỳ
-    // cấu hình). KHÔNG bao giờ tự nâng lên PM/ADMIN.
-    if (config.defaultRole !== null) {
-      return { userId, role: config.defaultRole, projects: [] };
-    }
+    // Đã xác thực nhưng chưa được cấp quyền: mặc định là MEMBER trắng tay
+    // (không thấy dự án nào) hoặc từ chối, tuỳ cấu hình. KHÔNG bao giờ tự nâng
+    // lên membership/ADMIN.
+    if (config.defaultGrant === 'ADMIN') return { userId, isAdmin: true, memberships: {} };
+    if (config.defaultGrant === 'MEMBER') return { userId, isAdmin: false, memberships: {} };
     return null;
   };
 }
 
-const VALID_DEFAULT_ROLES: ReadonlySet<string> = new Set(['ADMIN', 'PM', 'VIEWER', 'NONE']);
+/**
+ * Giá trị hợp lệ của AUTH_DEFAULT_ROLE. `VIEWER`/`PM` là giá trị CŨ (trước
+ * multi-tenant) — vẫn chấp nhận để deploy cũ không chết lúc boot, nhưng giờ
+ * chúng chỉ còn nghĩa "MEMBER chưa có dự án" (xem chú thích đầu file).
+ */
+const VALID_DEFAULT_ROLES: ReadonlySet<string> = new Set([
+  'ADMIN',
+  'MEMBER',
+  'PM',
+  'VIEWER',
+  'NONE',
+]);
 
 /**
  * Đọc cấu hình auth từ biến môi trường (gọi ở điểm lắp ráp `main.ts`).
  *
  *   AUTH_IDENTITY_HEADER   tên header danh tính (mặc định `x-user-id`)
  *   AUTH_BOOTSTRAP_ADMINS  danh sách email admin mồi, phân tách bởi dấu phẩy
- *   AUTH_DEFAULT_ROLE      VIEWER (mặc định) | PM | ADMIN | NONE
+ *   AUTH_DEFAULT_ROLE      MEMBER (mặc định) | ADMIN | NONE
+ *                          (VIEWER/PM cũ được hiểu như MEMBER)
  */
 export function authConfigFromEnv(env: NodeJS.ProcessEnv): AuthConfig {
   const identityHeader = env['AUTH_IDENTITY_HEADER']?.trim() || 'x-user-id';
@@ -100,13 +133,16 @@ export function authConfigFromEnv(env: NodeJS.ProcessEnv): AuthConfig {
       .filter((s): s is string => s !== null),
   );
 
-  const rawRole = (env['AUTH_DEFAULT_ROLE']?.trim().toUpperCase() || 'VIEWER');
+  const rawRole = env['AUTH_DEFAULT_ROLE']?.trim().toUpperCase() || 'MEMBER';
   if (!VALID_DEFAULT_ROLES.has(rawRole)) {
     throw new Error(
-      `AUTH_DEFAULT_ROLE="${rawRole}" không hợp lệ. Giá trị cho phép: ADMIN, PM, VIEWER, NONE.`,
+      `AUTH_DEFAULT_ROLE="${rawRole}" không hợp lệ. Giá trị cho phép: ADMIN, MEMBER, NONE ` +
+        '(VIEWER/PM là giá trị cũ, được hiểu như MEMBER).',
     );
   }
-  const defaultRole = rawRole === 'NONE' ? null : (rawRole as UserRole);
 
-  return { identityHeader, bootstrapAdmins, defaultRole };
+  const defaultGrant: DefaultGrant | null =
+    rawRole === 'NONE' ? null : rawRole === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+
+  return { identityHeader, bootstrapAdmins, defaultGrant };
 }

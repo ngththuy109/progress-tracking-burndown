@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { TrackedEpicSummary } from '@app/shared';
 import { useEpicList } from '../../api/use-epics.js';
+import { projectPath, useProjectKey } from '../../project/project-context.js';
 import { EmptyState, ErrorState, LoadingState } from '../ui/index.js';
 
 /**
@@ -35,6 +36,9 @@ export interface EpicPickerProps {
 }
 
 export function EpicPicker({ icon, title, description, onSelect }: EpicPickerProps) {
+  // Hook gọi ở ĐẦU component — gọi trong JSX phía dưới sẽ thành hook có điều
+  // kiện (các nhánh return sớm ở trên) và React sẽ báo lỗi.
+  const projectKey = useProjectKey();
   const query = useEpicList();
 
   if (query.isPending) return <LoadingState label="Loading Epics…" rows={4} />;
@@ -110,15 +114,17 @@ export function EpicPicker({ icon, title, description, onSelect }: EpicPickerPro
           đường sang màn Epics thay vì tưởng nó biến mất. */}
       <p className="muted">
         Only active Epics are listed here. Paused or still-syncing Epics are on the{' '}
-        <Link to="/epics">Epics screen</Link>.
+        <Link to={projectPath(projectKey, 'epics')}>Epics screen</Link>.
       </p>
     </section>
   );
 }
 
 function GoToEpics() {
+  // Link nội bộ dự án — cần key của dự án đang mở.
+  const projectKey = useProjectKey();
   return (
-    <Link className="button button--primary" to="/epics">
+    <Link className="button button--primary" to={projectPath(projectKey, 'epics')}>
       Go to Epics
     </Link>
   );

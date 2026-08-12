@@ -2,7 +2,7 @@ import type { EffectiveConfig, SubtaskParseResult } from '@app/shared';
 import { UNCLASSIFIED_PHASE } from '@app/shared';
 import { SubtaskTitleParser, TaskTitleParser } from '@app/engine';
 import { readWbsDates, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
-import type { EpicTree } from './fetch-epic-tree.js';
+import type { RootTree } from './fetch-epic-tree.js';
 
 /**
  * GIAI ĐOẠN 3 — đổi dữ liệu thô của Jira thành bản ghi sẵn sàng ghi xuống DB,
@@ -12,12 +12,38 @@ import type { EpicTree } from './fetch-epic-tree.js';
  * đồng hồ — nên test được ngay, và đó là chỗ chứa mọi quy tắc dễ sai nhất.
  */
 
-export const ISSUE_TYPE = { EPIC: 'EPIC', TASK: 'TASK', SUBTASK: 'SUBTASK' } as const;
+/**
+ * `issue_type` là VAI TRÒ trong cây, gán theo VỊ TRÍ TẦNG chứ không theo
+ * issue type của Jira: tầng 0 = EPIC (tracked root), tầng lá = SUBTASK, tầng
+ * lá-1 = TASK (chỉ khi depth ≥ 2), các tầng giữa còn lại = MIDDLE. Mọi phép
+ * cộng dồn SQL đều lọc `issue_type = 'SUBTASK'` nên hàng MIDDLE tự đứng ngoài
+ * số liệu.
+ */
+export const ISSUE_TYPE = {
+  EPIC: 'EPIC',
+  TASK: 'TASK',
+  SUBTASK: 'SUBTASK',
+  MIDDLE: 'MIDDLE',
+} as const;
+
+/** Vai trò của một tầng, suy từ vị trí. HÀM THUẦN — test theo bảng dễ dàng. */
+export function tierRole(tierIndex: number, depth: number): string {
+  if (tierIndex === 0) return ISSUE_TYPE.EPIC;
+  if (tierIndex === depth) return ISSUE_TYPE.SUBTASK;
+  // `tierIndex ≥ 1` và khác lá nên tới đây depth chắc chắn ≥ 2 — TASK chỉ tồn
+  // tại khi có ít nhất hai tầng dưới root.
+  if (tierIndex === depth - 1) return ISSUE_TYPE.TASK;
+  return ISSUE_TYPE.MIDDLE;
+}
 
 export interface IssueRecord {
   issueKey: string;
   issueId: bigint;
+  /** Tenant sở hữu — bắt buộc từ multi-tenant (khớp `IssueUpsertRow`). */
+  projectKey: string;
   issueType: string;
+  /** Vị trí tầng thật: 0 = root, 1..depth. */
+  tierIndex: number;
   parentKey: string | null;
   epicKey: string | null;
   summary: string;
@@ -44,6 +70,8 @@ export interface IssueRecord {
 
 export interface WorklogRecord {
   worklogId: bigint;
+  /** Tenant sở hữu — PK của bảng là (project_key, worklog_id). */
+  projectKey: string;
   issueKey: string;
   epicKey: string;
   authorAccountId: string | null;
@@ -171,13 +199,17 @@ function fitSubtaskColumns(
 
 export function buildRecords(args: {
   epicKey: string;
-  tree: EpicTree;
+  /** Tenant sở hữu — gắn vào MỌI bản ghi issue và worklog. */
+  projectKey: string;
+  /** Số tầng dưới root (1..4) — quyết định vai trò của từng tầng. */
+  hierarchyDepth: number;
+  tree: RootTree;
   worklogsByIssue: ReadonlyMap<string, readonly JiraWorklog[]>;
   changelogByIssue: ReadonlyMap<string, readonly JiraChangelogEntry[]>;
   config: EffectiveConfig;
   fields: ResolvedFieldMapping;
 }): BuiltRecords {
-  const { epicKey, tree, config, fields } = args;
+  const { epicKey, projectKey, hierarchyDepth: depth, tree, config, fields } = args;
   const warnings: { code: string; message: string }[] = [];
 
   const taskParser = new TaskTitleParser(config);
@@ -186,45 +218,71 @@ export function buildRecords(args: {
   const issues: IssueRecord[] = [];
   const phaseOfTask = new Map<string, string>();
 
-  if (tree.epic) {
-    issues.push(baseRecord(tree.epic, ISSUE_TYPE.EPIC, epicKey, fields));
+  if (tree.root) {
+    issues.push(baseRecord(tree.root, ISSUE_TYPE.EPIC, 0, projectKey, epicKey, fields));
   }
 
-  for (const t of tree.tasks) {
-    const parsed = taskParser.parse(stringField(t.fields['summary']));
-    phaseOfTask.set(t.key, parsed.phaseCode);
-    warnings.push(...parsed.warnings);
+  for (let d = 1; d <= depth; d++) {
+    const role = tierRole(d, depth);
 
-    issues.push({
-      ...baseRecord(t, ISSUE_TYPE.TASK, epicKey, fields),
-      phaseCode: parsed.phaseCode,
-      rawPhaseLabel: parsed.rawPhaseLabel,
-    });
-  }
+    for (const issue of tree.byTier[d] ?? []) {
+      if (role === ISSUE_TYPE.TASK) {
+        const parsed = taskParser.parse(stringField(issue.fields['summary']));
+        phaseOfTask.set(issue.key, parsed.phaseCode);
+        warnings.push(...parsed.warnings);
 
-  for (const s of tree.subtasks) {
-    // Sub-task LUÔN lấy Phase từ Task cha, không lấy từ `[Phase]` trong tiêu đề
-    // của chính nó (PRD §2.9.2). Cây Jira là cấu trúc thật, tiêu đề chỉ là chữ.
-    const parentKey = parentKeyOf(s.fields);
-    const parentPhase = (parentKey ? phaseOfTask.get(parentKey) : undefined) ?? UNCLASSIFIED_PHASE;
+        issues.push({
+          ...baseRecord(issue, ISSUE_TYPE.TASK, d, projectKey, epicKey, fields),
+          phaseCode: parsed.phaseCode,
+          rawPhaseLabel: parsed.rawPhaseLabel,
+        });
+        continue;
+      }
 
-    const parsed = subtaskParser.parse(stringField(s.fields['summary']), parentPhase);
-    warnings.push(...parsed.warnings);
+      if (role !== ISSUE_TYPE.SUBTASK) {
+        // Tầng MIDDLE: chỉ là cấu trúc, KHÔNG mang phase/kết quả phân tách —
+        // giống hàng EPIC. Cộng dồn SQL lọc issue_type='SUBTASK' nên các hàng
+        // này tự đứng ngoài mọi phép tính.
+        issues.push(baseRecord(issue, ISSUE_TYPE.MIDDLE, d, projectKey, epicKey, fields));
+        continue;
+      }
 
-    issues.push({
-      ...baseRecord(s, ISSUE_TYPE.SUBTASK, epicKey, fields),
-      // `UNPARSED` KHÔNG có nghĩa là bỏ qua Sub-task này. Nó vẫn được ghi đầy đủ
-      // và vẫn cộng dồn vào Burndown (C-11, PRD E-27) — chỉ là không lên được
-      // bảng Signboard.
-      phaseCode: parsed.phaseCode,
-      rawPhaseLabel: null,
-      // Sáu trường bóc từ tiêu đề được siết cho vừa cột VARCHAR NGAY TẠI ĐÂY.
-      // Một tiêu đề dài bất thường mà không siết sẽ làm cả lượt đồng bộ Epic đổ
-      // vì "value too long" (xem `fitSubtaskColumns`).
-      ...fitSubtaskColumns(parsed, s.key, warnings),
-      taskType: parsed.taskType,
-      sbParseStatus: parsed.sbParseStatus,
-    });
+      // --- Tầng lá (vai trò SUBTASK) ---
+      let parentPhase: string;
+      if (depth === 1) {
+        // depth = 1: không có tầng TASK, nên chính tiêu đề LÁ được đưa qua
+        // TaskTitleParser để suy ra Phase (không khớp → UNCLASSIFIED, fallback
+        // sẵn trong parser). Phần bóc theo mẫu Sub-task bên dưới vẫn chạy như
+        // thường để Signboard có dữ liệu.
+        const parsed = taskParser.parse(stringField(issue.fields['summary']));
+        warnings.push(...parsed.warnings);
+        parentPhase = parsed.phaseCode;
+      } else {
+        // Sub-task LUÔN lấy Phase từ Task cha, không lấy từ `[Phase]` trong
+        // tiêu đề của chính nó (PRD §2.9.2). Cây Jira là cấu trúc thật, tiêu
+        // đề chỉ là chữ.
+        const parentKey = parentKeyOf(issue.fields);
+        parentPhase = (parentKey ? phaseOfTask.get(parentKey) : undefined) ?? UNCLASSIFIED_PHASE;
+      }
+
+      const parsed = subtaskParser.parse(stringField(issue.fields['summary']), parentPhase);
+      warnings.push(...parsed.warnings);
+
+      issues.push({
+        ...baseRecord(issue, ISSUE_TYPE.SUBTASK, d, projectKey, epicKey, fields),
+        // `UNPARSED` KHÔNG có nghĩa là bỏ qua Sub-task này. Nó vẫn được ghi đầy
+        // đủ và vẫn cộng dồn vào Burndown (C-11, PRD E-27) — chỉ là không lên
+        // được bảng Signboard.
+        phaseCode: parsed.phaseCode,
+        rawPhaseLabel: null,
+        // Sáu trường bóc từ tiêu đề được siết cho vừa cột VARCHAR NGAY TẠI ĐÂY.
+        // Một tiêu đề dài bất thường mà không siết sẽ làm cả lượt đồng bộ đổ
+        // vì "value too long" (xem `fitSubtaskColumns`).
+        ...fitSubtaskColumns(parsed, issue.key, warnings),
+        taskType: parsed.taskType,
+        sbParseStatus: parsed.sbParseStatus,
+      });
+    }
   }
 
   const keyOf = new Map(issues.map((i) => [i.issueKey, i]));
@@ -235,6 +293,7 @@ export function buildRecords(args: {
     for (const w of list) {
       worklogs.push({
         worklogId: BigInt(w.id),
+        projectKey,
         issueKey,
         epicKey,
         authorAccountId: w.author?.accountId ?? null,
@@ -280,6 +339,8 @@ export function hasRetroLog(worklogs: readonly WorklogRecord[]): boolean {
 function baseRecord(
   issue: JiraIssue,
   issueType: string,
+  tierIndex: number,
+  projectKey: string,
   epicKey: string,
   fields: ResolvedFieldMapping,
 ): IssueRecord {
@@ -290,7 +351,9 @@ function baseRecord(
   return {
     issueKey: issue.key,
     issueId: BigInt(issue.id),
+    projectKey,
     issueType,
+    tierIndex,
     parentKey: parentKeyOf(f),
     // Bản thân Epic có `epicKey` trỏ về chính nó — nhờ vậy mọi truy vấn theo
     // Epic chỉ cần một điều kiện, không phải `OR issue_key = ...`.

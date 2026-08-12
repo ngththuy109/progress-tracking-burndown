@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TrackedEpicSummary } from '@app/shared';
+import { ProjectScopeProvider } from '../../project/project-context.js';
 import { EpicPicker } from './index.js';
 
 /**
@@ -51,12 +52,15 @@ function renderPicker(onSelect: (key: string) => void = () => {}): void {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <EpicPicker
-          icon="📉"
-          title="Pick an Epic to chart"
-          description="Choose an active Epic below."
-          onSelect={onSelect}
-        />
+        {/* Scope dự án cố định — thay cho route /p/:projectKey của app thật. */}
+        <ProjectScopeProvider value={{ projectKey: 'PAY', role: 'PM', isAdmin: false }}>
+          <EpicPicker
+            icon="📉"
+            title="Pick an Epic to chart"
+            description="Choose an active Epic below."
+            onSelect={onSelect}
+          />
+        </ProjectScopeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -102,7 +106,8 @@ describe('EpicPicker', () => {
     renderPicker();
 
     await waitFor(() => expect(screen.getByText('No Epics tracked yet')).toBeTruthy());
-    expect(screen.getByRole('link', { name: 'Go to Epics' }).getAttribute('href')).toBe('/epics');
+    // Link phải Ở LẠI dự án đang mở — tiền tố /p/<key>.
+    expect(screen.getByRole('link', { name: 'Go to Epics' }).getAttribute('href')).toBe('/p/PAY/epics');
   });
 
   it('có Epic nhưng không cái nào active thì nói rõ và không tự chọn', async () => {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { RECOMPUTE_SECONDS_PER_EPIC, SIDE_CALENDAR_ID, type AddEpicsRequest } from '@app/shared';
 import { useAddEpics, useValidateEpics } from '../../api/use-epics.js';
 import { useCalendars } from '../../api/use-calendars.js';
-import { useMe } from '../../api/use-me.js';
+import { useProject } from '../../project/project-context.js';
 import { Badge, ErrorState } from '../../components/ui/index.js';
 
 /**
@@ -41,17 +41,17 @@ export function estimateMinutes(epicCount: number): number {
 }
 
 export function AddEpicsPanel() {
-  const me = useMe();
+  const { role } = useProject();
   const [raw, setRaw] = useState('');
   const [calendarId, setCalendarId] = useState(DEFAULT_CALENDAR_ID);
   const calendars = useCalendars();
   const validate = useValidateEpics();
   const add = useAddEpics();
 
-  // VIEWER không được đổi tập Epic theo dõi (API sẽ trả 403). Ẩn cả ô nhập cho
-  // gọn, thay vì để họ gõ xong mới bị từ chối. Đây CHỈ là trải nghiệm — hàng
-  // rào thật vẫn ở API.
-  if (me.data?.role === 'VIEWER') {
+  // VIEWER (của dự án này) không được đổi tập Epic theo dõi (API sẽ trả 403).
+  // Ẩn cả ô nhập cho gọn, thay vì để họ gõ xong mới bị từ chối. Đây CHỈ là
+  // trải nghiệm — hàng rào thật vẫn ở API.
+  if (role === 'VIEWER') {
     return (
       <section className="panel" aria-labelledby="add-epics-title">
         <h2 className="panel__title" id="add-epics-title">

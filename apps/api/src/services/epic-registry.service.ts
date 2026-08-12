@@ -13,12 +13,17 @@ import {
   type ValidateEpicsResponse,
 } from '@app/shared';
 import { ApiError } from './phase-config.service.js';
+import { epicNotFound } from './epic-scope.js';
 
 /**
  * Sổ đăng ký Epic — PRD §2.6.
  *
  * Cùng lối với T-09: mọi thứ bên ngoài đi qua CỔNG, nên logic ở đây test được
  * mà không cần PostgreSQL lẫn Jira.
+ *
+ * TỪ PHASE B (multi-tenant): mọi hàm đều nhận `projectKey` của tenant đang thao
+ * tác (lấy từ guard `requireProject`). Key thuộc dự án khác bị đối xử y như
+ * "không tồn tại" — không xác nhận cho người ngoài rằng Epic đó có thật.
  */
 
 const SECONDS_PER_HOUR = 3600;
@@ -70,8 +75,11 @@ export type JiraLookupResult =
   | { readonly ok: false; readonly reason: 'NOT_FOUND' | 'NO_PERMISSION' };
 
 export interface JiraEpicPort {
-  /** Tra nhiều key một lượt — PM dán cả danh sách chứ không nhập từng cái. */
-  lookup(keys: readonly string[]): Promise<ReadonlyMap<string, JiraLookupResult>>;
+  /**
+   * Tra nhiều key một lượt — PM dán cả danh sách chứ không nhập từng cái.
+   * `projectKey` chọn KẾT NỐI Jira của tenant đó (mỗi dự án một site/token).
+   */
+  lookup(projectKey: string, keys: readonly string[]): Promise<ReadonlyMap<string, JiraLookupResult>>;
   browse(
     projectKey: string,
     page: { startAt: number; maxResults: number },
@@ -79,8 +87,13 @@ export interface JiraEpicPort {
 }
 
 export interface TrackedEpicStore {
-  findStatus(epicKey: string): Promise<TrackedEpicStatus | null>;
-  existingKeys(keys: readonly string[]): Promise<ReadonlySet<string>>;
+  /** Trạng thái + tenant của một Epic trong sổ. `null` = chưa theo dõi. */
+  findTracked(epicKey: string): Promise<{ status: TrackedEpicStatus; projectKey: string } | null>;
+  /**
+   * Key đã theo dõi TRONG MỘT tenant. Cố ý không có bản xuyên dự án: trả lời
+   * "đã theo dõi" cho key của tenant khác là xác nhận key đó tồn tại.
+   */
+  existingKeys(keys: readonly string[], projectKey: string): Promise<ReadonlySet<string>>;
   /** Chèn các dòng chưa có, trả về KEY đã chèn thật sự (key trùng bị bỏ qua). */
   insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<readonly string[]>;
   update(epicKey: string, data: EpicPatchData): Promise<void>;
@@ -138,19 +151,21 @@ export interface EpicRegistryDeps {
  */
 export async function validateKeys(
   deps: EpicRegistryDeps,
+  projectKey: string,
   keys: readonly string[],
 ): Promise<ValidateEpicsResponse> {
   // Khử trùng lặp nhưng GIỮ THỨ TỰ PM đã dán, để họ dò lại được theo danh sách.
   const unique = [...new Set(keys.map((k) => k.trim()).filter((k) => k !== ''))];
 
   const [lookups, tracked] = await Promise.all([
-    deps.jira.lookup(unique),
-    deps.store.existingKeys(unique),
+    deps.jira.lookup(projectKey, unique),
+    deps.store.existingKeys(unique, projectKey),
   ]);
 
   const results: EpicValidationResult[] = unique.map((key) => {
     // Xét "đã theo dõi" TRƯỚC: đó là thông tin hữu ích hơn cho PM, và tránh
-    // báo NOT_FOUND cho một Epic họ biết chắc là có.
+    // báo NOT_FOUND cho một Epic họ biết chắc là có. `tracked` đã bó theo
+    // tenant nên không xác nhận nhầm Epic của dự án khác.
     if (tracked.has(key)) {
       return { key, valid: false, reason: 'ALREADY_TRACKED', message: 'Already tracked' };
     }
@@ -166,6 +181,17 @@ export async function validateKeys(
           reason === 'NO_PERMISSION'
             ? `No permission to read issue ${key}`
             : `${key} not found`,
+      };
+    }
+
+    // Epic của DỰ ÁN KHÁC = "không tồn tại" với tenant này (luật 404-thay-vì-
+    // 403): trả reason khác đi là xác nhận key đó có thật ở đâu đó.
+    if (found.meta.projectKey !== projectKey) {
+      return {
+        key,
+        valid: false,
+        reason: 'NOT_FOUND',
+        message: `${key} not found in project ${projectKey}`,
       };
     }
 
@@ -213,12 +239,13 @@ export async function validateKeys(
  */
 export async function addEpics(
   deps: EpicRegistryDeps,
+  projectKey: string,
   req: AddEpicsRequest,
   addedBy: string,
 ): Promise<ValidateEpicsResponse & AddEpicsResponse> {
   assertValidTimezone(req.timezone);
 
-  const check = await validateKeys(deps, req.keys);
+  const check = await validateKeys(deps, projectKey, req.keys);
 
   // `skipped` = key đã theo dõi rồi — cả loại bị bắt lúc kiểm tra lẫn loại thua
   // cuộc đua chèn bên dưới. Các lý do từ chối khác vẫn nằm trong `results`.
@@ -229,7 +256,7 @@ export async function addEpics(
   const ok = check.results.filter((r) => r.valid);
   if (ok.length === 0) return { ...check, added: [], skipped, estimatedSeconds: 0 };
 
-  const lookups = await deps.jira.lookup(ok.map((r) => r.key));
+  const lookups = await deps.jira.lookup(projectKey, ok.map((r) => r.key));
   const rows: InsertEpicRow[] = [];
   for (const r of ok) {
     const found = lookups.get(r.key);
@@ -262,9 +289,10 @@ export async function addEpics(
   };
 }
 
+/** Danh sách Epic CỦA MỘT tenant — không còn đường liệt kê xuyên dự án. */
 export function listEpics(
   deps: EpicRegistryDeps,
-  projectKey: string | null,
+  projectKey: string,
 ): Promise<readonly TrackedEpicSummary[]> {
   return deps.store.listWithHealth(projectKey);
 }
@@ -281,7 +309,7 @@ export async function browseEpics(
   page: { startAt: number; maxResults: number },
 ): Promise<{ items: readonly BrowsableEpic[]; total: number; startAt: number; maxResults: number }> {
   const { items, total } = await deps.jira.browse(projectKey, page);
-  const tracked = await deps.store.existingKeys(items.map((i) => i.key));
+  const tracked = await deps.store.existingKeys(items.map((i) => i.key), projectKey);
   return {
     items: items.map((i) => ({ ...i, alreadyTracked: tracked.has(i.key) })),
     total,
@@ -292,25 +320,25 @@ export async function browseEpics(
 
 export async function patchEpic(
   deps: EpicRegistryDeps,
+  projectKey: string,
   epicKey: string,
   patch: PatchEpicRequest,
 ): Promise<void> {
-  const current = await deps.store.findStatus(epicKey);
-  if (current === null) throw new ApiError(404, 'NOT_TRACKED', `${epicKey} is not tracked.`);
+  const current = await trackedInProject(deps, projectKey, epicKey);
 
   if (patch.timezone !== undefined) assertValidTimezone(patch.timezone);
-  if (patch.status !== undefined) assertTransition(current, patch.status);
+  if (patch.status !== undefined) assertTransition(current.status, patch.status);
 
   await deps.store.update(epicKey, patch);
 }
 
 export async function removeEpic(
   deps: EpicRegistryDeps,
+  projectKey: string,
   epicKey: string,
   args: { purge: boolean; confirmKey: string | null },
 ): Promise<void> {
-  const current = await deps.store.findStatus(epicKey);
-  if (current === null) throw new ApiError(404, 'NOT_TRACKED', `${epicKey} is not tracked.`);
+  await trackedInProject(deps, projectKey, epicKey);
 
   // Xoá sạch là thao tác KHÔNG HOÀN TÁC ĐƯỢC, nên đòi gõ lại đúng key chứ không
   // chỉ một tham số `?purge=true` (PRD §2.6.4). Tham số quá dễ bấm nhầm.
@@ -327,11 +355,22 @@ export async function removeEpic(
 
 export async function listMissingDates(
   deps: EpicRegistryDeps,
+  projectKey: string,
   epicKey: string,
 ): Promise<readonly MissingDateRow[]> {
-  const current = await deps.store.findStatus(epicKey);
-  if (current === null) throw new ApiError(404, 'NOT_TRACKED', `${epicKey} is not tracked.`);
+  await trackedInProject(deps, projectKey, epicKey);
   return deps.store.listMissingDates(epicKey);
+}
+
+/** Epic phải CÓ trong sổ VÀ thuộc đúng tenant — sai bên nào cũng là 404. */
+async function trackedInProject(
+  deps: EpicRegistryDeps,
+  projectKey: string,
+  epicKey: string,
+): Promise<{ status: TrackedEpicStatus; projectKey: string }> {
+  const current = await deps.store.findTracked(epicKey);
+  if (current === null || current.projectKey !== projectKey) throw epicNotFound(epicKey);
+  return current;
 }
 
 /**

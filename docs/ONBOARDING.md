@@ -41,15 +41,28 @@ npx playwright install chromium     # trình duyệt cho test E2E, ~300MB
 cp .env.example .env
 ```
 
-Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đủ cả năm, không bắt chạy đi chạy lại:
+Hai biến bắt buộc; thiếu cái nào thì worker báo **một lần** đủ cả, không bắt chạy đi chạy lại:
 
 | Biến | Lấy ở đâu |
 |---|---|
 | `DATABASE_URL` | PostgreSQL cục bộ, ví dụ `postgres://postgres:postgres@localhost:5432/burndown` |
 | `REDIS_URL` | `redis://localhost:6379` |
+
+**Kết nối Jira (multi-tenant).** Từ bản multi-tenant, **mỗi dự án tự khai kết
+nối Jira riêng** ở màn hình *Admin → Projects* (hỗ trợ nhiều Jira site khác
+nhau; token lưu trong DB, mã hóa bằng `APP_ENCRYPTION_KEY`). Ba biến
+`JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` giờ là **fallback tùy chọn**
+cho những dự án *chưa* khai kết nối riêng — khai thì phải đủ cả ba
+(all-or-nothing), hệ thống 1 site kiểu cũ chạy tiếp không cần làm gì. Boot
+**không còn** kiểm tra Jira; kiểm tra kết nối bằng nút **Test connection**
+trong màn hình Admin.
+
+| Biến (tùy chọn) | Lấy ở đâu |
+|---|---|
 | `JIRA_BASE_URL` | `https://<công-ty>.atlassian.net` |
 | `JIRA_EMAIL` | Email tài khoản Jira |
 | `JIRA_API_TOKEN` | https://id.atlassian.com/manage-profile/security/api-tokens |
+| `APP_ENCRYPTION_KEY` | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` — chỉ bắt buộc trước khi nhập token riêng cho một dự án |
 
 > **Chỉ cần Jira thật khi muốn đồng bộ dữ liệu thật.** Toàn bộ test chạy được mà không cần Jira, PostgreSQL hay Redis — xem mục 5.
 

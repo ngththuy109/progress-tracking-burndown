@@ -25,7 +25,8 @@ import type {
 export interface FakeIssue {
   id: string;
   key: string;
-  type: 'EPIC' | 'TASK' | 'SUBTASK';
+  /** Chỉ là `issuetype.name` trả về từ Jira giả — VAI TRÒ thật gán theo tầng. */
+  type: 'EPIC' | 'TASK' | 'SUBTASK' | 'MIDDLE';
   parent?: string;
   summary: string;
   statusId?: string;
@@ -259,6 +260,7 @@ export class FakeStore implements SyncRunPort, EpicStatePort, DirtyEpicQueuePort
   readonly runs: Array<{
     id: number;
     epicKey: string;
+    projectKey?: string;
     runType: string;
     status: string;
     apiCalls?: number;
@@ -308,11 +310,13 @@ export class FakeStore implements SyncRunPort, EpicStatePort, DirtyEpicQueuePort
     return Promise.resolve();
   }
 
-  markDeleted(worklogIds: readonly bigint[]): Promise<number> {
+  markDeleted(projectKey: string, worklogIds: readonly bigint[]): Promise<number> {
     let n = 0;
     for (const id of worklogIds) {
       const row = this.worklogRows.get(String(id));
-      if (row && !row.isDeleted) {
+      // Scope theo tenant như bảng thật: worklog ID chỉ duy nhất trong một
+      // site, danh sách xoá của site này không được đụng dòng của tenant khác.
+      if (row && row.projectKey === projectKey && !row.isDeleted) {
         // Đặt cờ, KHÔNG xoá dòng (E-17)
         this.worklogRows.set(String(id), { ...row, isDeleted: true });
         n += 1;
@@ -330,9 +334,15 @@ export class FakeStore implements SyncRunPort, EpicStatePort, DirtyEpicQueuePort
   }
 
   // --- sync_run ---
-  start(args: { epicKey: string; runType: string }): Promise<number> {
+  start(args: { epicKey: string; projectKey?: string; runType: string }): Promise<number> {
     const id = this.nextRunId++;
-    this.runs.push({ id, epicKey: args.epicKey, runType: args.runType, status: 'RUNNING' });
+    this.runs.push({
+      id,
+      epicKey: args.epicKey,
+      ...(args.projectKey !== undefined ? { projectKey: args.projectKey } : {}),
+      runType: args.runType,
+      status: 'RUNNING',
+    });
     return Promise.resolve(id);
   }
 
@@ -408,7 +418,8 @@ export function portsOf(store: FakeStore) {
     } satisfies IssueWritePort,
     worklogs: {
       upsertMany: (r: readonly WorklogRecord[]) => store.upsertManyWorklogs(r),
-      markDeleted: (ids: readonly bigint[]) => store.markDeleted(ids),
+      markDeleted: (projectKey: string, ids: readonly bigint[]) =>
+        store.markDeleted(projectKey, ids),
     } satisfies WorklogWritePort,
     changelog: {
       upsertMany: (r: readonly ChangelogRecord[]) => store.upsertManyChangelog(r),

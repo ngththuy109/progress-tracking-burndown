@@ -164,9 +164,46 @@ Lý do cụ thể: trạng thái Signboard phụ thuộc *hôm nay là ngày nà
 
 ### Ranh giới xác thực (bổ sung khi lắp SSO, 2026-08-09)
 
-`apps/api` **không tự đăng nhập người dùng**. Một auth proxy (SSO/OIDC) đứng trước, đặt header danh tính `x-user-id` = email đã xác thực và **xoá mọi `x-user-*`** client tự gửi. API chỉ tin danh tính đó rồi **tra vai trò ở bảng `app_user`** — KHÔNG tin `role` từ header. Vai trò/`projects` là dữ liệu của hệ thống (bảng `app_user`, `project`), không suy từ Jira.
+`apps/api` **không tự đăng nhập người dùng**. Một auth proxy (SSO/OIDC) đứng trước, đặt header danh tính `x-user-id` = email đã xác thực và **xoá mọi `x-user-*`** client tự gửi. API chỉ tin danh tính đó rồi **tra vai trò trong DB** — KHÔNG tin `role` từ header. Vai trò là dữ liệu của hệ thống (bảng `app_user` + `project_member`), không suy từ Jira.
 
 Danh tính được phân giải một lần mỗi request trong một hook `onRequest` (`apps/api/src/adapters/principal.ts`), nên tầng route vẫn đọc `resolvePrincipal(req)` đồng bộ như cũ. Chi tiết: [AUTH.md](./AUTH.md); cấu hình cổng: [`config/auth-proxy/`](../config/auth-proxy/).
+
+### Ranh giới multi-tenant (bổ sung 2026-08-12)
+
+**Tenant = Jira project key** — bảng `project` là gốc tenant, tự chứa: kết nối
+Jira riêng (base URL / email / token mã hóa AES-256-GCM bằng
+`APP_ENCRYPTION_KEY`), field mapping riêng (thay vai trò của
+`config/jira-fields.yaml` — file YAML chỉ còn là fallback cho chế độ env),
+`hierarchy_depth` (1..4 tầng dưới tracked root), timezone và thành viên
+(`project_member`, role `PM|VIEWER` theo từng dự án; `app_user.role` chỉ còn
+`ADMIN|MEMBER` toàn cục).
+
+Các bất biến phải giữ khi sửa code:
+
+1. **Issue key là khóa chính toàn cục được** vì key Jira luôn có tiền tố
+   project key và project key là duy nhất toàn hệ thống. Ngược lại **ID SỐ của
+   Jira (`issue_id`, `worklog_id`, `epic_id`) chỉ duy nhất trong một site** —
+   mọi ràng buộc unique theo số phải scope theo `project_key`
+   (`uq_issue_project_id`, PK `worklog_entry` là `(project_key, worklog_id)`).
+   Đặc biệt: danh sách worklog-đã-xóa từ Jira là dữ liệu CẢ SITE — mọi thao tác
+   đánh dấu xóa bắt buộc lọc thêm `project_key`.
+2. **`issue_type` là VAI TRÒ, không phải vị trí**: tầng 0 = `EPIC`, tầng lá =
+   `SUBTASK`, lá-1 = `TASK` (khi depth ≥ 2), các tầng giữa khác = `MIDDLE`.
+   Mọi SQL tổng hợp lọc `issue_type='SUBTASK'` nên engine và các repository
+   snapshot/signboard không cần biết depth. Cột `epic_key` giữ nghĩa "key của
+   tracked root". Vị trí thật nằm ở `tier_index`.
+3. **Scoping ở tầng ứng dụng**: mọi route dữ liệu nằm dưới
+   `/api/projects/:projectKey/...` và đi qua preHandler `requireProject`
+   (`apps/api/src/adapters/project-scope.ts`); route theo epic phải resolve
+   epic TRONG project (`resolveEpicInProject`) trước khi đụng snapshot/rollup.
+   Non-member nhận **404** (không phải 403) để không lộ tenant nào tồn tại.
+4. **JiraClient sinh theo project** qua `createJiraRegistry`
+   (`packages/jira/src/client-registry.ts`); rate limiter + giới hạn 8
+   concurrent chia sẻ **theo site** (C-7 áp per-site) — N dự án cùng site vẫn
+   dùng chung một bucket 40 req/s. Boot KHÔNG đụng Jira; kiểm tra kết nối bằng
+   endpoint Test connection.
+5. **Giới hạn chấp nhận**: hai Jira site cùng có một project key thì không thể
+   cùng làm tenant.
 
 ---
 

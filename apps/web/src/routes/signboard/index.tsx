@@ -10,6 +10,7 @@ import {
 import { useSignboard, useSignboardPhases, useUnparsedSubtasks } from '../../api/use-signboard.js';
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { EpicPicker } from '../../components/epic-picker/index.js';
+import { projectPath, useProjectKey } from '../../project/project-context.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
 import { jiraBaseUrl } from '../../api/jira.js';
@@ -159,6 +160,8 @@ function PhaseNav({
  * và chỉ chạy khi thật sự có Phase.
  */
 function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; readonly phaseCode: string }) {
+  // Key dự án cho các link nội bộ (Sub-tasks, Signboard settings).
+  const projectKey = useProjectKey();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<SignboardStatus | null>(null);
 
@@ -222,7 +225,7 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
           start or end date on a day off — cells below are flagged with{' '}
           <Badge tone="danger">⚠ day off</Badge>; hover a flagged cell for the reason. Fix the wbs
           dates in Jira, then resync.{' '}
-          <Link className="button" to={`/phase-subtasks?epic=${epicKey}`}>
+          <Link className="button" to={`${projectPath(projectKey, 'phase-subtasks')}?epic=${epicKey}`}>
             See the full list
           </Link>
         </div>
@@ -246,7 +249,7 @@ function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; read
           nhóm: một nhóm thì thứ tự vô nghĩa, hint chỉ gây nhiễu. */}
       {data.columnGroups.length > 1 && (
         <p className="muted">
-          <Link to={subPhaseOrderLink(phaseCode, data.columnGroups)}>Set sub-phase order</Link> —
+          <Link to={subPhaseOrderLink(projectKey, phaseCode, data.columnGroups)}>Set sub-phase order</Link> —
           opens Signboard settings with this Phase&rsquo;s sub-phases pre-filled. Sub-phases not
           declared there fall back to: match a Phase&rsquo;s code → that Phase&rsquo;s position,
           otherwise A→Z, with &ldquo;(No sub-phase)&rdquo; always last.
@@ -326,12 +329,13 @@ function SummaryBar({
  * rỗng) không gửi — nó luôn đứng cuối, không xếp được.
  */
 function subPhaseOrderLink(
+  projectKey: string,
   phaseCode: string,
   groups: readonly SignboardColumnGroup[],
 ): string {
   const subs = groups.map((g) => g.subPhaseKey).filter((k) => k !== '');
   const params = new URLSearchParams({ orderPhase: phaseCode, subs: subs.join(',') });
-  return `/config/signboard?${params.toString()}`;
+  return `${projectPath(projectKey, 'config/signboard')}?${params.toString()}`;
 }
 
 /**
@@ -524,6 +528,7 @@ function BoardTable({
 }
 
 function UnparsedPanel({ query }: { readonly query: ReturnType<typeof useUnparsedSubtasks> }) {
+  const projectKey = useProjectKey();
   if (query.isPending) return <LoadingState label="Looking for sub-tasks not on the board…" rows={2} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
@@ -556,7 +561,7 @@ function UnparsedPanel({ query }: { readonly query: ReturnType<typeof useUnparse
               <code>{s.taskCode}</code> ({s.count}×){' '}
             </span>
           ))}
-          <Link className="button" to="/config/signboard">
+          <Link className="button" to={projectPath(projectKey, 'config/signboard')}>
             Open column settings
           </Link>
         </div>

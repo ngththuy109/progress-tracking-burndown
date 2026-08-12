@@ -88,6 +88,19 @@ redis.call('PEXPIRE', key, 60000)
 return wait_ms
 `;
 
+/**
+ * Khoá Redis của token bucket theo SITE Jira.
+ *
+ * Jira giới hạn tốc độ THEO SITE, không theo dự án: N dự án cùng trỏ về một site
+ * phải chia nhau đúng một bucket. Khoá theo host (không theo URL đầy đủ) để
+ * `https://acme.atlassian.net` và `https://acme.atlassian.net/` ra cùng một khoá.
+ * Khoá mặc định `ratelimit:jira:tokens` (không hậu tố) vẫn giữ nguyên cho đường
+ * legacy đơn site.
+ */
+export function siteRateLimitKey(baseUrl: string): string {
+  return `ratelimit:jira:tokens:${new URL(baseUrl).host}`;
+}
+
 export interface TokenBucketOptions {
   readonly store: TokenBucketStore;
   readonly key?: string;

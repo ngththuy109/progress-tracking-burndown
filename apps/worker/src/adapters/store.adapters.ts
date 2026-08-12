@@ -78,7 +78,9 @@ export function createIssueWritePort(prisma: PrismaClient): IssueWritePort {
 export function createWorklogWritePort(prisma: PrismaClient): WorklogWritePort {
   return {
     upsertMany: (rows) => upsertWorklogs(prisma, rows),
-    markDeleted: (ids) => markWorklogsDeleted(prisma, ids),
+    // `projectKey` bắt buộc: worklog ID chỉ duy nhất TRONG MỘT SITE, danh sách
+    // xoá của site này không được đóng dấu nhầm dòng của tenant site khác.
+    markDeleted: (projectKey, ids) => markWorklogsDeleted(prisma, projectKey, ids),
   };
 }
 

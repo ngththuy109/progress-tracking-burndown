@@ -14,8 +14,8 @@ import {
   readWbsDates,
   searchIssues,
   type JiraClient,
+  type JiraClientRegistry,
   type JiraIssue,
-  type ResolvedFieldMapping,
 } from '@app/jira';
 import type { TrackedEpicStatus } from '@app/shared';
 import type {
@@ -36,14 +36,18 @@ import type {
 
 export function createTrackedEpicStore(prisma: PrismaClient): TrackedEpicStore {
   return {
-    async findStatus(epicKey) {
+    async findTracked(epicKey) {
       const row = await findByKey(prisma, epicKey);
-      return (row?.status as TrackedEpicStatus | undefined) ?? null;
+      if (row === null) return null;
+      // `projectKey` đi kèm để service neo Epic vào đúng tenant (Phase B).
+      return { status: row.status as TrackedEpicStatus, projectKey: row.projectKey };
     },
-    async existingKeys(keys) {
+    async existingKeys(keys, projectKey) {
       if (keys.length === 0) return new Set<string>();
       const rows = await prisma.trackedEpic.findMany({
-        where: { epicKey: { in: [...keys] } },
+        // Bó theo tenant: key của dự án khác coi như chưa theo dõi (đường
+        // validate sẽ trả NOT_FOUND cho nó — không lộ gì).
+        where: { epicKey: { in: [...keys] }, projectKey },
         select: { epicKey: true },
       });
       return new Set(rows.map((r) => r.epicKey));
@@ -59,21 +63,22 @@ export function createTrackedEpicStore(prisma: PrismaClient): TrackedEpicStore {
 /** Số key tối đa nhận mỗi lần — trùng với giới hạn ở zod schema. */
 export const MAX_KEYS_PER_LOOKUP = 100;
 
-export function createJiraEpicPort(
-  client: JiraClient,
-  fields: ResolvedFieldMapping,
-): JiraEpicPort {
+export function createJiraEpicPort(registry: JiraClientRegistry): JiraEpicPort {
   return {
     /**
      * Tra nhiều key: đường nhanh chỉ 2 lần gọi `/search` (tra key + lấy cây con
      * bằng `parentEpic`), bất kể 1 hay 100 key.
+     *
+     * Client + field mapping lấy từ REGISTRY THEO DỰ ÁN (Phase B): mỗi tenant có
+     * thể trỏ site/token/field Jira riêng; dự án legacy rơi về env JIRA_*.
      *
      * Gọi từng key một sẽ là 100 request cho một hộp thoại — đúng vấn đề N+1 mà
      * PRD §4.5 cảnh báo, chỉ là ở chỗ khác. Khi có key sai, tầng (1) buộc phải
      * lùi về tra lẻ (xem `resolveEpicKeys`) — đó là cái giá không tránh được để
      * một key hỏng không kéo sập cả lượt.
      */
-    async lookup(keys) {
+    async lookup(projectKey, keys) {
+      const { client, fields } = await registry.forProject(projectKey);
       const out = new Map<string, JiraLookupResult>();
       const wanted = [...new Set(keys)].slice(0, MAX_KEYS_PER_LOOKUP);
       if (wanted.length === 0) return out;
@@ -160,6 +165,7 @@ export function createJiraEpicPort(
     },
 
     async browse(projectKey, page) {
+      const { client } = await registry.forProject(projectKey);
       // Lọc theo `statusCategory`, KHÔNG theo `status.name` (C-4): tên trạng
       // thái là tiếng Nhật và admin đổi được bất cứ lúc nào.
       const issues = await searchIssues(client, {

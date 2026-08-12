@@ -21,8 +21,9 @@ export function createPlanConflictReadPort(prisma: PrismaClient): PlanConflictRe
     },
 
     async listEpics(projectKey) {
+      // Luôn bó theo tenant (Phase B) — không còn đường liệt kê xuyên dự án.
       return prisma.trackedEpic.findMany({
-        where: projectKey === null ? {} : { projectKey },
+        where: { projectKey },
         select: { epicKey: true, projectKey: true, calendarId: true },
         orderBy: { epicKey: 'asc' },
       });

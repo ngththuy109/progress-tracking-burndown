@@ -7,6 +7,7 @@ import {
   type Principal,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
+import { projectCtxOf, type AuthzGuards } from '../adapters/project-scope.js';
 import {
   addEpics,
   browseEpics,
@@ -22,8 +23,20 @@ import {
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 
+/**
+ * Sổ đăng ký Epic, mount THEO TENANT: `/api/projects/:projectKey/epics`.
+ *
+ * Quyền do guard tập trung lo (adapters/project-scope):
+ *   - GET danh sách / missing-dates → thành viên dự án (VIEWER trở lên).
+ *     Đây cũng là chỗ đóng lỗ hổng cũ: `GET /api/epics` từng liệt kê Epic của
+ *     MỌI dự án cho bất kỳ ai; giờ danh sách luôn bó trong tenant của URL.
+ *   - validate / thêm / duyệt / sửa / xoá → PM của dự án (hoặc ADMIN).
+ * Mọi thao tác theo `:epicKey` đều kiểm Epic thuộc đúng tenant (service làm,
+ * qua `trackedInProject`) — sai tenant là 404 EPIC_NOT_FOUND, không phải 403.
+ */
 export interface EpicRouteDeps extends EpicRegistryDeps {
   resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
 }
 
 export function registerEpicRoutes(app: FastifyInstance, deps: EpicRouteDeps): void {
@@ -44,60 +57,53 @@ export function registerEpicRoutes(app: FastifyInstance, deps: EpicRouteDeps): v
     }
   };
 
-  const requireWriter = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-    if (p.role === 'VIEWER') {
-      throw new ApiError(403, 'FORBIDDEN', 'Only Admins and PMs can change which Epics are tracked.');
-    }
-    return p;
-  };
+  const asViewer = { preHandler: deps.guards.requireProject('VIEWER') };
+  const asPm = { preHandler: deps.guards.requireProject('PM') };
 
-  app.post('/api/epics/validate', async (req, reply) =>
+  app.post('/api/projects/:projectKey/epics/validate', asPm, async (req, reply) =>
     handle(reply, async () => {
       const parsed = validateEpicsRequestSchema.safeParse(req.body);
       if (!parsed.success) throw badRequest(parsed.error);
-      return validateKeys(deps, parsed.data.keys);
+      return validateKeys(deps, projectCtxOf(req).projectKey, parsed.data.keys);
     }),
   );
 
-  app.post('/api/epics', async (req, reply) =>
+  app.post('/api/projects/:projectKey/epics', asPm, async (req, reply) =>
     handle(reply, async () => {
-      const principal = requireWriter(req);
+      // Guard đã bảo đảm có principal; userId chỉ dùng để ghi sổ `added_by`.
+      const userId = deps.resolvePrincipal(req)?.userId ?? '';
       const parsed = addEpicsRequestSchema.safeParse(req.body);
       if (!parsed.success) throw badRequest(parsed.error);
-      return addEpics(deps, parsed.data, principal.userId);
+      return addEpics(deps, projectCtxOf(req).projectKey, parsed.data, userId);
     }),
   );
 
-  app.get('/api/epics', async (req, reply) =>
-    handle(reply, async () => ({ epics: await listEpics(deps, queryString(req, 'project')) })),
+  app.get('/api/projects/:projectKey/epics', asViewer, async (req, reply) =>
+    handle(reply, async () => ({
+      epics: await listEpics(deps, projectCtxOf(req).projectKey),
+    })),
   );
 
-  app.get('/api/epics/browse', async (req, reply) =>
-    handle(reply, async () => {
-      const projectKey = queryString(req, 'project');
-      if (!projectKey) throw new ApiError(400, 'BAD_REQUEST', 'Missing the ?project=KEY parameter.');
-      return browseEpics(deps, projectKey, {
+  app.get('/api/projects/:projectKey/epics/browse', asPm, async (req, reply) =>
+    handle(reply, async () =>
+      browseEpics(deps, projectCtxOf(req).projectKey, {
         startAt: queryInt(req, 'startAt', 0),
         maxResults: Math.min(queryInt(req, 'maxResults', DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE),
-      });
-    }),
+      }),
+    ),
   );
 
-  app.patch('/api/epics/:epicKey', async (req, reply) =>
+  app.patch('/api/projects/:projectKey/epics/:epicKey', asPm, async (req, reply) =>
     handle(reply, async () => {
-      requireWriter(req);
       const parsed = patchEpicRequestSchema.safeParse(req.body);
       if (!parsed.success) throw badRequest(parsed.error);
-      await patchEpic(deps, epicKeyParam(req), parsed.data);
+      await patchEpic(deps, projectCtxOf(req).projectKey, epicKeyParam(req), parsed.data);
       return { ok: true };
     }),
   );
 
-  app.delete('/api/epics/:epicKey', async (req, reply) =>
+  app.delete('/api/projects/:projectKey/epics/:epicKey', asPm, async (req, reply) =>
     handle(reply, async () => {
-      requireWriter(req);
       // `purge` đến từ query (`?purge=true`), `confirmKey` từ body — cố ý tách
       // hai chỗ để không xoá sạch được chỉ bằng một đường link.
       const parsed = deleteEpicRequestSchema.safeParse({
@@ -105,18 +111,24 @@ export function registerEpicRoutes(app: FastifyInstance, deps: EpicRouteDeps): v
         confirmKey: (req.body as { confirmKey?: string } | undefined)?.confirmKey ?? null,
       });
       if (!parsed.success) throw badRequest(parsed.error);
-      await removeEpic(deps, epicKeyParam(req), parsed.data);
+      await removeEpic(deps, projectCtxOf(req).projectKey, epicKeyParam(req), parsed.data);
       return { ok: true };
     }),
   );
 
-  app.get('/api/epics/:epicKey/missing-dates', async (req, reply) =>
-    handle(reply, async () => {
-      // `missingDatesResponseSchema` yêu cầu cả `epicKey` — thiếu nó là client
-      // từ chối toàn bộ response (RESPONSE_SHAPE_INVALID), không chỉ thiếu chữ.
-      const epicKey = epicKeyParam(req);
-      return { epicKey, rows: await listMissingDates(deps, epicKey) };
-    }),
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/missing-dates',
+    asViewer,
+    async (req, reply) =>
+      handle(reply, async () => {
+        // `missingDatesResponseSchema` yêu cầu cả `epicKey` — thiếu nó là client
+        // từ chối toàn bộ response (RESPONSE_SHAPE_INVALID), không chỉ thiếu chữ.
+        const epicKey = epicKeyParam(req);
+        return {
+          epicKey,
+          rows: await listMissingDates(deps, projectCtxOf(req).projectKey, epicKey),
+        };
+      }),
   );
 }
 

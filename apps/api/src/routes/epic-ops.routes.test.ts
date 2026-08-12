@@ -20,6 +20,7 @@ import {
   type EpicOpsWritePort,
 } from './epic-ops.routes.js';
 import { levelOf } from '../services/epic-health.service.js';
+import { asAdmin, asPm, asViewer, testGuards } from '../test-fakes.js';
 
 const CALENDAR: WorkCalendar = {
   calendarId: 'test',
@@ -36,7 +37,6 @@ const STATUS_IDS: StatusIdMap = new Map([
   ['6', 'done'],
 ]);
 
-const ADMIN: Principal = { userId: 'admin', role: 'ADMIN', projects: [] };
 
 const ms = (iso: string): number => Date.parse(iso);
 
@@ -64,6 +64,7 @@ function sub(key: string, over: Partial<SubtaskRecord> = {}): SubtaskRecord {
 
 class FakeReads implements EpicOpsReadPort {
   status: TrackedEpicStatus = 'ACTIVE';
+  projectKey = 'PAY';
   lastError: string | null = null;
   subtasks: SubtaskRecord[] = [];
   stored: number | null = 28_800;
@@ -79,7 +80,7 @@ class FakeReads implements EpicOpsReadPort {
 
   async epicMeta() {
     return {
-      projectKey: 'PAY',
+      projectKey: this.projectKey,
       status: this.status,
       lastSyncedAt: new Date('2026-03-06T17:00:00Z'),
       lastError: this.lastError,
@@ -148,10 +149,14 @@ let principal: Principal | null;
 beforeEach(async () => {
   reads = new FakeReads();
   writes = new FakeWrites();
-  principal = ADMIN;
+  principal = asAdmin();
 
   app = Fastify();
-  registerEpicOpsRoutes(app, { reads, writes, resolvePrincipal: () => principal });
+  registerEpicOpsRoutes(app, {
+    reads,
+    writes,
+    guards: testGuards({ principal: () => principal }),
+  });
   await app.ready();
 });
 
@@ -172,7 +177,7 @@ describe('giải thích số liệu', () => {
     ];
     reads.stored = 0;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
     const row = body.rows[0];
 
     expect(row?.appliedRule).toBe(1);
@@ -186,7 +191,7 @@ describe('giải thích số liệu', () => {
     reads.subtasks = [sub('PAY-12', { changelog: [est('18000', '2026-03-03T10:00:00+07:00')] })];
     reads.stored = 18_000;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-04/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-04/explain');
     const row = body.rows[0];
 
     expect(row?.appliedRule).toBe(2);
@@ -205,7 +210,7 @@ describe('giải thích số liệu', () => {
     ];
     reads.stored = 21_600;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
     const row = body.rows[0];
 
     expect(row?.appliedRule).toBe(3);
@@ -227,7 +232,7 @@ describe('giải thích số liệu', () => {
     ];
     reads.stored = 18_000;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
 
     expect(body.rows[0]?.appliedRule).toBe(2);
     // Quy tắc 3 sẽ cho 28800 − 25200 = 3600 (1 giờ). Quy tắc 2 cho 5 giờ.
@@ -242,7 +247,7 @@ describe('giải thích số liệu', () => {
     ];
     reads.stored = 0;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
     expect(body.rows[0]?.appliedRule).toBe(1);
   });
 
@@ -250,7 +255,7 @@ describe('giải thích số liệu', () => {
     reads.subtasks = [sub('PAY-11'), sub('PAY-12')];
     reads.stored = 57_600;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
 
     expect(body.recomputedRemainingHours).toBe(16);
     expect(body.storedRemainingHours).toBe(16);
@@ -262,14 +267,14 @@ describe('giải thích số liệu', () => {
     reads.subtasks = [sub('PAY-11')];
     reads.stored = 14_400;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
 
     expect(body.mismatch).toEqual({ storedHours: 4, recomputedHours: 8, differenceHours: 4 });
   });
 
   it('mỗi dòng có câu giải thích tiếng Việt, không chỉ số quy tắc', async () => {
     reads.subtasks = [sub('PAY-11')];
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
 
     expect(body.rows[0]?.ruleExplanation).toContain('Rule 3');
     expect(body.rows[0]?.ruleExplanation.length).toBeGreaterThan(30);
@@ -281,7 +286,7 @@ describe('giải thích số liệu', () => {
     reads.subtasks = [sub('PAY-11'), sub('PAY-99', { phaseCode: 'UNCLASSIFIED' })];
     reads.stored = 57_600;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
 
     expect(body.rows.map((r) => r.issueKey)).toEqual(['PAY-11', 'PAY-99']);
     expect(body.mismatch).toBeNull();
@@ -291,13 +296,13 @@ describe('giải thích số liệu', () => {
     reads.subtasks = [sub('PAY-11'), sub('PAY-20', { createdAtMs: ms('2026-03-05T09:00:00+07:00') })];
     reads.stored = 28_800;
 
-    const { body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-03/explain');
+    const { body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-03/explain');
     expect(body.rows.map((r) => r.issueKey)).toEqual(['PAY-11']);
   });
 
   it('ngày chưa có snapshot trả 404 kèm cách khắc phục, KHÔNG tính bù tại chỗ', async () => {
     reads.stored = null;
-    const { status, body } = await call<ExplainResponse>('GET', '/api/burndown/epic/PAY-1/day/2026-03-12/explain');
+    const { status, body } = await call<ExplainResponse>('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/2026-03-12/explain');
 
     expect(status).toBe(404);
     expect(body.error).toBe('NO_SNAPSHOT');
@@ -305,7 +310,7 @@ describe('giải thích số liệu', () => {
   });
 
   it('ngày sai định dạng bị từ chối', async () => {
-    const { status } = await call('GET', '/api/burndown/epic/PAY-1/day/12-03-2026/explain');
+    const { status } = await call('GET', '/api/projects/PAY/epics/PAY-1/burndown/day/12-03-2026/explain');
     expect(status).toBe(400);
   });
 });
@@ -313,13 +318,13 @@ describe('giải thích số liệu', () => {
 describe('sức khoẻ dữ liệu', () => {
   it('missingSnapshotDays trả về NGÀY cụ thể, không phải con số', async () => {
     reads.dates = new Set(['2026-03-02', '2026-03-03', '2026-03-05', '2026-03-06']);
-    const { body } = await call<EpicHealthResponse>('GET', '/api/epic/PAY-1/health');
+    const { body } = await call<EpicHealthResponse>('GET', '/api/projects/PAY/epics/PAY-1/health');
 
     expect(body.missingSnapshotDays).toEqual(['2026-03-04']);
   });
 
   it('Epic dữ liệu sạch cho mọi chỉ số mức OK', async () => {
-    const { body } = await call<EpicHealthResponse>('GET', '/api/epic/PAY-1/health');
+    const { body } = await call<EpicHealthResponse>('GET', '/api/projects/PAY/epics/PAY-1/health');
 
     expect(body.metrics.every((m) => m.level === 'OK')).toBe(true);
     expect(body.overallLevel).toBe('OK');
@@ -338,14 +343,14 @@ describe('sức khoẻ dữ liệu', () => {
   it('mức tổng lấy chỉ số XẤU NHẤT, không lấy trung bình', async () => {
     // Trung bình sẽ để ba chỉ số tốt che mất một chỉ số nghiêm trọng.
     reads.ratios = { ...reads.ratios, missingWbsDateRatio: 0.5 };
-    const { body } = await call<EpicHealthResponse>('GET', '/api/epic/PAY-1/health');
+    const { body } = await call<EpicHealthResponse>('GET', '/api/projects/PAY/epics/PAY-1/health');
 
     expect(body.overallLevel).toBe('CRITICAL');
   });
 
   it('mỗi chỉ số vượt ngưỡng đều nói rõ phải làm gì tiếp', async () => {
     reads.ratios = { ...reads.ratios, unclassifiedPhaseRatio: 0.25 };
-    const { body } = await call<EpicHealthResponse>('GET', '/api/epic/PAY-1/health');
+    const { body } = await call<EpicHealthResponse>('GET', '/api/projects/PAY/epics/PAY-1/health');
 
     const metric = body.metrics.find((m) => m.name === 'unclassifiedPhaseRatio');
     expect(metric?.message).toContain('Phase settings');
@@ -354,7 +359,7 @@ describe('sức khoẻ dữ liệu', () => {
   it('Epic đang ERROR trả kèm nguyên văn lỗi', async () => {
     reads.status = 'ERROR';
     reads.lastError = 'Jira trả 401: token hết hạn';
-    const { body } = await call<EpicHealthResponse>('GET', '/api/epic/PAY-1/health');
+    const { body } = await call<EpicHealthResponse>('GET', '/api/projects/PAY/epics/PAY-1/health');
 
     expect(body.status).toBe('ERROR');
     expect(body.lastError).toBe('Jira trả 401: token hết hạn');
@@ -363,7 +368,7 @@ describe('sức khoẻ dữ liệu', () => {
 
 describe('đồng bộ lại', () => {
   it('đẩy job và trả về NGAY, không chạy đồng bộ trong request', async () => {
-    const { status, body } = await call<ResyncResponse>('POST', '/api/epic/PAY-1/resync', {});
+    const { status, body } = await call<ResyncResponse>('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
 
     expect(status).toBe(200);
     expect(body.queued).toBe(true);
@@ -372,7 +377,7 @@ describe('đồng bộ lại', () => {
 
   it('Epic đang ERROR thì chuyển về BACKFILLING qua máy trạng thái', async () => {
     reads.status = 'ERROR';
-    await call('POST', '/api/epic/PAY-1/resync', { full: true });
+    await call('POST', '/api/projects/PAY/epics/PAY-1/resync', { full: true });
 
     expect(writes.statusCalls).toEqual(['BACKFILLING']);
   });
@@ -380,7 +385,7 @@ describe('đồng bộ lại', () => {
   it('Epic đang PAUSED thì bị từ chối, kèm cách bật lại', async () => {
     // Đánh thức một Epic đã cố ý tạm dừng sẽ vô hiệu hoá chính nút Tạm dừng.
     reads.status = 'PAUSED';
-    const { status, body } = await call('POST', '/api/epic/PAY-1/resync', {});
+    const { status, body } = await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
 
     expect(status).toBe(409);
     expect(body.error).toBe('EPIC_PAUSED');
@@ -392,56 +397,67 @@ describe('đồng bộ lại', () => {
     // Máy trạng thái của T-10 cố ý không có nhánh ACTIVE → BACKFILLING: Epic
     // đang chạy bình thường vẫn phải ở ACTIVE trong lúc đồng bộ lại.
     reads.status = 'ACTIVE';
-    const { status } = await call('POST', '/api/epic/PAY-1/resync', {});
+    const { status } = await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
 
     expect(status).toBe(200);
     expect(writes.statusCalls).toEqual([]);
   });
 
   it('bấm hai lần chỉ tạo một job', async () => {
-    await call('POST', '/api/epic/PAY-1/resync', {});
-    await call('POST', '/api/epic/PAY-1/resync', {});
+    await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
+    await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
 
     expect(writes.enqueued).toHaveLength(1);
   });
 
-  it('người xem không được đồng bộ lại', async () => {
-    principal = { userId: 'v', role: 'VIEWER', projects: [] };
-    const { status, body } = await call('POST', '/api/epic/PAY-1/resync', {});
+  it('VIEWER của dự án không được đồng bộ lại (403)', async () => {
+    principal = asViewer('PAY');
+    const { status, body } = await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
 
     expect(status).toBe(403);
-    expect(body.message).toContain('Jira rate limit');
+    expect(body.error).toBe('FORBIDDEN');
   });
 
-  it('PM không phụ trách project cũng không được', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['SHOP'] };
-    expect((await call('POST', '/api/epic/PAY-1/resync', {})).status).toBe(403);
+  it('PM của dự án KHÁC → 404, không lộ tenant', async () => {
+    principal = asPm('CRM');
+    const { status, body } = await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
+    expect(status).toBe(404);
+    expect(body.error).toBe('PROJECT_NOT_FOUND');
+  });
+
+  it('Epic thuộc tenant khác ghép vào URL dự án mình → 404 EPIC_NOT_FOUND', async () => {
+    principal = asPm('PAY');
+    reads.projectKey = 'CRM'; // Epic thật ra của CRM
+    const { status, body } = await call('POST', '/api/projects/PAY/epics/CRM-9/resync', {});
+    expect(status).toBe(404);
+    expect(body.error).toBe('EPIC_NOT_FOUND');
+    expect(writes.enqueued).toEqual([]);
   });
 
   it('full = true ĐI TỚI ĐƯỢC nội dung job', async () => {
     // Đây là mắt xích từng đứt: API nhận `full`, đẩy vào job, rồi worker khai
     // kiểu job chỉ có `epicKey` nên không bao giờ nhìn thấy nó. Lệnh trong
     // runbook chạy trót lọt mà không dựng lại gì cả.
-    await call('POST', '/api/epic/PAY-1/resync', { full: true });
+    await call('POST', '/api/projects/PAY/epics/PAY-1/resync', { full: true });
 
     expect(writes.payloads).toEqual([{ from: null, to: null, full: true }]);
   });
 
   it('dải ngày gõ tay cũng đi tới được nội dung job', async () => {
-    await call('POST', '/api/epic/PAY-1/resync', { from: '2026-03-01', to: '2026-03-11' });
+    await call('POST', '/api/projects/PAY/epics/PAY-1/resync', { from: '2026-03-01', to: '2026-03-11' });
 
     expect(writes.payloads).toEqual([{ from: '2026-03-01', to: '2026-03-11', full: false }]);
   });
 
   it('thân yêu cầu rỗng cho ra lượt đồng bộ tăng dần', async () => {
-    await call('POST', '/api/epic/PAY-1/resync', {});
+    await call('POST', '/api/projects/PAY/epics/PAY-1/resync', {});
     expect(writes.payloads).toEqual([{ from: null, to: null, full: false }]);
   });
 
   it('full là chuỗi "true" bị từ chối kèm ví dụ đúng, KHÔNG bị ép kiểu', async () => {
     // Lỗi gõ tay phổ biến nhất khi dán lệnh curl. Ép kiểu ngầm sẽ biến cả chuỗi
     // "false" thành true.
-    const { status, body } = await call('POST', '/api/epic/PAY-1/resync', { full: 'true' });
+    const { status, body } = await call('POST', '/api/projects/PAY/epics/PAY-1/resync', { full: 'true' });
 
     expect(status).toBe(400);
     expect(body.message).toContain('full');
@@ -450,7 +466,7 @@ describe('đồng bộ lại', () => {
   });
 
   it('ngày sai định dạng bị chặn ngay ở API, không để job chết sau', async () => {
-    const { status, body } = await call('POST', '/api/epic/PAY-1/resync', { from: '01/03/2026' });
+    const { status, body } = await call('POST', '/api/projects/PAY/epics/PAY-1/resync', { from: '01/03/2026' });
 
     expect(status).toBe(400);
     expect(body.message).toContain('YYYY-MM-DD');
@@ -471,14 +487,14 @@ describe('lịch sử dịch chuyển kế hoạch', () => {
 
   it('trả danh sách mới nhất trước', async () => {
     reads.shifts = [shift('A', 1, '2026-03-01T00:00:00Z'), shift('B', 1, '2026-03-05T00:00:00Z')];
-    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/epic/PAY-1/plan-shift-history');
+    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/projects/PAY/epics/PAY-1/plan-shift-history');
 
     expect(body.shifts.map((s) => s.phaseCode)).toEqual(['B', 'A']);
   });
 
   it('lùi quá 40% độ dài kế hoạch cho mức nghiêm trọng', async () => {
     reads.shifts = [shift('DESIGN', 5, '2026-03-05T00:00:00Z')];
-    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/epic/PAY-1/plan-shift-history');
+    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/projects/PAY/epics/PAY-1/plan-shift-history');
 
     expect(body.totalShiftedWorkdays).toBe(5);
     expect(body.warningLevel).toBe('CRITICAL');
@@ -486,13 +502,13 @@ describe('lịch sử dịch chuyển kế hoạch', () => {
 
   it('KHÔNG trừ phần kéo sớm lên khi cộng tổng ngày lùi', async () => {
     reads.shifts = [shift('A', 3, '2026-03-05T00:00:00Z'), shift('B', -3, '2026-03-06T00:00:00Z')];
-    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/epic/PAY-1/plan-shift-history');
+    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/projects/PAY/epics/PAY-1/plan-shift-history');
 
     expect(body.totalShiftedWorkdays).toBe(3);
   });
 
   it('Epic chưa từng bị lùi trả danh sách rỗng và mức OK', async () => {
-    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/epic/PAY-1/plan-shift-history');
+    const { body } = await call<PlanShiftHistoryResponse>('GET', '/api/projects/PAY/epics/PAY-1/plan-shift-history');
 
     expect(body.shifts).toEqual([]);
     expect(body.warningLevel).toBe('OK');

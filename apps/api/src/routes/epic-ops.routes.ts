@@ -8,7 +8,6 @@ import {
   type HealthLevel,
   type PlanShiftHistoryResponse,
   type PlanShiftRecord,
-  type Principal,
   type ResyncResponse,
   type StatusIdMap,
   type SubtaskRecord,
@@ -17,12 +16,19 @@ import {
 } from '@app/shared';
 import { listWorkdays } from '@app/engine';
 import { ApiError } from '../services/phase-config.service.js';
+import { resolveEpicInProject } from '../services/epic-scope.js';
+import { projectCtxOf, type AuthzGuards } from '../adapters/project-scope.js';
 import { assertTransition } from '../services/epic-registry.service.js';
 import { buildEpicHealth, type HealthRatios } from '../services/epic-health.service.js';
 import { explainDay } from '../services/explain-day.service.js';
 
 /**
- * Bốn endpoint vận hành Epic — PRD Phụ lục B.
+ * Bốn endpoint vận hành Epic, mount theo tenant:
+ * `/api/projects/:projectKey/epics/:epicKey/...`.
+ *
+ * Quyền: đọc (health, explain, plan-shift-history) → VIEWER của dự án;
+ * resync → PM của dự án (nó tiêu quota Jira dùng chung). Epic sai tenant là
+ * 404 EPIC_NOT_FOUND (`resolveEpicInProject`).
  *
  * Tầng này CHỈ điều phối. Toàn bộ tính toán nằm ở hai service thuần bên cạnh.
  */
@@ -41,8 +47,12 @@ export interface EpicOpsReadPort {
   snapshotDates(epicKey: string): Promise<ReadonlySet<string>>;
   /** `actual_remaining_s` của một ngày. `null` = ngày đó không có snapshot. */
   storedRemaining(epicKey: string, date: DateOnly): Promise<number | null>;
-  /** Sub-task kèm đủ lịch sử để tính lại — cùng dữ liệu mà T-18 dùng. */
-  subtasksWithHistory(epicKey: string): Promise<{
+  /**
+   * Sub-task kèm đủ lịch sử để tính lại — cùng dữ liệu mà T-18 dùng.
+   * `projectKey` để bộ chuyển đổi nạp đúng bảng tra status của TENANT đó
+   * (đa site Jira thì status ID số đụng nhau giữa các site).
+   */
+  subtasksWithHistory(epicKey: string, projectKey: string): Promise<{
     subtasks: readonly SubtaskRecord[];
     summaries: Record<string, string>;
     statusIdMap: StatusIdMap;
@@ -61,7 +71,7 @@ export interface EpicOpsWritePort {
 export interface EpicOpsRouteDeps {
   readonly reads: EpicOpsReadPort;
   readonly writes: EpicOpsWritePort;
-  resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
 }
 
 /** Ngưỡng R-11: tổng số ngày lùi vượt 20% độ dài kế hoạch. */
@@ -89,49 +99,19 @@ export function registerEpicOpsRoutes(app: FastifyInstance, deps: EpicOpsRouteDe
     }
   };
 
-  const principalOf = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-    return p;
-  };
+  const asViewer = { preHandler: deps.guards.requireProject('VIEWER') };
+  const asPm = { preHandler: deps.guards.requireProject('PM') };
 
-  async function metaOrThrow(epicKey: string) {
-    const meta = await deps.reads.epicMeta(epicKey);
-    if (meta === null) {
-      throw new ApiError(
-        404,
-        'EPIC_NOT_FOUND',
-        `Epic ${epicKey} is not tracked. Add it on the Epics screen first.`,
-      );
-    }
-    return meta;
-  }
-
-  function assertCanRead(principal: Principal, projectKey: string): void {
-    if (principal.role === 'ADMIN' || principal.role === 'VIEWER') return;
-    if (principal.projects.includes(projectKey)) return;
-    throw new ApiError(403, 'FORBIDDEN', `You are not assigned to project ${projectKey}.`);
-  }
-
-  /** Đồng bộ lại là thao tác GHI: người xem không được phép. */
-  function assertCanOperate(principal: Principal, projectKey: string): void {
-    if (principal.role === 'ADMIN') return;
-    if (principal.role === 'PM' && principal.projects.includes(projectKey)) return;
-    throw new ApiError(
-      403,
-      'FORBIDDEN',
-      `Only an Admin, or the PM assigned to project ${projectKey}, can trigger a resync. ` +
-        'It uses the Jira rate limit shared by the whole system.',
-    );
-  }
+  /** Tra Epic + kiểm nó thuộc đúng tenant của URL — 404 cho cả hai ca sai. */
+  const metaInProject = (req: FastifyRequest, epicKey: string) =>
+    resolveEpicInProject((k) => deps.reads.epicMeta(k), epicKey, projectCtxOf(req).projectKey);
 
   // -------------------------------------------------------------------------
 
-  app.get('/api/epic/:epicKey/health', async (req, reply) =>
+  app.get('/api/projects/:projectKey/epics/:epicKey/health', asViewer, async (req, reply) =>
     handle(reply, async (): Promise<EpicHealthResponse> => {
       const epicKey = param(req, 'epicKey');
-      const meta = await metaOrThrow(epicKey);
-      assertCanRead(principalOf(req), meta.projectKey);
+      const meta = await metaInProject(req, epicKey);
 
       const [ratios, snapshotDates] = await Promise.all([
         deps.reads.healthRatios(epicKey),
@@ -158,46 +138,47 @@ export function registerEpicOpsRoutes(app: FastifyInstance, deps: EpicOpsRouteDe
     }),
   );
 
-  app.get('/api/burndown/epic/:epicKey/day/:date/explain', async (req, reply) =>
-    handle(reply, async (): Promise<ExplainResponse> => {
-      const epicKey = param(req, 'epicKey');
-      const date = dateParam(req);
-      const meta = await metaOrThrow(epicKey);
-      assertCanRead(principalOf(req), meta.projectKey);
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/burndown/day/:date/explain',
+    asViewer,
+    async (req, reply) =>
+      handle(reply, async (): Promise<ExplainResponse> => {
+        const epicKey = param(req, 'epicKey');
+        const date = dateParam(req);
+        const meta = await metaInProject(req, epicKey);
 
-      const stored = await deps.reads.storedRemaining(epicKey, date);
-      if (stored === null) {
-        // KHÔNG tính bù tại chỗ. Ngày thiếu snapshot là triệu chứng cần nhìn
-        // thấy — tính bù sẽ che mất việc job đêm đang hỏng (E-12).
-        throw new ApiError(
-          404,
-          'NO_SNAPSHOT',
-          `${date} has no snapshot, so there is nothing to explain. ` +
-            'Check "missing snapshot days" on /health, then click Resync to rebuild it.',
-        );
-      }
+        const stored = await deps.reads.storedRemaining(epicKey, date);
+        if (stored === null) {
+          // KHÔNG tính bù tại chỗ. Ngày thiếu snapshot là triệu chứng cần nhìn
+          // thấy — tính bù sẽ che mất việc job đêm đang hỏng (E-12).
+          throw new ApiError(
+            404,
+            'NO_SNAPSHOT',
+            `${date} has no snapshot, so there is nothing to explain. ` +
+              'Check "missing snapshot days" on /health, then click Resync to rebuild it.',
+          );
+        }
 
-      const { subtasks, summaries, statusIdMap, changeAuthors } =
-        await deps.reads.subtasksWithHistory(epicKey);
+        const { subtasks, summaries, statusIdMap, changeAuthors } =
+          await deps.reads.subtasksWithHistory(epicKey, meta.projectKey);
 
-      return explainDay({
-        epicKey,
-        date,
-        subtasks,
-        summaries,
-        calendar: meta.calendar,
-        statusIdMap,
-        storedRemainingSeconds: stored,
-        changeAuthors,
-      });
-    }),
+        return explainDay({
+          epicKey,
+          date,
+          subtasks,
+          summaries,
+          calendar: meta.calendar,
+          statusIdMap,
+          storedRemainingSeconds: stored,
+          changeAuthors,
+        });
+      }),
   );
 
-  app.post('/api/epic/:epicKey/resync', async (req, reply) =>
+  app.post('/api/projects/:projectKey/epics/:epicKey/resync', asPm, async (req, reply) =>
     handle(reply, async (): Promise<ResyncResponse> => {
       const epicKey = param(req, 'epicKey');
-      const meta = await metaOrThrow(epicKey);
-      assertCanOperate(principalOf(req), meta.projectKey);
+      const meta = await metaInProject(req, epicKey);
 
       const parsed = resyncRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) {
@@ -251,42 +232,44 @@ export function registerEpicOpsRoutes(app: FastifyInstance, deps: EpicOpsRouteDe
     }),
   );
 
-  app.get('/api/epic/:epicKey/plan-shift-history', async (req, reply) =>
-    handle(reply, async (): Promise<PlanShiftHistoryResponse> => {
-      const epicKey = param(req, 'epicKey');
-      const meta = await metaOrThrow(epicKey);
-      assertCanRead(principalOf(req), meta.projectKey);
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/plan-shift-history',
+    asViewer,
+    async (req, reply) =>
+      handle(reply, async (): Promise<PlanShiftHistoryResponse> => {
+        const epicKey = param(req, 'epicKey');
+        await metaInProject(req, epicKey);
 
-      const [raw, planWorkdays] = await Promise.all([
-        deps.reads.planShifts(epicKey),
-        deps.reads.totalPlanWorkdays(epicKey),
-      ]);
+        const [raw, planWorkdays] = await Promise.all([
+          deps.reads.planShifts(epicKey),
+          deps.reads.totalPlanWorkdays(epicKey),
+        ]);
 
-      const shifts = [...raw]
-        .sort((a, b) => b.detectedAt.getTime() - a.detectedAt.getTime())
-        .map((s) => ({
-          phaseCode: s.phaseCode,
-          shiftType: s.shiftType,
-          fromDate: s.fromDate,
-          toDate: s.toDate,
-          shiftedWorkdays: s.shiftedWorkdays,
-          causedByKeys: [...s.causedByKeys],
-          detectedAt: s.detectedAt.toISOString(),
-        }));
+        const shifts = [...raw]
+          .sort((a, b) => b.detectedAt.getTime() - a.detectedAt.getTime())
+          .map((s) => ({
+            phaseCode: s.phaseCode,
+            shiftType: s.shiftType,
+            fromDate: s.fromDate,
+            toDate: s.toDate,
+            shiftedWorkdays: s.shiftedWorkdays,
+            causedByKeys: [...s.causedByKeys],
+            detectedAt: s.detectedAt.toISOString(),
+          }));
 
-      // CHỈ cộng phần lùi ra xa. Trừ đi phần kéo sớm lên sẽ để một Phase về sớm
-      // che mất một Phase đang trễ — đúng thứ R-11 sinh ra để phát hiện.
-      const total = shifts
-        .filter((s) => s.shiftedWorkdays > 0)
-        .reduce((sum, s) => sum + s.shiftedWorkdays, 0);
+        // CHỈ cộng phần lùi ra xa. Trừ đi phần kéo sớm lên sẽ để một Phase về sớm
+        // che mất một Phase đang trễ — đúng thứ R-11 sinh ra để phát hiện.
+        const total = shifts
+          .filter((s) => s.shiftedWorkdays > 0)
+          .reduce((sum, s) => sum + s.shiftedWorkdays, 0);
 
-      return {
-        epicKey,
-        shifts,
-        totalShiftedWorkdays: total,
-        warningLevel: planShiftLevel(total, planWorkdays),
-      };
-    }),
+        return {
+          epicKey,
+          shifts,
+          totalShiftedWorkdays: total,
+          warningLevel: planShiftLevel(total, planWorkdays),
+        };
+      }),
   );
 }
 

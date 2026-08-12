@@ -126,12 +126,24 @@ async function installApi(page: Page, over: Record<string, unknown> = {}): Promi
         body: JSON.stringify(body),
       });
 
+      // Multi-tenant: /api/me nuôi ProjectProvider — thiếu nó là bị đá về `/`.
+      if (path === '/api/me') {
+        await route.fulfill(
+          json({
+            userId: 'pm@example.com',
+            isAdmin: false,
+            projects: [{ projectKey: 'PAY', displayName: 'Payments', role: 'PM' }],
+          }),
+        );
+        return;
+      }
       if (path.includes('/explain')) {
         counts.explain += 1;
         await route.fulfill(json(EXPLAIN));
         return;
       }
-      if (path.includes('/burndown/epic/')) {
+      // `/api/projects/PAY/epics/PAY-1/burndown`
+      if (path.includes('/burndown')) {
         counts.burndown += 1;
         await route.fulfill(json(burndownBody(over)));
         return;
@@ -150,7 +162,7 @@ async function installApi(page: Page, over: Record<string, unknown> = {}): Promi
 
 // CỐ Ý không đặt tên là `URL`: hằng số đó sẽ che mất `URL` toàn cục mà
 // `installApi` đang dùng, và mọi test đỏ với 'URL is not a constructor'.
-const PAGE = '/burndown?epic=PAY-1';
+const PAGE = '/p/PAY/burndown?epic=PAY-1';
 
 // ---------------------------------------------------------------------------
 
@@ -268,7 +280,7 @@ test('bấm vào biểu đồ mở bảng giải thích có ghi quy tắc đã �
 
 test('chưa chọn Epic thì hiện bộ chọn Epic active để bấm thẳng, không để ngõ cụt', async ({ page }) => {
   await installApi(page);
-  await page.goto('/burndown');
+  await page.goto('/p/PAY/burndown');
 
   // Thay cho ô trống "sang màn Epics": danh sách Epic active kèm mã + tiêu đề.
   await expect(page.getByRole('heading', { name: 'Pick an Epic to chart' })).toBeVisible();

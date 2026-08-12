@@ -6,6 +6,7 @@ import {
   createApiClient,
   fallbackMessage,
   noContent,
+  projectApiPath,
   type ResponseParser,
 } from './client.js';
 
@@ -248,5 +249,16 @@ describe('câu thông báo mặc định', () => {
         `HTTP ${status} — câu "${message}" không nói cách khắc phục`,
       ).toBe(true);
     }
+  });
+});
+
+describe('projectApiPath', () => {
+  it('ghép tiền tố /projects/<key> cho endpoint theo phạm vi dự án', () => {
+    expect(projectApiPath('PAY', '/epics')).toBe('/projects/PAY/epics');
+    expect(projectApiPath('PAY', '/config/phase')).toBe('/projects/PAY/config/phase');
+  });
+
+  it('encode projectKey — giá trị đến từ URL, không tin sẵn', () => {
+    expect(projectApiPath('A/B', '/epics')).toBe('/projects/A%2FB/epics');
   });
 });

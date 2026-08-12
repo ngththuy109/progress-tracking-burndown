@@ -18,29 +18,39 @@ import {
   type SaveConfigResponse,
   type UnmatchedLabel,
 } from '@app/shared';
-import { apiClient, type ApiClient } from './client.js';
+import { apiClient, projectApiPath, type ApiClient } from './client.js';
 
 /**
- * Sáu hook của màn hình cấu hình Phase — PRD Phụ lục B.
+ * Sáu hook của màn hình cấu hình Phase — PRD Phụ lục B, bản multi-tenant.
  *
- * Mọi schema đều lấy từ `@app/shared`. Không khai lại kiểu ở đây: T-09 đã đặc
- * tả xong hợp đồng, khai lại là hai bên lệch nhau lúc nào không ai biết.
- *
- * `client` truyền vào được để test dựng được mọi tình huống mà không đụng tới
- * `globalThis.fetch`.
+ * KHÁC các hook nghiệp vụ khác, `projectKey` ở đây là THAM SỐ TƯỜNG MINH kiểu
+ * `string | null` thay vì lấy từ `ProjectProvider`:
+ *   - chuỗi   → cấu hình CỦA DỰ ÁN đó, endpoint `/api/projects/:key/config/phase...`;
+ *   - `null`  → bộ Mặc định (GLOBAL), endpoint quản trị `/api/admin/config/phase...`
+ *               (chỉ ADMIN — API tự chặn).
+ * Màn hình cấu hình cho phép ADMIN chuyển qua lại hai phạm vi ngay tại chỗ, nên
+ * hook phải nhận được cả hai.
  */
 
-export const phaseConfigKeys = {
-  all: ['config', 'phase'] as const,
-  effective: (projectKey: string | null) => ['config', 'phase', 'effective', projectKey] as const,
-  versions: (projectKey: string | null) => ['config', 'phase', 'versions', projectKey] as const,
-  unmatched: (projectKey: string | null) => ['config', 'phase', 'unmatched', projectKey] as const,
-};
-
-/** `?project=` chỉ gửi khi đang làm việc trên một project cụ thể. */
-function scopeQuery(projectKey: string | null): { query: { project: string } } | Record<string, never> {
-  return projectKey === null ? {} : { query: { project: projectKey } };
+/** Ghép đường dẫn nhóm config theo phạm vi: dự án hay bộ Mặc định (admin). */
+export function phaseConfigPath(projectKey: string | null, suffix = ''): string {
+  return projectKey === null
+    ? `/admin/config/phase${suffix}`
+    : projectApiPath(projectKey, `/config/phase${suffix}`);
 }
+
+/** Tiền tố query key: dự án nào, hay 'GLOBAL' cho bộ Mặc định. */
+const scopeKey = (projectKey: string | null): string => projectKey ?? 'GLOBAL';
+
+export const phaseConfigKeys = {
+  all: (projectKey: string | null) => [scopeKey(projectKey), 'config', 'phase'] as const,
+  effective: (projectKey: string | null) =>
+    [scopeKey(projectKey), 'config', 'phase', 'effective'] as const,
+  versions: (projectKey: string | null) =>
+    [scopeKey(projectKey), 'config', 'phase', 'versions'] as const,
+  unmatched: (projectKey: string | null) =>
+    [scopeKey(projectKey), 'config', 'phase', 'unmatched'] as const,
+};
 
 export function useEffectiveConfig(
   projectKey: string | null,
@@ -49,7 +59,7 @@ export function useEffectiveConfig(
   return useQuery({
     queryKey: phaseConfigKeys.effective(projectKey),
     queryFn: ({ signal }) =>
-      client.get('/config/phase', effectiveConfigSchema, { signal, ...scopeQuery(projectKey) }),
+      client.get(phaseConfigPath(projectKey), effectiveConfigSchema, { signal }),
   });
 }
 
@@ -61,7 +71,7 @@ export function useVersions(
     queryKey: phaseConfigKeys.versions(projectKey),
     queryFn: ({ signal }) =>
       client
-        .get('/config/phase/versions', versionsResponseSchema, { signal, ...scopeQuery(projectKey) })
+        .get(phaseConfigPath(projectKey, '/versions'), versionsResponseSchema, { signal })
         .then((r) => r.versions),
   });
 }
@@ -74,7 +84,7 @@ export function useUnmatched(
     queryKey: phaseConfigKeys.unmatched(projectKey),
     queryFn: ({ signal }) =>
       client
-        .get('/config/phase/unmatched', unmatchedResponseSchema, { signal, ...scopeQuery(projectKey) })
+        .get(phaseConfigPath(projectKey, '/unmatched'), unmatchedResponseSchema, { signal })
         .then((r) => r.labels),
   });
 }
@@ -97,7 +107,7 @@ export function usePreview(
   return useMutation({
     mutationFn: (vars: PreviewVars) =>
       client.post(
-        '/config/phase/preview',
+        phaseConfigPath(vars.projectKey, '/preview'),
         { projectKey: vars.projectKey, draft: vars.draft, limit: 200 },
         previewResponseSchema,
       ),
@@ -117,14 +127,21 @@ export function useSaveConfig(
   return useMutation({
     mutationFn: (vars: SaveVars) =>
       client.put(
-        '/config/phase',
+        phaseConfigPath(vars.projectKey),
         { projectKey: vars.projectKey, payload: vars.payload, note: vars.note },
         saveConfigResponseSchema,
       ),
-    onSuccess: () => {
-      // Xoá cache CẢ NHÁNH `config.phase`: lưu xong thì cấu hình hiệu lực, danh
-      // sách version và danh sách nhãn chưa nhận diện được đều đổi cùng lúc.
-      void queryClient.invalidateQueries({ queryKey: phaseConfigKeys.all });
+    onSuccess: (_data, vars) => {
+      // Xoá cache CẢ NHÁNH `config.phase` của phạm vi vừa lưu: cấu hình hiệu
+      // lực, danh sách version và danh sách nhãn chưa nhận diện đều đổi cùng lúc.
+      void queryClient.invalidateQueries({ queryKey: phaseConfigKeys.all(vars.projectKey) });
+      // Sửa bộ Mặc định lan sang MỌI dự án đang kế thừa — không biết dự án nào
+      // nên xoá hết cache config của các phạm vi khác cho chắc.
+      if (vars.projectKey === null) {
+        void queryClient.invalidateQueries({
+          predicate: (q) => q.queryKey[1] === 'config' && q.queryKey[2] === 'phase',
+        });
+      }
     },
   });
 }
@@ -141,13 +158,12 @@ export function useRollback(
   return useMutation({
     mutationFn: (vars: RollbackVars) =>
       client.post(
-        `/config/phase/rollback/${vars.version}`,
+        phaseConfigPath(vars.projectKey, `/rollback/${vars.version}`),
         undefined,
         saveConfigResponseSchema,
-        scopeQuery(vars.projectKey),
       ),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: phaseConfigKeys.all });
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({ queryKey: phaseConfigKeys.all(vars.projectKey) });
     },
   });
 }

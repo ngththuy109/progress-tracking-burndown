@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { localDateOf } from '@app/engine';
 import type {
   DateOnly,
-  Principal,
   SignboardPhase,
   SignboardPhasesResponse,
   SignboardResponse,
@@ -11,6 +10,8 @@ import type {
   WorkCalendar,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
+import { resolveEpicInProject } from '../services/epic-scope.js';
+import { projectCtxOf, type AuthzGuards } from '../adapters/project-scope.js';
 import {
   buildSignboard,
   buildUnparsedList,
@@ -19,7 +20,9 @@ import {
 } from '../services/signboard.service.js';
 
 /**
- * Ba endpoint bảng Signboard — PRD §6.
+ * Ba endpoint bảng Signboard — PRD §6 — mount theo tenant:
+ * `/api/projects/:projectKey/epics/:epicKey/signboard[...]` (VIEWER trở lên),
+ * cộng `GET /api/projects/:projectKey/config/signboard-columns` cho cấu hình cột.
  *
  * KHÔNG cache. Trạng thái ô phụ thuộc "hôm nay"; cache qua nửa đêm sẽ trả trạng
  * thái của hôm qua và KHÔNG AI NHẬN RA — bảng vẫn hiện, chỉ là sai.
@@ -53,7 +56,7 @@ export interface SignboardReadPort {
 
 export interface SignboardRouteDeps {
   readonly reads: SignboardReadPort;
-  resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
   /** Đồng hồ, nhận qua cổng để test đóng băng được. */
   readonly now: () => Date;
 }
@@ -72,30 +75,22 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     }
   };
 
+  const asViewer = { preHandler: deps.guards.requireProject('VIEWER') };
+
   /**
-   * Phần dùng chung: xác thực + tra Epic + kiểm quyền, CHƯA đọc `phaseCode`.
+   * Phần dùng chung: tra Epic + neo vào đúng tenant, CHƯA đọc `phaseCode`.
+   * (Quyền đã do guard `requireProject('VIEWER')` kiểm trước khi vào handler.)
    *
    * Bộ chọn Phase chỉ cần tới đây (không có Phase nào để đọc); bảng thì gọi tiếp
    * `context` để lấy thêm `phaseCode`.
    */
   async function epicContext(req: FastifyRequest) {
-    const principal = deps.resolvePrincipal(req);
-    if (!principal) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-
     const epicKey = param(req, 'epicKey');
-
-    const meta = await deps.reads.epicMeta(epicKey);
-    if (meta === null) {
-      throw new ApiError(
-        404,
-        'EPIC_NOT_FOUND',
-        `Epic ${epicKey} is not tracked. Add it on the Epics screen first.`,
-      );
-    }
-    if (principal.role === 'PM' && !principal.projects.includes(meta.projectKey)) {
-      throw new ApiError(403, 'FORBIDDEN', `You are not assigned to project ${meta.projectKey}.`);
-    }
-
+    const meta = await resolveEpicInProject(
+      (k) => deps.reads.epicMeta(k),
+      epicKey,
+      projectCtxOf(req).projectKey,
+    );
     return { epicKey, meta };
   }
 
@@ -120,14 +115,14 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     return raw;
   }
 
-  app.get('/api/signboard/epic/:epicKey/phases', async (req, reply) =>
+  app.get('/api/projects/:projectKey/epics/:epicKey/signboard/phases', asViewer, async (req, reply) =>
     handle(reply, async (): Promise<SignboardPhasesResponse> => {
       const { epicKey, meta } = await epicContext(req);
       return { epicKey, phases: await deps.reads.phases(epicKey, meta.projectKey) };
     }),
   );
 
-  app.get('/api/signboard/epic/:epicKey/phase/:phaseCode', async (req, reply) =>
+  app.get('/api/projects/:projectKey/epics/:epicKey/signboard/phase/:phaseCode', asViewer, async (req, reply) =>
     handle(reply, async (): Promise<SignboardResponse> => {
       const { epicKey, phaseCode, meta } = await context(req);
       const [subtasks, columns, subPhaseMeta] = await Promise.all([
@@ -147,7 +142,7 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     }),
   );
 
-  app.get('/api/signboard/epic/:epicKey/phase/:phaseCode/unparsed', async (req, reply) =>
+  app.get('/api/projects/:projectKey/epics/:epicKey/signboard/phase/:phaseCode/unparsed', asViewer, async (req, reply) =>
     handle(reply, async (): Promise<UnparsedResponse> => {
       const { epicKey, phaseCode } = await context(req);
       const [subtasks, raw] = await Promise.all([
@@ -164,10 +159,12 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     }),
   );
 
-  app.get('/api/config/signboard-columns', async (req, reply) =>
+  // Cấu hình cột đã gộp kế thừa của MỘT tenant. Bản GLOBAL thuần nằm trong
+  // payload của /api/admin/config/phase — không cần endpoint đọc riêng.
+  app.get('/api/projects/:projectKey/config/signboard-columns', asViewer, async (req, reply) =>
     handle(reply, async () => {
-      const projectKey = (req.query as { project?: string }).project?.trim() ?? '';
-      return { project: projectKey === '' ? null : projectKey, columns: await deps.reads.columns(projectKey) };
+      const projectKey = projectCtxOf(req).projectKey;
+      return { project: projectKey, columns: await deps.reads.columns(projectKey) };
     }),
   );
 }

@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { ConfigPayload, Principal, PreviewResponse } from '@app/shared';
 import { registerConfigPhaseRoutes } from './config-phase.routes.js';
-import { FakeConfigStore, FakeDirtyQueue, FakeIssueRead } from '../test-fakes.js';
+import {
+  FakeConfigStore,
+  FakeDirtyQueue,
+  FakeIssueRead,
+  asAdmin,
+  asPm,
+  asViewer,
+  testGuards,
+} from '../test-fakes.js';
 import type { PreviewTask } from '../services/config-preview.service.js';
 
 const GLOBAL_PAYLOAD: ConfigPayload = {
@@ -31,9 +39,8 @@ const TASKS: PreviewTask[] = [
   { taskKey: 'PAY-107', epicKey: 'PAY-200', title: '打ち合わせ準備', currentPhaseCode: 'UNCLASSIFIED' },
 ];
 
-const ADMIN: Principal = { userId: 'admin@x.com', role: 'ADMIN', projects: [] };
-const PM_PAY: Principal = { userId: 'pm@x.com', role: 'PM', projects: ['PAY'] };
-const VIEWER: Principal = { userId: 'v@x.com', role: 'VIEWER', projects: [] };
+/** Các tenant "tồn tại" trong guard directory của test. */
+const KNOWN_PROJECTS = ['PAY', 'CRM', 'SHOP'] as const;
 
 let store: FakeConfigStore;
 let dirty: FakeDirtyQueue;
@@ -57,13 +64,14 @@ function build(tasks: readonly PreviewTask[] = TASKS, epicKeys: readonly string[
       epicKeys,
     ),
     resolvePrincipal: () => principal,
+    guards: testGuards({ principal: () => principal, projects: KNOWN_PROJECTS }),
   });
   return app;
 }
 
 let app: FastifyInstance;
 beforeEach(() => {
-  principal = ADMIN;
+  principal = asAdmin();
   app = build();
 });
 
@@ -76,8 +84,21 @@ const DRAFT_WITH_REVIEW: ConfigPayload = {
   ],
 };
 
-const previewBody = (draft: ConfigPayload, projectKey: string | null = null) =>
-  ({ method: 'POST' as const, url: '/api/config/phase/preview', payload: { projectKey, draft } });
+/** `projectKey` giờ nằm trong URL: null = bộ Mặc định (/api/admin), khác = tenant. */
+const previewBody = (draft: ConfigPayload, projectKey: string | null = null) => ({
+  method: 'POST' as const,
+  url:
+    projectKey === null
+      ? '/api/admin/config/phase/preview'
+      : `/api/projects/${projectKey}/config/phase/preview`,
+  payload: { draft },
+});
+
+const saveGlobal = (payload: ConfigPayload, note: string | null = null) => ({
+  method: 'PUT' as const,
+  url: '/api/admin/config/phase',
+  payload: { payload, note },
+});
 
 describe('xem thử', () => {
   it('xem thử KHÔNG ghi gì vào database', async () => {
@@ -161,15 +182,23 @@ describe('xem thử', () => {
     expect(body.rows.find((r) => r.taskKey === 'PAY-101')!.resultPhaseCode).toBe('DESIGN');
     expect(body.summary.stillUnclassified).toBe(1); // chỉ PAY-107
   });
+
+  it('projectKey trong BODY bị bỏ qua — phạm vi luôn là của URL', async () => {
+    // Gửi projectKey giả trong body qua đường admin: preview vẫn chạy trên bộ
+    // Mặc định (GLOBAL), không phải trên "HACK".
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/config/phase/preview',
+      payload: { projectKey: 'HACK', draft: DRAFT_WITH_REVIEW },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<PreviewResponse>().projectKey).toBeNull();
+  });
 });
 
 describe('lưu', () => {
   it('lưu thành công tạo version mới và trả về số Epic phải tính lại', async () => {
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: DRAFT_WITH_REVIEW, note: 'thêm Design Review' },
-    });
+    const res = await app.inject(saveGlobal(DRAFT_WITH_REVIEW, 'thêm Design Review'));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       version: 2,
@@ -179,11 +208,7 @@ describe('lưu', () => {
   });
 
   it('lưu thành công đẩy đúng các Epic vào Redis set dirty:epics', async () => {
-    await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: DRAFT_WITH_REVIEW, note: null },
-    });
+    await app.inject(saveGlobal(DRAFT_WITH_REVIEW));
     expect([...dirty.members].sort()).toEqual(['PAY-100', 'PAY-200']);
   });
 
@@ -194,11 +219,7 @@ describe('lưu', () => {
         { keyword: 'Dev', matchMode: 'CONTAINS', phaseCode: 'KHONG_TON_TAI', matchPriority: 50 },
       ],
     };
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: broken, note: null },
-    });
+    const res = await app.inject(saveGlobal(broken));
     expect(res.statusCode).toBe(400);
     const body = res.json();
     expect(body.error).toBe('CONFIG_INVALID');
@@ -207,24 +228,16 @@ describe('lưu', () => {
 
   it('lưu thất bại thì KHÔNG có version mới nào được tạo', async () => {
     const broken: ConfigPayload = { ...GLOBAL_PAYLOAD, phaseDefinitions: [] };
-    await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: broken, note: null },
-    });
+    await app.inject(saveGlobal(broken));
     expect(store.writeCount).toBe(0);
 
-    const versions = (await app.inject({ method: 'GET', url: '/api/config/phase/versions' })).json();
+    const versions = (await app.inject({ method: 'GET', url: '/api/admin/config/phase/versions' })).json();
     expect(versions.versions).toHaveLength(1);
   });
 
   it('lưu thất bại thì KHÔNG đẩy Epic nào vào dirty:epics', async () => {
     const broken: ConfigPayload = { ...GLOBAL_PAYLOAD, phaseDefinitions: [] };
-    await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: broken, note: null },
-    });
+    await app.inject(saveGlobal(broken));
     expect(dirty.members.size).toBe(0);
   });
 });
@@ -238,13 +251,14 @@ describe('khi chưa có bộ Mặc định (chưa seed)', () => {
       store: emptyStore,
       dirty: new FakeDirtyQueue(),
       issues: new FakeIssueRead([], [], ['PAY-100']),
-      resolvePrincipal: () => ADMIN,
+      resolvePrincipal: () => asAdmin(),
+      guards: testGuards({ principal: () => asAdmin(), projects: KNOWN_PROJECTS }),
     });
     return { app, store: emptyStore };
   }
 
-  it('GET /api/config/phase trả 200 với bộ RỖNG, KHÔNG còn 500 NO_GLOBAL_CONFIG', async () => {
-    const res = await buildEmpty().app.inject({ method: 'GET', url: '/api/config/phase' });
+  it('GET /api/admin/config/phase trả 200 với bộ RỖNG, KHÔNG còn 500 NO_GLOBAL_CONFIG', async () => {
+    const res = await buildEmpty().app.inject({ method: 'GET', url: '/api/admin/config/phase' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.globalVersion).toBe(0);
@@ -256,8 +270,8 @@ describe('khi chưa có bộ Mặc định (chưa seed)', () => {
     expect(body.fallbackScanFullTitle).toBe(true);
   });
 
-  it('GET ?project=SHOP cũng mở bình thường (rỗng) khi chưa có Mặc định', async () => {
-    const res = await buildEmpty().app.inject({ method: 'GET', url: '/api/config/phase?project=SHOP' });
+  it('GET của tenant SHOP cũng mở bình thường (rỗng) khi chưa có Mặc định', async () => {
+    const res = await buildEmpty().app.inject({ method: 'GET', url: '/api/projects/SHOP/config/phase' });
     expect(res.statusCode).toBe(200);
     expect(res.json().globalVersion).toBe(0);
     expect(res.json().phaseDefinitions).toEqual([]);
@@ -267,9 +281,8 @@ describe('khi chưa có bộ Mặc định (chưa seed)', () => {
     const { app } = buildEmpty();
     const saved = await app.inject({
       method: 'PUT',
-      url: '/api/config/phase',
+      url: '/api/admin/config/phase',
       payload: {
-        projectKey: null,
         payload: {
           fallbackScanFullTitle: true,
           titlePatterns: [],
@@ -285,7 +298,7 @@ describe('khi chưa có bộ Mặc định (chưa seed)', () => {
     expect(saved.json().version).toBe(1);
 
     // Sau khi lưu, GET phản ánh đúng bộ vừa tạo (hết rỗng).
-    const after = (await app.inject({ method: 'GET', url: '/api/config/phase' })).json();
+    const after = (await app.inject({ method: 'GET', url: '/api/admin/config/phase' })).json();
     expect(after.globalVersion).toBe(1);
     expect(after.phaseDefinitions).toHaveLength(1);
     expect(after.signboardColumns).toHaveLength(1);
@@ -294,12 +307,8 @@ describe('khi chưa có bộ Mặc định (chưa seed)', () => {
 
 describe('version và quay lại', () => {
   it('GET /versions trả đủ lịch sử kèm người sửa và ghi chú', async () => {
-    await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: DRAFT_WITH_REVIEW, note: 'thêm Design Review' },
-    });
-    const body = (await app.inject({ method: 'GET', url: '/api/config/phase/versions' })).json();
+    await app.inject(saveGlobal(DRAFT_WITH_REVIEW, 'thêm Design Review'));
+    const body = (await app.inject({ method: 'GET', url: '/api/admin/config/phase/versions' })).json();
 
     expect(body.versions).toHaveLength(2);
     expect(body.versions[0]).toMatchObject({
@@ -312,34 +321,30 @@ describe('version và quay lại', () => {
   });
 
   it('rollback về version 1 tạo version mới, version 2 vẫn còn trong lịch sử', async () => {
-    await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: DRAFT_WITH_REVIEW, note: 'v2' },
-    });
-    const res = await app.inject({ method: 'POST', url: '/api/config/phase/rollback/1' });
+    await app.inject(saveGlobal(DRAFT_WITH_REVIEW, 'v2'));
+    const res = await app.inject({ method: 'POST', url: '/api/admin/config/phase/rollback/1' });
     expect(res.statusCode).toBe(200);
     expect(res.json().version).toBe(3);
 
-    const body = (await app.inject({ method: 'GET', url: '/api/config/phase/versions' })).json();
+    const body = (await app.inject({ method: 'GET', url: '/api/admin/config/phase/versions' })).json();
     expect(body.versions.map((v: { version: number }) => v.version)).toEqual([3, 2, 1]);
     // Quay lại KHÔNG xoá version 2 — viết lại lịch sử thì không giải thích được
     expect(body.versions.find((v: { version: number }) => v.version === 2)).toBeDefined();
   });
 
   it('rollback cũng đẩy Epic vào dirty:epics', async () => {
-    await app.inject({ method: 'POST', url: '/api/config/phase/rollback/1' });
+    await app.inject({ method: 'POST', url: '/api/admin/config/phase/rollback/1' });
     expect([...dirty.members].sort()).toEqual(['PAY-100', 'PAY-200']);
   });
 
   it('rollback về version không tồn tại trả HTTP 500 chứ không im lặng', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/config/phase/rollback/99' });
+    const res = await app.inject({ method: 'POST', url: '/api/admin/config/phase/rollback/99' });
     expect(res.statusCode).toBe(500);
   });
 });
 
 describe('kế thừa và phân quyền', () => {
-  it('GET /api/config/phase?project=SHOP trả cấu hình đã gộp kèm cờ inherited đúng từng phần', async () => {
+  it('GET config của tenant SHOP trả cấu hình đã gộp kèm cờ inherited đúng từng phần', async () => {
     store = new FakeConfigStore([
       { scope: 'GLOBAL', projectKey: null, payload: GLOBAL_PAYLOAD },
       {
@@ -354,10 +359,11 @@ describe('kế thừa và phân quyền', () => {
       store,
       dirty: new FakeDirtyQueue(),
       issues: new FakeIssueRead(),
-      resolvePrincipal: () => ADMIN,
+      resolvePrincipal: () => asAdmin(),
+      guards: testGuards({ principal: () => asAdmin(), projects: KNOWN_PROJECTS }),
     });
 
-    const body = (await local.inject({ method: 'GET', url: '/api/config/phase?project=SHOP' })).json();
+    const body = (await local.inject({ method: 'GET', url: '/api/projects/SHOP/config/phase' })).json();
     expect(body.titlePatterns).toEqual([{ patternText: '【{name}】', sortOrder: 1 }]);
     expect(body.inherited.titlePatterns).toBe(false);
     expect(body.inherited.phaseDefinitions).toBe(true);
@@ -365,50 +371,53 @@ describe('kế thừa và phân quyền', () => {
     expect(body.phaseDefinitions).toHaveLength(2); // kế thừa từ Mặc định
   });
 
-  it('người dùng thường không được PUT, trả HTTP 403', async () => {
-    principal = VIEWER;
+  it('VIEWER của dự án ĐỌC được config nhưng không được PUT (403)', async () => {
+    principal = asViewer('PAY');
+    expect((await app.inject({ method: 'GET', url: '/api/projects/PAY/config/phase' })).statusCode).toBe(200);
+
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: 'PAY', payload: GLOBAL_PAYLOAD, note: null },
+      url: '/api/projects/PAY/config/phase',
+      payload: { payload: GLOBAL_PAYLOAD, note: null },
     });
     expect(res.statusCode).toBe(403);
     expect(store.writeCount).toBe(0);
   });
 
   it('PM sửa được project mình phụ trách nhưng KHÔNG sửa được bộ Mặc định', async () => {
-    principal = PM_PAY;
+    principal = asPm('PAY');
     const ok = await app.inject({
       method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: 'PAY', payload: GLOBAL_PAYLOAD, note: null },
+      url: '/api/projects/PAY/config/phase',
+      payload: { payload: GLOBAL_PAYLOAD, note: null },
     });
     expect(ok.statusCode).toBe(200);
 
     const denied = await app.inject({
       method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: GLOBAL_PAYLOAD, note: null },
+      url: '/api/admin/config/phase',
+      payload: { payload: GLOBAL_PAYLOAD, note: null },
     });
     expect(denied.statusCode).toBe(403);
   });
 
-  it('PM không sửa được project của người khác', async () => {
-    principal = PM_PAY;
+  it('PM đụng vào project của người khác → 404 (không phải 403 — không lộ tenant)', async () => {
+    principal = asPm('PAY');
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: 'SHOP', payload: GLOBAL_PAYLOAD, note: null },
+      url: '/api/projects/SHOP/config/phase',
+      payload: { payload: GLOBAL_PAYLOAD, note: null },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('PROJECT_NOT_FOUND');
   });
 
   it('yêu cầu không có thông tin người dùng trả HTTP 401', async () => {
     principal = null;
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: 'PAY', payload: GLOBAL_PAYLOAD, note: null },
+      url: '/api/projects/PAY/config/phase',
+      payload: { payload: GLOBAL_PAYLOAD, note: null },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -416,7 +425,7 @@ describe('kế thừa và phân quyền', () => {
 
 describe('chưa nhận diện', () => {
   it('GET /unmatched trả danh sách raw_phase_label kèm số lần xuất hiện', async () => {
-    const body = (await app.inject({ method: 'GET', url: '/api/config/phase/unmatched?project=PAY' })).json();
+    const body = (await app.inject({ method: 'GET', url: '/api/projects/PAY/config/phase/unmatched' })).json();
     expect(body.labels).toEqual([
       { rawPhaseLabel: 'Chuẩn bị họp', count: 7, sampleTaskKeys: ['PAY-107'] },
       { rawPhaseLabel: '結合テスト', count: 12, sampleTaskKeys: ['PAY-140'] },
@@ -428,8 +437,8 @@ describe('kiểm tra thân yêu cầu', () => {
   it('thân yêu cầu sai schema trả HTTP 400 kèm đường dẫn tới trường lỗi', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/config/phase/preview',
-      payload: { projectKey: null, draft: { titlePatterns: 'không phải mảng' } },
+      url: '/api/admin/config/phase/preview',
+      payload: { draft: { titlePatterns: 'không phải mảng' } },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('BAD_REQUEST');
@@ -448,11 +457,7 @@ describe('kiểm tra thân yêu cầu', () => {
         { phaseCode: '', labelVi: '', displayOrder: 3 },
       ],
     };
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: withBlankPhase, note: null },
-    });
+    const res = await app.inject(saveGlobal(withBlankPhase));
     expect(res.statusCode).toBe(400);
     const body = res.json();
     expect(body.error).toBe('BAD_REQUEST');
@@ -476,11 +481,7 @@ describe('kiểm tra thân yêu cầu', () => {
         { keyword: '', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 50 },
       ],
     };
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/config/phase',
-      payload: { projectKey: null, payload: withBlankRule, note: null },
-    });
+    const res = await app.inject(saveGlobal(withBlankRule));
     expect(res.statusCode).toBe(400);
     const paths = res.json().issues.map((i: { path: string }) => i.path);
     expect(paths).toContain('matchRules[1].keyword');
@@ -489,9 +490,8 @@ describe('kiểm tra thân yêu cầu', () => {
   it('Xem thử sai schema cũng cho đường dẫn đã chuẩn hoá (bỏ khoá bọc draft)', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/config/phase/preview',
+      url: '/api/admin/config/phase/preview',
       payload: {
-        projectKey: null,
         draft: { ...GLOBAL_PAYLOAD, phaseDefinitions: [{ phaseCode: '', labelVi: '', displayOrder: 1 }] },
       },
     });
@@ -502,7 +502,7 @@ describe('kiểm tra thân yêu cầu', () => {
   });
 
   it('số version không phải số trả HTTP 400', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/config/phase/rollback/abc' });
+    const res = await app.inject({ method: 'POST', url: '/api/admin/config/phase/rollback/abc' });
     expect(res.statusCode).toBe(400);
   });
 });

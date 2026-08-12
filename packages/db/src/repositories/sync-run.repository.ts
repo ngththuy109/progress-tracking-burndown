@@ -10,11 +10,18 @@ import type { PrismaClient } from '../client.js';
 
 export async function startSyncRun(
   prisma: PrismaClient,
-  args: { epicKey: string; runType: string; startedAt: Date; watermarkBefore?: Date | null },
+  args: {
+    epicKey: string;
+    projectKey: string;
+    runType: string;
+    startedAt: Date;
+    watermarkBefore?: Date | null;
+  },
 ): Promise<number> {
   const row = await prisma.syncRun.create({
     data: {
       epicKey: args.epicKey,
+      projectKey: args.projectKey,
       runType: args.runType,
       status: 'RUNNING',
       startedAt: args.startedAt,
@@ -65,3 +72,4 @@ export async function finishSyncRun(
     },
   });
 }
+

@@ -2,11 +2,15 @@ import type {
   ConfigPayload,
   ConfigSet,
   ConfigVersion,
+  JiraTestResponse,
   MissingDateRow,
+  Principal,
   TrackedEpicStatus,
   TrackedEpicSummary,
   UnmatchedLabel,
 } from '@app/shared';
+import { createAuthzGuards, type AuthzGuards } from './adapters/project-scope.js';
+import type { JiraConnectionTester } from './routes/projects.routes.js';
 import type {
   DirtyEpicQueue,
   IssueReadPort,
@@ -201,12 +205,15 @@ export class FakeTrackedEpicStore implements TrackedEpicStore {
     }
   }
 
-  findStatus(epicKey: string): Promise<TrackedEpicStatus | null> {
-    return Promise.resolve(this.rows.get(epicKey)?.status ?? null);
+  findTracked(epicKey: string): Promise<{ status: TrackedEpicStatus; projectKey: string } | null> {
+    const row = this.rows.get(epicKey);
+    return Promise.resolve(row === undefined ? null : { status: row.status, projectKey: row.projectKey });
   }
 
-  existingKeys(keys: readonly string[]): Promise<ReadonlySet<string>> {
-    return Promise.resolve(new Set(keys.filter((k) => this.rows.has(k))));
+  existingKeys(keys: readonly string[], projectKey: string): Promise<ReadonlySet<string>> {
+    return Promise.resolve(
+      new Set(keys.filter((k) => this.rows.get(k)?.projectKey === projectKey)),
+    );
   }
 
   insertIfAbsent(rows: readonly InsertEpicRow[]): Promise<readonly string[]> {
@@ -280,7 +287,7 @@ export class FakeTrackedEpicStore implements TrackedEpicStore {
 export class FakeJiraEpicPort implements JiraEpicPort {
   constructor(private readonly known: ReadonlyMap<string, JiraLookupResult>) {}
 
-  lookup(keys: readonly string[]): Promise<ReadonlyMap<string, JiraLookupResult>> {
+  lookup(_projectKey: string, keys: readonly string[]): Promise<ReadonlyMap<string, JiraLookupResult>> {
     const out = new Map<string, JiraLookupResult>();
     for (const k of keys) {
       out.set(k, this.known.get(k) ?? { ok: false, reason: 'NOT_FOUND' });
@@ -342,3 +349,96 @@ export class FakeDirtyQueue implements DirtyEpicQueue {
     return Promise.resolve();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Phân quyền multi-tenant (Phase B)
+// ---------------------------------------------------------------------------
+
+/** ADMIN toàn cục — vượt mọi kiểm tra membership. */
+export function asAdmin(userId = 'admin@x.com'): Principal {
+  return { userId, isAdmin: true, memberships: {} };
+}
+
+/** PM của một (hoặc nhiều) dự án. */
+export function asPm(projectKey: string | readonly string[], userId = 'pm@x.com'): Principal {
+  const keys = typeof projectKey === 'string' ? [projectKey] : projectKey;
+  return {
+    userId,
+    isAdmin: false,
+    memberships: Object.fromEntries(keys.map((k) => [k, 'PM' as const])),
+  };
+}
+
+/** VIEWER của một (hoặc nhiều) dự án. */
+export function asViewer(projectKey: string | readonly string[], userId = 'viewer@x.com'): Principal {
+  const keys = typeof projectKey === 'string' ? [projectKey] : projectKey;
+  return {
+    userId,
+    isAdmin: false,
+    memberships: Object.fromEntries(keys.map((k) => [k, 'VIEWER' as const])),
+  };
+}
+
+/** MEMBER đã đăng nhập nhưng không thuộc dự án nào. */
+export function asNobody(userId = 'nobody@x.com'): Principal {
+  return { userId, isAdmin: false, memberships: {} };
+}
+
+/**
+ * Guard thật (createAuthzGuards) chạy trên directory giả — test route dùng để
+ * kiểm đúng chuỗi 401/403/404 mà production sẽ trả, không phải một bản mô phỏng.
+ */
+export function testGuards(args: {
+  principal: () => Principal | null;
+  /** Các projectKey "tồn tại". Mặc định: ['PAY', 'CRM']. */
+  projects?: readonly string[];
+}): AuthzGuards {
+  const keys = new Set(args.projects ?? ['PAY', 'CRM']);
+  return createAuthzGuards({
+    resolvePrincipal: () => args.principal(),
+    directory: { exists: (projectKey) => Promise.resolve(keys.has(projectKey)) },
+  });
+}
+
+/** "Test connection" giả — trả kịch bản dựng sẵn, ghi lại lời gọi để kiểm. */
+export class FakeJiraTester implements JiraConnectionTester {
+  readonly calls: Array<{
+    baseUrl: string | null;
+    email: string | null;
+    apiToken: string | null;
+    fieldsConfig: unknown;
+    projectKey: string;
+  }> = [];
+
+  constructor(
+    private readonly result: JiraTestResponse = {
+      ok: true,
+      steps: [
+        { step: 'AUTH', ok: true, detail: 'ok' },
+        { step: 'FIELDS', ok: true, detail: 'ok' },
+        { step: 'PROJECT_ACCESS', ok: true, detail: 'ok' },
+      ],
+    },
+  ) {}
+
+  test(args: {
+    baseUrl: string | null;
+    email: string | null;
+    apiToken: string | null;
+    fieldsConfig: unknown;
+    projectKey: string;
+  }): Promise<JiraTestResponse> {
+    this.calls.push(args);
+    return Promise.resolve(this.result);
+  }
+}
+
+/** Hộp mã hóa giả — đủ để kiểm "token không bao giờ được lưu thô". */
+export const FAKE_TOKEN_BOX = {
+  seal: (plaintext: string): string => `sealed(${plaintext})`,
+  open: (sealed: string): string => {
+    const m = /^sealed\((.*)\)$/.exec(sealed);
+    if (m === null) throw new Error(`FAKE_TOKEN_BOX: không mở được "${sealed}"`);
+    return m[1]!;
+  },
+};

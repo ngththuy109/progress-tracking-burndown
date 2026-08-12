@@ -21,11 +21,15 @@ import {
  */
 
 export interface OpsHealthPort {
-  opsHealth(): Promise<OpsHealthResponse>;
-  /** Chi tiết MỘT lần chạy job — bước lỗi, nguyên nhân, stack. `null` = không có. */
-  runDetail(runId: string): Promise<SyncRunDetail | null>;
+  /** `projectKey` (tuỳ chọn) BÓ mọi số đo trong một tenant — cửa sổ ops của PM. */
+  opsHealth(projectKey?: string): Promise<OpsHealthResponse>;
+  /**
+   * Chi tiết MỘT lần chạy job — bước lỗi, nguyên nhân, stack. `null` = không có.
+   * Kèm `projectKey` thì run của tenant khác cũng là `null` (404 — không dò được).
+   */
+  runDetail(runId: string, projectKey?: string): Promise<SyncRunDetail | null>;
   /** Từng ticket đang lỗi dữ liệu (kể cả ticket đã đánh dấu bỏ qua, kèm cờ). */
-  dataQualityIssues(): Promise<readonly DataQualityIssue[]>;
+  dataQualityIssues(projectKey?: string): Promise<readonly DataQualityIssue[]>;
   /**
    * Đặt/gỡ cờ "không cần sửa dữ liệu" cho một Sub-task.
    * Trả về `projectKey` của Epic chứa ticket để tầng route kiểm quyền,
@@ -56,9 +60,15 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
   const now = options.now ?? (() => new Date());
 
   return {
-    async opsHealth(): Promise<OpsHealthResponse> {
+    async opsHealth(projectKey?: string): Promise<OpsHealthResponse> {
       const collectedAt = now();
       const since24h = new Date(collectedAt.getTime() - DAY_MS);
+
+      // Bó theo TENANT khi có `projectKey` (cửa sổ ops của PM): mọi bảng vận
+      // hành đều mang `project_key` (sync_run, tracked_epic, jira_issue); riêng
+      // plan_shift_history đi vòng qua tracked_epic. Cùng một tham số cho mọi
+      // câu — chuỗi rỗng nghĩa là "toàn hệ thống", điều kiện tự triệt tiêu.
+      const pk = projectKey ?? '';
 
       // Chạy song song: các truy vấn độc lập, không phụ thuộc kết quả của nhau.
       const [nightlyRows, rateRows, snapRows, dataRows, dataByEpicRows, runRows, erroredRows, driftRows] = await Promise.all([
@@ -67,25 +77,31 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           `SELECT duration_ms
              FROM sync_run
             WHERE run_type = 'DAILY' AND duration_ms IS NOT NULL
+              AND ($1 = '' OR project_key = $1)
             ORDER BY started_at DESC
             LIMIT 1`,
+          pk,
         ),
         // Tổng số lần bị Jira chặn (429) trong 24 giờ qua.
         prisma.$queryRawUnsafe<{ hits: bigint }[]>(
           `SELECT COALESCE(SUM(rate_limit_hits), 0)::bigint AS hits
              FROM sync_run
-            WHERE started_at >= $1`,
+            WHERE started_at >= $1
+              AND ($2 = '' OR project_key = $2)`,
           since24h,
+          pk,
         ),
         // Epic ACTIVE đã lỡ ít nhất một snapshot đêm (snapshot mới nhất cũ hơn hôm qua).
         prisma.$queryRawUnsafe<{ behind: bigint }[]>(
           `SELECT COUNT(*)::bigint AS behind
              FROM tracked_epic te
             WHERE te.status = 'ACTIVE'
+              AND ($1 = '' OR te.project_key = $1)
               AND COALESCE(
                     (SELECT MAX(snapshot_date) FROM daily_snapshot ds WHERE ds.epic_key = te.epic_key),
                     DATE '1900-01-01'
                   ) < CURRENT_DATE - 1`,
+          pk,
         ),
         // Chất lượng dữ liệu trên toàn bộ Sub-task đang hoạt động (không đọc token).
         // Ticket đã đánh dấu "không cần sửa dữ liệu" bị loại khỏi cả tử số lẫn
@@ -99,7 +115,9 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                   COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
                   COUNT(*) FILTER (WHERE sb_parse_status = 'UNPARSED')::bigint AS unparsed
              FROM jira_issue
-            WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = FALSE`,
+            WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = FALSE
+              AND ($1 = '' OR project_key = $1)`,
+          pk,
         ),
         // Cùng số đo, tách theo TỪNG Epic đang theo dõi — số toàn cục không nói
         // được đội nào phải sửa dữ liệu.
@@ -127,8 +145,10 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
               AND ji.issue_type = 'SUBTASK'
               AND ji.removed_at IS NULL
               AND ji.dq_exempt = FALSE
+            WHERE ($1 = '' OR te.project_key = $1)
             GROUP BY te.epic_key, te.display_name
             ORDER BY te.epic_key`,
+          pk,
         ),
         // 20 lần chạy job gần nhất — mới nhất trước.
         prisma.$queryRawUnsafe<
@@ -144,8 +164,10 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         >(
           `SELECT id, epic_key, run_type, status, started_at, duration_ms, error_message
              FROM sync_run
+            WHERE ($1 = '' OR project_key = $1)
             ORDER BY started_at DESC
             LIMIT 20`,
+          pk,
         ),
         // Epic đang ở trạng thái lỗi, kèm NGUYÊN VĂN thông báo lỗi.
         prisma.$queryRawUnsafe<
@@ -153,7 +175,9 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         >(
           `SELECT epic_key, last_error, last_synced_at, added_at
              FROM tracked_epic
-            WHERE status = 'ERROR'`,
+            WHERE status = 'ERROR'
+              AND ($1 = '' OR project_key = $1)`,
+          pk,
         ),
         // Tổng mức trôi kế hoạch theo (Epic, Phase) — chỉ cộng chiều lùi ra xa.
         prisma.$queryRawUnsafe<
@@ -167,7 +191,9 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
              LEFT JOIN phase_rollup pr
                ON pr.epic_key = ps.epic_key AND pr.phase_code = ps.phase_code
             WHERE ps.shift_type = 'END_MOVED'
+              AND ($1 = '' OR ps.epic_key IN (SELECT epic_key FROM tracked_epic WHERE project_key = $1))
             GROUP BY ps.epic_key, ps.phase_code`,
+          pk,
         ),
       ]);
 
@@ -238,7 +264,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
       });
     },
 
-    async runDetail(runId: string): Promise<SyncRunDetail | null> {
+    async runDetail(runId: string, projectKey?: string): Promise<SyncRunDetail | null> {
       // `id` là BigInt; chuỗi không phải số thì không có gì để tra.
       if (!/^\d+$/.test(runId)) return null;
       const rows = await prisma.$queryRawUnsafe<
@@ -262,8 +288,10 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                 api_calls_made, rate_limit_hits, days_computed,
                 error_step, error_message, error_detail
            FROM sync_run
-          WHERE id = $1`,
+          WHERE id = $1
+            AND ($2 = '' OR project_key = $2)`,
         BigInt(runId),
+        projectKey ?? '',
       );
       const r = rows[0];
       if (r === undefined) return null;
@@ -284,7 +312,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
       };
     },
 
-    async dataQualityIssues(): Promise<readonly DataQualityIssue[]> {
+    async dataQualityIssues(projectKey?: string): Promise<readonly DataQualityIssue[]> {
       // Ticket exempt VẪN nằm trong danh sách (kèm cờ) — không thì không gỡ
       // đánh dấu được; nhưng chúng đã bị loại khỏi các SỐ ĐO ở opsHealth().
       const rows = await prisma.$queryRawUnsafe<
@@ -315,11 +343,13 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
            JOIN tracked_epic te ON te.epic_key = ji.epic_key
           WHERE ji.issue_type = 'SUBTASK'
             AND ji.removed_at IS NULL
+            AND ($1 = '' OR te.project_key = $1)
             AND (ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0
                  OR ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL
                  OR ji.phase_code = 'UNCLASSIFIED'
                  OR ji.sb_parse_status = 'UNPARSED')
           ORDER BY te.epic_key, ji.issue_key`,
+        projectKey ?? '',
       );
       return rows.map((r) => {
         const problems: DqProblem[] = [];

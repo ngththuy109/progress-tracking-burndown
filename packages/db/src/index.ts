@@ -52,6 +52,17 @@ export {
 } from './repositories/phase-config.repository.js';
 
 export {
+  seal,
+  open,
+  parseEncryptionKey,
+  SecretBoxError,
+  SECRET_BOX_VERSION,
+  SECRET_KEY_BYTES,
+} from './crypto/secret-box.js';
+
+export { assertEncryptionKeyUsable } from './crypto/assert-key.js';
+
+export {
   assertMigrationsApplied,
   fetchAppliedMigrationNames,
   listMigrationDirNames,
@@ -79,16 +90,31 @@ export {
   deleteAppUser,
   upsertAppUser,
   type AppUserRow,
+  type AppUserListRow,
   type UpsertAppUserArgs,
 } from './repositories/app-user.repository.js';
 
 export {
   listProjects,
+  findProject,
+  findProjectConnection,
   projectKeySet,
   upsertProject,
+  updateProjectJira,
   deleteProject,
   type ProjectRow,
+  type ProjectConnectionRow,
+  type UpsertProjectArgs,
+  type UpdateProjectJiraArgs,
 } from './repositories/project.repository.js';
+
+export {
+  listMembers,
+  upsertMember,
+  removeMember,
+  type ProjectMemberRow,
+  type UpsertMemberArgs,
+} from './repositories/project-member.repository.js';
 
 export {
   upsertIssues,

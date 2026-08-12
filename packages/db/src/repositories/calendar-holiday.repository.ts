@@ -32,11 +32,28 @@ export interface CalendarWithHolidayMeta {
   readonly makeupYears: number[];
 }
 
-/** Danh sách lịch kèm số ngày lễ & ngày làm bù đã khai — cho `GET /api/calendars`. */
+/**
+ * Danh sách lịch kèm số ngày lễ & ngày làm bù đã khai — cho `GET /api/calendars`.
+ *
+ * `forProject` (multi-tenant, tuỳ chọn — bỏ qua = mọi lịch, giữ hành vi cũ):
+ *   - `null`  → chỉ lịch built-in (`project_key IS NULL`);
+ *   - `'PAY'` → built-in + lịch riêng của dự án PAY.
+ */
 export async function listCalendarsWithHolidayMeta(
   prisma: PrismaClient,
+  forProject?: string | null,
 ): Promise<CalendarWithHolidayMeta[]> {
   const rows = await prisma.workCalendar.findMany({
+    ...(forProject === undefined
+      ? {}
+      : {
+          where: {
+            OR: [
+              { projectKey: null },
+              ...(forProject === null ? [] : [{ projectKey: forProject }]),
+            ],
+          },
+        }),
     include: {
       holidays: { select: { holidayDate: true } },
       makeupWorkdays: { select: { workDate: true } },

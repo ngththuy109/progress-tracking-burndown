@@ -66,6 +66,17 @@ async function installApi(page: Page, options: { project?: boolean; duplicate?: 
       const path = new URL(route.request().url()).pathname;
       const method = route.request().method();
 
+      // Multi-tenant: /api/me nuôi ProjectProvider — thiếu nó là bị đá về `/`.
+      if (path === '/api/me') {
+        return route.fulfill(
+          json({
+            userId: 'pm@example.com',
+            isAdmin: false,
+            projects: [{ projectKey: 'SHOP', displayName: 'Shop', role: 'PM' }],
+          }),
+        );
+      }
+
       if (path.endsWith('/unmatched')) return route.fulfill(json({ labels: [] }));
       if (path.endsWith('/versions')) return route.fulfill(json({ versions: [] }));
 
@@ -101,7 +112,7 @@ async function installApi(page: Page, options: { project?: boolean; duplicate?: 
   return calls;
 }
 
-const PAGE = '/config/signboard';
+const PAGE = '/p/SHOP/config/signboard';
 
 // ---------------------------------------------------------------------------
 
@@ -163,8 +174,9 @@ test('khai trùng mã cột thì lỗi hiện NGAY TẠI DÒNG đó', async ({ p
 });
 
 test('project ghi đè cột thì các phần khác VẪN kế thừa', async ({ page }) => {
+  // Multi-tenant: phạm vi dự án lấy từ URL /p/SHOP — không còn `?project=`.
   await installApi(page, { project: true });
-  await page.goto(`${PAGE}?project=SHOP`);
+  await page.goto(PAGE);
 
   // Cả khu ④ (cột) lẫn khu ⑤ (Sub-phase order) đều có nhãn kế thừa riêng —
   // kiểm cả hai để chắc phần MỚI cũng đi đúng luật kế thừa theo phần.

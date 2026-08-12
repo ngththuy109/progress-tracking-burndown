@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useProject } from '../../project/project-context.js';
 
 /**
- * Chọn phạm vi: bộ Mặc định hay một project cụ thể.
+ * Chọn phạm vi cấu hình: DỰ ÁN ĐANG MỞ hay bộ Mặc định (GLOBAL).
  *
- * Ô project là ô GÕ TAY chứ không phải danh sách thả xuống, vì hiện chưa có
- * endpoint nào trả về danh sách project. Gõ sai mã thì API trả về bộ Mặc định
- * đã gộp kế thừa — không hỏng gì, nhưng cũng không rõ ràng. Có danh sách project
- * rồi thì thay ô này bằng `<select>` là xong.
+ * Bản multi-tenant: không còn ô gõ tay mã project — dự án lấy thẳng từ URL
+ * (`/p/:projectKey`). Nút "Mặc định" chỉ hiện với ADMIN vì bộ Mặc định nay đi
+ * qua endpoint quản trị `/api/admin/config/phase...` (API chặn người thường).
  */
 export interface ScopePickerProps {
+  /** `null` = đang sửa bộ Mặc định (GLOBAL); chuỗi = đang sửa dự án đó. */
   readonly projectKey: string | null;
   readonly onChange: (projectKey: string | null) => void;
   /** Chặn đổi phạm vi khi còn thay đổi chưa lưu. */
@@ -16,9 +16,10 @@ export interface ScopePickerProps {
 }
 
 export function ScopePicker({ projectKey, onChange, dirty }: ScopePickerProps) {
-  const [text, setText] = useState(projectKey ?? '');
+  const scope = useProject();
 
   const apply = (next: string | null): void => {
+    if (next === projectKey) return;
     if (dirty && !confirmDiscard()) return;
     onChange(next);
   };
@@ -29,27 +30,22 @@ export function ScopePicker({ projectKey, onChange, dirty }: ScopePickerProps) {
 
       <button
         type="button"
-        className={`button${projectKey === null ? ' button--primary' : ''}`}
-        onClick={() => apply(null)}
+        className={`button${projectKey !== null ? ' button--primary' : ''}`}
+        onClick={() => apply(scope.projectKey)}
       >
-        Default
+        Dự án <code>{scope.projectKey}</code>
       </button>
 
-      <input
-        className="input input--code"
-        value={text}
-        placeholder="Project key, e.g. PAY"
-        aria-label="Project key"
-        onChange={(e) => setText(e.target.value)}
-      />
-      <button
-        type="button"
-        className={`button${projectKey !== null ? ' button--primary' : ''}`}
-        disabled={text.trim() === ''}
-        onClick={() => apply(text.trim())}
-      >
-        Open project
-      </button>
+      {scope.isAdmin && (
+        <button
+          type="button"
+          className={`button${projectKey === null ? ' button--primary' : ''}`}
+          title="Bộ quy tắc dùng chung cho mọi dự án chưa ghi đè — chỉ ADMIN sửa được."
+          onClick={() => apply(null)}
+        >
+          Mặc định (mọi dự án)
+        </button>
+      )}
     </div>
   );
 }

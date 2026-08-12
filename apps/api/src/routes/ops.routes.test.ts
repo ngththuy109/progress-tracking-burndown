@@ -10,16 +10,14 @@ import {
 } from '@app/shared';
 import { registerOpsRoutes, type OpsRouteDeps } from './ops.routes.js';
 import { buildOpsHealth } from '../services/ops-health.service.js';
+import { asAdmin, asPm, asViewer, testGuards } from '../test-fakes.js';
 
 /**
- * Bug "Màn hình Monitoring 404" — `GET /api/ops/health` không được LẮP.
+ * Test nhóm route vận hành sau Phase B: dashboard toàn cục dưới /api/admin/ops
+ * (CHỈ ADMIN), bản theo tenant dưới /api/projects/:key/ops (PM, mọi số đo đã
+ * bó theo dự án — run/ticket của tenant khác là 404).
  *
- * `registerOpsRoutes` và cổng `opsHealth()` đã có sẵn nhưng `createServer` chưa
- * bao giờ gọi, nên endpoint trả 404 "Route GET:/api/ops/health not found" và cả
- * dashboard giám sát chết. Test này đi qua CHÍNH `registerOpsRoutes` và inject
- * request thật, nên chạy được không cần PostgreSQL.
- *
- * Đồng thời canh cạm bẫy lắp ráp: `main.ts` đã tự mở `/healthz` bằng Prisma/Redis
+ * Vẫn canh cạm bẫy lắp ráp cũ: `main.ts` đã tự mở `/healthz` bằng Prisma/Redis
  * thật. Nếu `registerOpsRoutes` cũng mở `/healthz` vô điều kiện thì Fastify ném
  * `FST_ERR_DUPLICATED_ROUTE` lúc khởi động và MỌI route chết. Vậy `/healthz` chỉ
  * được mở khi có `checks`.
@@ -45,16 +43,19 @@ const SAMPLE: OpsHealthResponse = buildOpsHealth({
 });
 
 let app: FastifyInstance | undefined;
+let principal: Principal | null = asAdmin();
 
 afterEach(async () => {
   await app?.close();
   app = undefined;
+  principal = asAdmin();
 });
 
 function build(over: Partial<OpsRouteDeps> = {}): FastifyInstance {
   app = Fastify();
   registerOpsRoutes(app, {
     registry: new MetricsRegistry(),
+    guards: testGuards({ principal: () => principal }),
     opsHealth: () => Promise.resolve(SAMPLE),
     ...over,
   });
@@ -62,8 +63,8 @@ function build(over: Partial<OpsRouteDeps> = {}): FastifyInstance {
 }
 
 describe('registerOpsRoutes — endpoint dashboard được LẮP', () => {
-  it('GET /api/ops/health trả 200 với đủ bốn nhóm số liệu (KHÔNG còn 404)', async () => {
-    const res = await build().inject({ method: 'GET', url: '/api/ops/health' });
+  it('GET /api/admin/ops/health trả 200 với đủ bốn nhóm số liệu (KHÔNG còn 404)', async () => {
+    const res = await build().inject({ method: 'GET', url: '/api/admin/ops/health' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as OpsHealthResponse;
     expect(body.collectedAt).toBe('2026-03-10T02:00:00.000Z');
@@ -71,6 +72,36 @@ describe('registerOpsRoutes — endpoint dashboard được LẮP', () => {
     expect(body.jira).toBeDefined();
     expect(body.data).toBeDefined();
     expect(body.planDrift).toBeDefined();
+  });
+
+  it('dashboard toàn cục là của ADMIN: PM → 403, chưa đăng nhập → 401', async () => {
+    const instance = build();
+    principal = asPm('PAY');
+    expect((await instance.inject({ method: 'GET', url: '/api/admin/ops/health' })).statusCode).toBe(403);
+    principal = null;
+    expect((await instance.inject({ method: 'GET', url: '/api/admin/ops/health' })).statusCode).toBe(401);
+  });
+
+  it('GET /api/projects/:key/ops/health — PM của dự án nhận bản đã bó theo tenant', async () => {
+    const asked: (string | undefined)[] = [];
+    const instance = build({
+      opsHealth: (projectKey) => {
+        asked.push(projectKey);
+        return Promise.resolve(SAMPLE);
+      },
+    });
+    principal = asPm('PAY');
+    const res = await instance.inject({ method: 'GET', url: '/api/projects/PAY/ops/health' });
+    expect(res.statusCode).toBe(200);
+    expect(asked).toEqual(['PAY']); // cổng được gọi VỚI projectKey — số liệu đã lọc
+
+    // VIEWER của dự án không xem được cửa sổ ops (nó thuộc việc vận hành của PM).
+    principal = asViewer('PAY');
+    expect((await instance.inject({ method: 'GET', url: '/api/projects/PAY/ops/health' })).statusCode).toBe(403);
+
+    // Không phải thành viên → 404, không lộ tenant.
+    principal = asPm('CRM');
+    expect((await instance.inject({ method: 'GET', url: '/api/projects/PAY/ops/health' })).statusCode).toBe(404);
   });
 
   it('GET /metrics trả 200 dạng text Prometheus', async () => {
@@ -97,19 +128,19 @@ describe('registerOpsRoutes — route tuỳ chọn chỉ mở khi có phụ thu�
     expect(res.json()).toMatchObject({ status: 'degraded', components: { postgres: 'ok', redis: 'down' } });
   });
 
-  it('KHÔNG mở /api/epic/:key/alerts khi thiếu bannerAlerts', async () => {
-    const res = await build().inject({ method: 'GET', url: '/api/epic/PAY-1/alerts' });
+  it('KHÔNG mở route alerts khi thiếu bannerAlerts', async () => {
+    const res = await build().inject({ method: 'GET', url: '/api/projects/PAY/epics/PAY-1/alerts' });
     expect(res.statusCode).toBe(404);
   });
 
-  it('mở /api/epic/:key/alerts khi CÓ bannerAlerts, và chỉ giữ cảnh báo P3', async () => {
+  it('mở route alerts khi CÓ bannerAlerts, và chỉ giữ cảnh báo P3', async () => {
     const alerts: Alert[] = [
       { code: 'MISSING_WBS_DATE', level: 'P3', epicKey: 'PAY-1', message: 'x', value: 1, threshold: 0 },
       { code: 'JOB_FAILED', level: 'P1', epicKey: 'PAY-1', message: 'y', value: 1, threshold: 0 },
     ];
     const res = await build({ bannerAlerts: () => Promise.resolve(alerts) }).inject({
       method: 'GET',
-      url: '/api/epic/PAY-1/alerts',
+      url: '/api/projects/PAY/epics/PAY-1/alerts',
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { alerts: Alert[] };
@@ -138,16 +169,16 @@ const RUN_DETAIL: SyncRunDetail = {
   errorDetail: 'Error: Jira trả 401\n    at fetchEpicTree (…)',
 };
 
-describe('registerOpsRoutes — GET /api/ops/runs/:runId', () => {
+describe('registerOpsRoutes — chi tiết một lần chạy job', () => {
   it('KHÔNG mở route khi thiếu runDetail (deps tuỳ chọn)', async () => {
-    const res = await build().inject({ method: 'GET', url: '/api/ops/runs/7' });
+    const res = await build().inject({ method: 'GET', url: '/api/admin/ops/runs/7' });
     expect(res.statusCode).toBe(404);
   });
 
-  it('trả về bước lỗi + stack nguyên văn của lần chạy', async () => {
+  it('bản admin trả về bước lỗi + stack nguyên văn của lần chạy', async () => {
     const res = await build({ runDetail: () => Promise.resolve(RUN_DETAIL) }).inject({
       method: 'GET',
-      url: '/api/ops/runs/7',
+      url: '/api/admin/ops/runs/7',
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as SyncRunDetail;
@@ -158,10 +189,26 @@ describe('registerOpsRoutes — GET /api/ops/runs/:runId', () => {
   it('lần chạy không tồn tại → 404 kèm câu chỉ dẫn, không phải 500', async () => {
     const res = await build({ runDetail: () => Promise.resolve(null) }).inject({
       method: 'GET',
-      url: '/api/ops/runs/999',
+      url: '/api/admin/ops/runs/999',
     });
     expect(res.statusCode).toBe(404);
     expect((res.json() as { error: string }).error).toBe('RUN_NOT_FOUND');
+  });
+
+  it('bản theo tenant chuyển projectKey xuống cổng — run của tenant khác thành 404', async () => {
+    const asked: Array<[string, string | undefined]> = [];
+    const instance = build({
+      runDetail: (runId, projectKey) => {
+        asked.push([runId, projectKey]);
+        // Cổng thật lọc bằng SQL: run 7 thuộc CRM nên khi hỏi kèm PAY → null.
+        return Promise.resolve(projectKey === 'PAY' ? null : RUN_DETAIL);
+      },
+    });
+    principal = asPm('PAY');
+    const res = await instance.inject({ method: 'GET', url: '/api/projects/PAY/ops/runs/7' });
+    expect(res.statusCode).toBe(404);
+    expect((res.json() as { error: string }).error).toBe('RUN_NOT_FOUND');
+    expect(asked).toEqual([['7', 'PAY']]);
   });
 });
 
@@ -179,83 +226,121 @@ const DQ_ISSUE: DataQualityIssue = {
   exemptBy: null,
 };
 
-const ADMIN: Principal = { userId: 'admin@x.vn', role: 'ADMIN', projects: [] };
-const PM_PAY: Principal = { userId: 'pm@x.vn', role: 'PM', projects: ['PAY'] };
-const VIEWER: Principal = { userId: 'viewer@x.vn', role: 'VIEWER', projects: [] };
-
 function buildDq(over: {
-  principal?: Principal | null;
   issueProject?: () => Promise<{ projectKey: string } | null>;
 } = {}) {
   const calls: Array<{ issueKey: string; exempt: boolean; by: string }> = [];
+  const askedIssueScopes: (string | undefined)[] = [];
   const instance = build({
     dataQuality: {
-      issues: () => Promise.resolve([DQ_ISSUE]),
+      issues: (projectKey) => {
+        askedIssueScopes.push(projectKey);
+        return Promise.resolve([DQ_ISSUE]);
+      },
       issueProject: over.issueProject ?? (() => Promise.resolve({ projectKey: 'PAY' })),
       setExempt: (args) => {
         calls.push({ issueKey: args.issueKey, exempt: args.exempt, by: args.by });
         return Promise.resolve();
       },
     },
-    resolvePrincipal: () => over.principal ?? null,
+    resolvePrincipal: () => principal,
     now: () => new Date('2026-03-10T02:00:00.000Z'),
   });
-  return { instance, calls };
+  return { instance, calls, askedIssueScopes };
 }
 
-describe('registerOpsRoutes — GET /api/ops/data-quality/issues', () => {
-  it('trả về từng ticket kèm loại lỗi và cờ exempt — nguồn của file CSV', async () => {
-    const res = await buildDq().instance.inject({ method: 'GET', url: '/api/ops/data-quality/issues' });
+describe('registerOpsRoutes — danh sách ticket lỗi dữ liệu', () => {
+  it('bản admin trả về từng ticket kèm loại lỗi và cờ exempt — nguồn của file CSV', async () => {
+    const res = await buildDq().instance.inject({ method: 'GET', url: '/api/admin/ops/data-quality/issues' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { collectedAt: string; issues: DataQualityIssue[] };
     expect(body.collectedAt).toBe('2026-03-10T02:00:00.000Z');
     expect(body.issues[0]?.problems).toEqual(['MISSING_ESTIMATE', 'MISSING_WBS_DATE']);
   });
+
+  it('bản theo tenant gọi cổng VỚI projectKey — không rò ticket của tenant khác', async () => {
+    const { instance, askedIssueScopes } = buildDq();
+    principal = asPm('PAY');
+    const res = await instance.inject({ method: 'GET', url: '/api/projects/PAY/ops/data-quality/issues' });
+    expect(res.statusCode).toBe(200);
+    expect(askedIssueScopes).toEqual(['PAY']);
+  });
 });
 
-describe('registerOpsRoutes — PUT /api/ops/data-quality/issues/:key/exempt', () => {
-  const put = (p: { principal?: Principal | null; body?: unknown; issueProject?: () => Promise<{ projectKey: string } | null> }) => {
+describe('registerOpsRoutes — đánh dấu "không cần sửa dữ liệu"', () => {
+  const putAdmin = (p: { body?: unknown; issueProject?: () => Promise<{ projectKey: string } | null> }) => {
     const { instance, calls } = buildDq(p);
     return {
       calls,
       res: instance.inject({
         method: 'PUT',
-        url: '/api/ops/data-quality/issues/PAY-101/exempt',
+        url: '/api/admin/ops/data-quality/issues/PAY-101/exempt',
         payload: p.body ?? { exempt: true },
       }),
     };
   };
 
   it('chưa đăng nhập → 401, không ghi gì', async () => {
-    const { res, calls } = put({ principal: null });
+    principal = null;
+    const { res, calls } = putAdmin({});
     expect((await res).statusCode).toBe(401);
     expect(calls).toEqual([]);
   });
 
-  it('VIEWER → 403: tắt cảnh báo là quyết định của người chịu trách nhiệm dữ liệu', async () => {
-    const { res } = put({ principal: VIEWER });
-    expect((await res).statusCode).toBe(403);
+  it('bản admin là của ADMIN: PM/VIEWER bị 403 ngay tại guard', async () => {
+    for (const p of [asPm('PAY'), asViewer('PAY')]) {
+      principal = p;
+      const { res, calls } = putAdmin({});
+      expect((await res).statusCode, p.userId).toBe(403);
+      expect(calls).toEqual([]);
+    }
   });
 
-  it('PM đúng project → 200 và ghi lại AI đánh dấu', async () => {
-    const { res, calls } = put({ principal: PM_PAY });
+  it('ADMIN đánh dấu → 200 và ghi lại AI đánh dấu', async () => {
+    const { res, calls } = putAdmin({});
     expect((await res).statusCode).toBe(200);
-    expect(calls).toEqual([{ issueKey: 'PAY-101', exempt: true, by: 'pm@x.vn' }]);
+    expect(calls).toEqual([{ issueKey: 'PAY-101', exempt: true, by: 'admin@x.com' }]);
   });
 
   it('ADMIN gỡ đánh dấu bằng {"exempt": false} → cảnh báo hiện trở lại', async () => {
-    const { res, calls } = put({ principal: ADMIN, body: { exempt: false } });
+    const { res, calls } = putAdmin({ body: { exempt: false } });
     expect((await res).statusCode).toBe(200);
     expect(calls[0]?.exempt).toBe(false);
   });
 
   it('ticket không thuộc Epic nào đang theo dõi → 404', async () => {
-    const { res } = put({ principal: ADMIN, issueProject: () => Promise.resolve(null) });
+    const { res } = putAdmin({ issueProject: () => Promise.resolve(null) });
     expect((await res).statusCode).toBe(404);
   });
 
   it('thân yêu cầu sai kiểu ({"exempt":"true"} có nháy) → 400, nói rõ dạng đúng', async () => {
-    const { res } = put({ principal: ADMIN, body: { exempt: 'true' } });
+    const { res } = putAdmin({ body: { exempt: 'true' } });
     expect((await res).statusCode).toBe(400);
+  });
+
+  it('PM đánh dấu được qua ĐƯỜNG DỰ ÁN khi ticket thuộc đúng tenant', async () => {
+    const { instance, calls } = buildDq();
+    principal = asPm('PAY');
+    const res = await instance.inject({
+      method: 'PUT',
+      url: '/api/projects/PAY/ops/data-quality/issues/PAY-101/exempt',
+      payload: { exempt: true },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(calls).toEqual([{ issueKey: 'PAY-101', exempt: true, by: 'pm@x.com' }]);
+  });
+
+  it('ticket của TENANT KHÁC qua đường dự án mình → 404, không ghi gì', async () => {
+    const { instance, calls } = buildDq({
+      issueProject: () => Promise.resolve({ projectKey: 'CRM' }),
+    });
+    principal = asPm('PAY');
+    const res = await instance.inject({
+      method: 'PUT',
+      url: '/api/projects/PAY/ops/data-quality/issues/CRM-101/exempt',
+      payload: { exempt: true },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(calls).toEqual([]);
   });
 });

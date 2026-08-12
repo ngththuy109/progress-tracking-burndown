@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { Principal, PhaseSubtaskResponse } from '@app/shared';
+import type { PhaseSubtaskResponse } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
+import { resolveEpicInProject } from '../services/epic-scope.js';
+import { projectCtxOf, type AuthzGuards } from '../adapters/project-scope.js';
 import {
   buildPhaseSubtaskList,
   type LoadedSubtask,
@@ -8,10 +10,12 @@ import {
 } from '../services/phase-subtasks.service.js';
 
 /**
- * Endpoint liệt kê Sub-task theo Phase — cho một Epic.
+ * Endpoint liệt kê Sub-task theo Phase — mount theo tenant:
+ * `GET /api/projects/:projectKey/epics/:epicKey/phase-subtasks` (VIEWER trở lên).
  *
- * Tầng này CHỈ điều phối: đọc tham số, kiểm quyền, gọi cổng, gọi hàm thuần.
- * Không một dòng logic gom nhóm nào ở đây — nó nằm ở `phase-subtasks.service`.
+ * Tầng này CHỈ điều phối: guard kiểm quyền, `resolveEpicInProject` neo Epic vào
+ * đúng tenant, rồi gọi hàm thuần. Không một dòng logic gom nhóm nào ở đây — nó
+ * nằm ở `phase-subtasks.service`.
  *
  * KHÔNG cache: danh sách này bám sát dữ liệu Jira mới nhất, và nó rẻ (một truy
  * vấn Sub-task + một truy vấn Phase). Cache lại chỉ tổ để PM thấy ticket cũ sau
@@ -29,7 +33,7 @@ export interface PhaseSubtaskReadPort {
 
 export interface PhaseSubtaskRouteDeps {
   readonly reads: PhaseSubtaskReadPort;
-  resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
 }
 
 export function registerPhaseSubtaskRoutes(app: FastifyInstance, deps: PhaseSubtaskRouteDeps): void {
@@ -46,46 +50,25 @@ export function registerPhaseSubtaskRoutes(app: FastifyInstance, deps: PhaseSubt
     }
   };
 
-  app.get('/api/epic/:epicKey/phase-subtasks', async (req, reply) =>
-    handle(reply, async (): Promise<PhaseSubtaskResponse> => {
-      const principal = deps.resolvePrincipal(req);
-      if (!principal) {
-        throw new ApiError(
-          401,
-          'UNAUTHENTICATED',
-          'This request has no signed-in user. Reload the page to sign in again.',
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/phase-subtasks',
+    { preHandler: deps.guards.requireProject('VIEWER') },
+    async (req, reply) =>
+      handle(reply, async (): Promise<PhaseSubtaskResponse> => {
+        const epicKey = paramEpicKey(req);
+        const meta = await resolveEpicInProject(
+          (k) => deps.reads.epicMeta(k),
+          epicKey,
+          projectCtxOf(req).projectKey,
         );
-      }
 
-      const epicKey = paramEpicKey(req);
+        const [subtasks, definitions] = await Promise.all([
+          deps.reads.subtasks(epicKey),
+          deps.reads.phaseDefinitions(meta.projectKey),
+        ]);
 
-      const meta = await deps.reads.epicMeta(epicKey);
-      if (meta === null) {
-        throw new ApiError(
-          404,
-          'EPIC_NOT_FOUND',
-          `Epic ${epicKey} is not tracked. Add it on the Epics screen first.`,
-        );
-      }
-
-      // VIEWER và ADMIN xem tất cả (dữ liệu báo cáo); PM chỉ xem project mình
-      // phụ trách — cùng luật với biểu đồ Burndown và Signboard.
-      if (principal.role === 'PM' && !principal.projects.includes(meta.projectKey)) {
-        throw new ApiError(
-          403,
-          'FORBIDDEN',
-          `You are not assigned to project ${meta.projectKey}, so you cannot view this Epic’s sub-tasks. ` +
-            'Ask an admin if you need access.',
-        );
-      }
-
-      const [subtasks, definitions] = await Promise.all([
-        deps.reads.subtasks(epicKey),
-        deps.reads.phaseDefinitions(meta.projectKey),
-      ]);
-
-      return buildPhaseSubtaskList({ epicKey, definitions, subtasks });
-    }),
+        return buildPhaseSubtaskList({ epicKey, definitions, subtasks });
+      }),
   );
 }
 

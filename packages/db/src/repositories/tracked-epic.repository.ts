@@ -57,10 +57,23 @@ export async function findManyByKeys(prisma: PrismaClient, keys: readonly string
  *
  * Dùng đúng partial index `idx_tracked_active`, nên vẫn nhanh khi sổ có hàng
  * nghìn Epic mà chỉ vài chục đang chạy.
+ *
+ * `excludeArchivedProjects: true` (worker dùng) loại thêm Epic thuộc project
+ * đã ARCHIVED — lưu trữ tenant nghĩa là job đêm phải ngừng đụng vào Jira của
+ * họ. Mặc định (không truyền) giữ nguyên hành vi cũ để không đổi ngầm các chỗ
+ * gọi khác.
  */
-export async function listActiveEpics(prisma: PrismaClient): Promise<string[]> {
+export async function listActiveEpics(
+  prisma: PrismaClient,
+  options?: { readonly excludeArchivedProjects?: boolean },
+): Promise<string[]> {
   const rows = await prisma.trackedEpic.findMany({
-    where: { status: 'ACTIVE' },
+    where: {
+      status: 'ACTIVE',
+      ...(options?.excludeArchivedProjects === true
+        ? { project: { status: { not: 'ARCHIVED' } } }
+        : {}),
+    },
     select: { epicKey: true },
     orderBy: { epicKey: 'asc' },
   });

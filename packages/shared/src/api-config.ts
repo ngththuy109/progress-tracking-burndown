@@ -195,14 +195,29 @@ export const unmatchedResponseSchema = z.object({ labels: z.array(unmatchedLabel
 // Phân quyền
 // ---------------------------------------------------------------------------
 
-export const USER_ROLE = ['ADMIN', 'PM', 'VIEWER'] as const;
-export type UserRole = (typeof USER_ROLE)[number];
+/**
+ * Mô hình phân quyền multi-tenant (2 tầng):
+ *
+ *   - Role TOÀN CỤC (`app_user.role`): ADMIN — thấy/quản mọi dự án, quản trị
+ *     hệ thống; MEMBER — chỉ thấy dự án mình là thành viên.
+ *   - Role TRONG DỰ ÁN (`project_member.role`): PM — cấu hình + thao tác ghi
+ *     trong dự án đó; VIEWER — chỉ xem dự án đó.
+ *
+ * Một người có thể là PM dự án A đồng thời VIEWER dự án B. PM/VIEWER toàn cục
+ * kiểu cũ đã chuyển thành membership per-project (migration 20260812000000).
+ */
+export const GLOBAL_ROLE = ['ADMIN', 'MEMBER'] as const;
+export type GlobalRole = (typeof GLOBAL_ROLE)[number];
+
+export const PROJECT_ROLE = ['PM', 'VIEWER'] as const;
+export type ProjectRole = (typeof PROJECT_ROLE)[number];
 
 export interface Principal {
   readonly userId: string;
-  readonly role: UserRole;
-  /** Các project user này phụ trách. Chỉ có nghĩa với role `PM`. */
-  readonly projects: readonly string[];
+  /** ADMIN toàn cục — vượt mọi kiểm tra membership. */
+  readonly isAdmin: boolean;
+  /** projectKey → role trong dự án đó. Rỗng với người chưa được cấp quyền. */
+  readonly memberships: Readonly<Record<string, ProjectRole>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +231,20 @@ export interface Principal {
  * ẩn nút không phải là hàng rào bảo mật, chỉ đỡ cho người dùng bấm vào thứ
  * chắc chắn bị từ chối.
  */
+/** Một dự án user truy cập được — nguồn dữ liệu cho project switcher. */
+export const meProjectSchema = z.object({
+  projectKey: z.string(),
+  displayName: z.string().nullable(),
+  /** Role hiệu dụng trong dự án. ADMIN toàn cục nhận 'PM' (toàn quyền). */
+  role: z.enum(PROJECT_ROLE),
+});
+export type MeProject = z.infer<typeof meProjectSchema>;
+
 export const meResponseSchema = z.object({
   userId: z.string(),
-  role: z.enum(USER_ROLE),
-  projects: z.array(z.string()),
+  isAdmin: z.boolean(),
+  /** ADMIN: mọi dự án chưa ARCHIVED. MEMBER: các dự án có membership. */
+  projects: z.array(meProjectSchema),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 
@@ -238,10 +263,11 @@ export type AppUserSource = (typeof APP_USER_SOURCE)[number];
 
 export const appUserSchema = z.object({
   userId: z.string(),
-  role: z.enum(USER_ROLE),
-  projects: z.array(z.string()),
+  role: z.enum(GLOBAL_ROLE),
   displayName: z.string().nullable(),
   source: z.enum(APP_USER_SOURCE),
+  /** Số dự án user này là thành viên — để màn hình quản trị nhìn nhanh. */
+  membershipCount: z.number().int().nonnegative(),
 });
 export type AppUserView = z.infer<typeof appUserSchema>;
 
@@ -250,12 +276,12 @@ export type ListUsersResponse = z.infer<typeof listUsersResponseSchema>;
 
 /**
  * Cấp / cập nhật một người dùng. `userId` là email (server tự hạ chữ thường).
- * `projects` chỉ có nghĩa với PM — server từ chối nếu gán cho ADMIN/VIEWER.
+ * Membership theo dự án quản ở /api/admin/projects/:projectKey/members —
+ * KHÔNG quản ở đây.
  */
 export const upsertUserRequestSchema = z.object({
   userId: z.string().trim().min(1),
-  role: z.enum(USER_ROLE),
-  projects: z.array(z.string().trim().min(1)).default([]),
+  role: z.enum(GLOBAL_ROLE),
   displayName: z
     .string()
     .trim()
@@ -275,11 +301,30 @@ export type UpsertUserRequest = z.infer<typeof upsertUserRequestSchema>;
  */
 export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9_]{0,31}$/;
 
+export const PROJECT_STATUS = ['ACTIVE', 'ARCHIVED'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUS)[number];
+
+/** Số tầng dưới tracked root: 1..4 (2 = Epic/Task/Subtask cổ điển). */
+export const HIERARCHY_DEPTH_MIN = 1;
+export const HIERARCHY_DEPTH_MAX = 4;
+
+/**
+ * Project = TENANT. Token Jira KHÔNG BAO GIỜ xuất hiện ở đây — API chỉ trả
+ * `hasJiraToken` để UI biết đã nhập hay chưa (token là write-only).
+ */
 export const projectSchema = z.object({
   projectKey: z.string(),
   displayName: z.string().nullable(),
-  /** Số PM đang được gán vào project này (một project có thể nhiều PM). */
-  pmCount: z.number().int().nonnegative(),
+  status: z.enum(PROJECT_STATUS),
+  jiraBaseUrl: z.string().nullable(),
+  jiraEmail: z.string().nullable(),
+  /** true = đã nhập token riêng; false = đang fallback env JIRA_*. */
+  hasJiraToken: z.boolean(),
+  hierarchyDepth: z.number().int().min(HIERARCHY_DEPTH_MIN).max(HIERARCHY_DEPTH_MAX),
+  timezone: z.string(),
+  defaultCalendarId: z.string().nullable(),
+  /** Số thành viên (mọi role) — để màn hình quản trị nhìn nhanh. */
+  memberCount: z.number().int().nonnegative(),
 });
 export type ProjectView = z.infer<typeof projectSchema>;
 
@@ -289,5 +334,68 @@ export type ListProjectsResponse = z.infer<typeof listProjectsResponseSchema>;
 export const upsertProjectRequestSchema = z.object({
   projectKey: z.string().trim().min(1),
   displayName: z.string().trim().min(1).nullable().default(null),
+  status: z.enum(PROJECT_STATUS).default('ACTIVE'),
+  hierarchyDepth: z
+    .number()
+    .int()
+    .min(HIERARCHY_DEPTH_MIN)
+    .max(HIERARCHY_DEPTH_MAX)
+    .default(2),
+  timezone: z.string().trim().min(1).default('Asia/Ho_Chi_Minh'),
+  defaultCalendarId: z.string().trim().min(1).nullable().default(null),
 });
 export type UpsertProjectRequest = z.infer<typeof upsertProjectRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Kết nối Jira của tenant — PUT /api/admin/projects/:projectKey/jira
+// ---------------------------------------------------------------------------
+
+/**
+ * Cập nhật kết nối Jira. `apiToken`:
+ *   - chuỗi có nội dung → mã hóa rồi lưu;
+ *   - `null`            → XÓA token đã lưu (quay về fallback env);
+ *   - không gửi trường  → GIỮ NGUYÊN token cũ (đổi URL/email không phải nhập lại).
+ * `fieldsConfig` cùng shape với config/jira-fields.yaml (zod kiểm ở server).
+ */
+export const updateProjectJiraRequestSchema = z.object({
+  jiraBaseUrl: z.string().trim().url().nullable().default(null),
+  jiraEmail: z.string().trim().email().nullable().default(null),
+  apiToken: z.string().trim().min(1).nullable().optional(),
+  fieldsConfig: z.unknown().nullable().default(null),
+});
+export type UpdateProjectJiraRequest = z.infer<typeof updateProjectJiraRequestSchema>;
+
+/** Kết quả từng bước của "Test connection" — hiển thị nguyên trạng trên UI. */
+export const jiraTestStepSchema = z.object({
+  step: z.enum(['AUTH', 'FIELDS', 'PROJECT_ACCESS']),
+  ok: z.boolean(),
+  detail: z.string(),
+});
+export const jiraTestResponseSchema = z.object({
+  ok: z.boolean(),
+  steps: z.array(jiraTestStepSchema),
+});
+export type JiraTestResponse = z.infer<typeof jiraTestResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Thành viên dự án — /api/admin/projects/:projectKey/members
+// ---------------------------------------------------------------------------
+
+export const projectMemberSchema = z.object({
+  userId: z.string(),
+  role: z.enum(PROJECT_ROLE),
+  displayName: z.string().nullable(),
+  addedBy: z.string(),
+  addedAt: z.string(),
+});
+export type ProjectMemberView = z.infer<typeof projectMemberSchema>;
+
+export const listMembersResponseSchema = z.object({ members: z.array(projectMemberSchema) });
+export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>;
+
+export const upsertMemberRequestSchema = z.object({
+  userId: z.string().trim().min(1),
+  role: z.enum(PROJECT_ROLE),
+});
+export type UpsertMemberRequest = z.infer<typeof upsertMemberRequestSchema>;
+

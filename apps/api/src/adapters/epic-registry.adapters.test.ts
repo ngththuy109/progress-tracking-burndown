@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { BasicAuthProvider, JiraClient, type ResolvedFieldMapping } from '@app/jira';
+import {
+  BasicAuthProvider,
+  JiraClient,
+  type JiraClientRegistry,
+  type ProjectJiraContext,
+  type ResolvedFieldMapping,
+} from '@app/jira';
 import { createJiraEpicPort } from './epic-registry.adapters.js';
 
 /**
@@ -147,19 +153,38 @@ function makePort(c: Counters = { search: 0, getIssue: 0, jqls: [] }) {
     fetchImpl: fakeFetch(c),
     retry: { sleep: async () => {}, random: () => 0 },
   });
-  return { port: createJiraEpicPort(client, FIELDS), counters: c };
+  // Registry giả một dự án: adapter chỉ cần `forProject` trả client + field
+  // mapping — phần hoà giải kết nối/đa site đã có test riêng ở @app/jira.
+  const context: ProjectJiraContext = {
+    client,
+    fields: FIELDS,
+    statusIdMap: new Map(),
+    connection: {
+      projectKey: 'PAY',
+      baseUrl: null,
+      email: null,
+      apiTokenPlain: null,
+      fieldsConfig: null,
+      resolvedFields: null,
+    },
+  };
+  const registry: JiraClientRegistry = {
+    forProject: () => Promise.resolve(context),
+    invalidate: () => {},
+  };
+  return { port: createJiraEpicPort(registry), counters: c };
 }
 
 describe('createJiraEpicPort.lookup — chịu được key không tồn tại', () => {
   it('một key sai KHÔNG làm sập cả lượt kiểm, mà trả NOT_FOUND từng dòng', async () => {
     const { port } = makePort();
-    const out = await port.lookup(['abc-1000']);
+    const out = await port.lookup('PAY', ['abc-1000']);
     expect(out.get('abc-1000')).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
 
   it('key hợp lệ dán cạnh key sai vẫn được tra đúng metadata', async () => {
     const { port } = makePort();
-    const out = await port.lookup(['PAY-100', 'abc-1000']);
+    const out = await port.lookup('PAY', ['PAY-100', 'abc-1000']);
 
     const pay = out.get('PAY-100');
     expect(pay?.ok).toBe(true);
@@ -177,13 +202,13 @@ describe('createJiraEpicPort.lookup — chịu được key không tồn tại',
 
   it('key tồn tại nhưng thiếu quyền → NO_PERMISSION, không phải 500', async () => {
     const { port } = makePort();
-    const out = await port.lookup(['HR-1']);
+    const out = await port.lookup('PAY', ['HR-1']);
     expect(out.get('HR-1')).toEqual({ ok: false, reason: 'NO_PERMISSION' });
   });
 
   it('lấy cây con bằng parentEpic (đủ cả Sub-task lồng), không phải parent một tầng', async () => {
     const { port, counters } = makePort();
-    await port.lookup(['PAY-100']);
+    await port.lookup('PAY', ['PAY-100']);
 
     const childQueries = counters.jqls.filter((q) => !q.startsWith('key IN'));
     expect(childQueries.some((q) => q.startsWith('parentEpic IN'))).toBe(true);
@@ -193,7 +218,7 @@ describe('createJiraEpicPort.lookup — chịu được key không tồn tại',
 
   it('Epic hợp lệ nhưng CHƯA có Task/Sub-task → vẫn ok, đếm về 0 (không 500)', async () => {
     const { port, counters } = makePort();
-    const out = await port.lookup(['PAY-500']);
+    const out = await port.lookup('PAY', ['PAY-500']);
 
     const epic = out.get('PAY-500');
     expect(epic?.ok).toBe(true);
@@ -210,7 +235,7 @@ describe('createJiraEpicPort.lookup — chịu được key không tồn tại',
 
   it('mọi key hợp lệ thì vẫn đi đường JQL gộp, không tra lẻ từng key', async () => {
     const { port, counters } = makePort();
-    const out = await port.lookup(['PAY-100']);
+    const out = await port.lookup('PAY', ['PAY-100']);
     expect(out.get('PAY-100')?.ok).toBe(true);
     // Đường nhanh còn nguyên: không rơi vào tra lẻ GET /issue.
     expect(counters.getIssue).toBe(0);

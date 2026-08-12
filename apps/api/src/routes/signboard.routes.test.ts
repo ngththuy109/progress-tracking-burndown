@@ -11,6 +11,7 @@ import {
   type WorkCalendar,
 } from '@app/shared';
 import { registerSignboardRoutes, type SignboardReadPort } from './signboard.routes.js';
+import { asAdmin, asPm, asViewer, testGuards } from '../test-fakes.js';
 import { type ColumnSpec, type SubPhaseMetaEntry } from '../services/signboard.service.js';
 
 const CALENDAR: WorkCalendar = {
@@ -28,7 +29,6 @@ const COLUMNS: ColumnSpec[] = [
   { taskCode: 'JMReview', label: 'JM review' },
 ];
 
-const ADMIN: Principal = { userId: 'a', role: 'ADMIN', projects: [] };
 
 function sub(over: Partial<SignboardSubtask> & { issueKey: string }): SignboardSubtask {
   return {
@@ -55,8 +55,10 @@ class FakeReads implements SignboardReadPort {
   subPhaseMetaMap: Map<string, SubPhaseMetaEntry> = new Map();
   queries = 0;
 
+  meta: { projectKey: string; calendar: typeof CALENDAR } | null = { projectKey: 'PAY', calendar: CALENDAR };
+
   async epicMeta() {
-    return { projectKey: 'PAY', calendar: CALENDAR };
+    return this.meta;
   }
   async phases() {
     return this.phaseList;
@@ -83,14 +85,14 @@ let now: Date;
 
 beforeEach(async () => {
   reads = new FakeReads();
-  principal = ADMIN;
+  principal = asAdmin();
   // 10/03/2026, 08:00 giờ Việt Nam.
   now = new Date('2026-03-10T01:00:00Z');
 
   app = Fastify();
   registerSignboardRoutes(app, {
     reads,
-    resolvePrincipal: () => principal,
+    guards: testGuards({ principal: () => principal }),
     now: () => now,
   });
   await app.ready();
@@ -101,7 +103,7 @@ async function get<T>(url: string) {
   return { status: res.statusCode, body: res.json() as T & { error?: string; message?: string } };
 }
 
-const BOARD = '/api/signboard/epic/PAY-1/phase/DESIGN';
+const BOARD = '/api/projects/PAY/epics/PAY-1/signboard/phase/DESIGN';
 
 // ---------------------------------------------------------------------------
 
@@ -507,7 +509,7 @@ describe('khu chưa lên được bảng', () => {
 });
 
 describe('bộ chọn Phase', () => {
-  const PHASES = '/api/signboard/epic/PAY-1/phases';
+  const PHASES = '/api/projects/PAY/epics/PAY-1/signboard/phases';
 
   it('trả về danh sách Phase có Sub-task đúng thứ tự cổng đưa ra', async () => {
     reads.phaseList = [
@@ -532,9 +534,9 @@ describe('bộ chọn Phase', () => {
     expect(body.phases).toEqual([]);
   });
 
-  it('PM không phụ trách project nhận HTTP 403', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['SHOP'] };
-    expect((await get(PHASES)).status).toBe(403);
+  it('PM của dự án khác nhận 404 — không lộ tenant', async () => {
+    principal = asPm('CRM');
+    expect((await get(PHASES)).status).toBe(404);
   });
 
   it('thiếu thông tin người dùng nhận HTTP 401', async () => {
@@ -544,18 +546,37 @@ describe('bộ chọn Phase', () => {
 });
 
 describe('phân quyền và lỗi', () => {
-  it('PM không phụ trách project nhận HTTP 403', async () => {
-    principal = { userId: 'pm', role: 'PM', projects: ['SHOP'] };
-    expect((await get(BOARD)).status).toBe(403);
+  it('PM của dự án khác nhận 404 PROJECT_NOT_FOUND (không phải 403)', async () => {
+    principal = asPm('CRM');
+    const { status, body } = await get(BOARD);
+    expect(status).toBe(404);
+    expect(body.error).toBe('PROJECT_NOT_FOUND');
   });
 
-  it('VIEWER xem được', async () => {
-    principal = { userId: 'v', role: 'VIEWER', projects: [] };
+  it('VIEWER của dự án xem được', async () => {
+    principal = asViewer('PAY');
     expect((await get(BOARD)).status).toBe(200);
+  });
+
+  it('Epic của tenant khác ghép vào URL dự án mình → 404 EPIC_NOT_FOUND', async () => {
+    reads.meta = { projectKey: 'CRM', calendar: CALENDAR };
+    const { status, body } = await get(BOARD);
+    expect(status).toBe(404);
+    expect(body.error).toBe('EPIC_NOT_FOUND');
   });
 
   it('thiếu thông tin người dùng nhận HTTP 401', async () => {
     principal = null;
     expect((await get(BOARD)).status).toBe(401);
+  });
+
+  it('GET /api/projects/:key/config/signboard-columns trả cột hiệu lực của tenant', async () => {
+    principal = asViewer('PAY');
+    const { status, body } = await get<{ project: string; columns: unknown[] }>(
+      '/api/projects/PAY/config/signboard-columns',
+    );
+    expect(status).toBe(200);
+    expect(body.project).toBe('PAY');
+    expect(body.columns.length).toBeGreaterThan(0);
   });
 });

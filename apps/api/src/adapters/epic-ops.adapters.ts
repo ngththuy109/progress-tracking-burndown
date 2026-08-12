@@ -20,7 +20,14 @@ import { createBurndownReadPort } from './burndown.adapters.js';
 
 export const SYNC_JOB_NAME = 'sync-epic';
 
-export function createEpicOpsReadPort(prisma: PrismaClient, statusIdMap: StatusIdMap): EpicOpsReadPort {
+/**
+ * Bảng tra status THEO TENANT: đa site Jira thì status ID số đụng nhau giữa các
+ * site, nên không còn một `StatusIdMap` toàn cục nạp lúc boot nữa — endpoint
+ * explain nạp theo yêu cầu qua cổng này (registry per-project cache sẵn).
+ */
+export type StatusMapLoader = (projectKey: string) => Promise<StatusIdMap>;
+
+export function createEpicOpsReadPort(prisma: PrismaClient, loadStatusMap: StatusMapLoader): EpicOpsReadPort {
   // Dùng lại phần đọc lịch và project của nhóm Burndown thay vì viết lại truy
   // vấn thứ hai — hai bản sao sẽ có ngày trả về hai múi giờ khác nhau.
   const burndown = createBurndownReadPort(prisma);
@@ -66,7 +73,8 @@ export function createEpicOpsReadPort(prisma: PrismaClient, statusIdMap: StatusI
 
     storedRemaining: (epicKey, date) => storedRemainingSeconds(prisma, epicKey, date),
 
-    subtasksWithHistory: (epicKey) => loadExplainBundle(prisma, epicKey, statusIdMap),
+    subtasksWithHistory: async (epicKey, projectKey) =>
+      loadExplainBundle(prisma, epicKey, await loadStatusMap(projectKey)),
 
     async planShifts(epicKey) {
       const rows = await listPlanShifts(prisma, epicKey);

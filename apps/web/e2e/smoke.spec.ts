@@ -1,13 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Smoke test — chứng minh cái khung thật sự chạy trên trình duyệt.
+ * Smoke test — chứng minh cái khung thật sự chạy trên trình duyệt, bản
+ * MULTI-TENANT: mọi màn hình nghiệp vụ nằm dưới `/p/:projectKey/...`, còn `/`
+ * tự chuyển vào dự án của người dùng.
  *
  * Spec KHÔNG cần máy chủ API: mỗi test tự chặn `/api/**`. Nhờ vậy `pnpm e2e`
  * chạy được trên máy chưa dựng PostgreSQL, Redis hay Jira — đúng ràng buộc đã
  * ghi ở ARCHITECTURE.md.
  *
- * Nhãn của bốn mục điều hướng được VIẾT LẠI ở đây thay vì import từ
+ * Nhãn điều hướng được VIẾT LẠI ở đây thay vì import từ
  * `src/layout/nav-items.ts`. Import thì đổi nhãn trong mã nguồn là test tự đổi
  * theo và vẫn xanh — nó sẽ không còn kiểm được gì nữa.
  */
@@ -18,9 +20,17 @@ const NAV_LABELS = [
   'Signboard',
   'Phase sub-tasks',
   'Signboard columns',
+  'Days off',
   'Phase settings',
   'Monitoring',
 ];
+
+/** `/api/me` — nguồn của project switcher và của hàng rào `/p/:projectKey`. */
+const ME = {
+  userId: 'pm@example.com',
+  isAdmin: false,
+  projects: [{ projectKey: 'PAY', displayName: 'Payments', role: 'PM' }],
+};
 
 const VALID_CONFIG = {
   fallbackScanFullTitle: true,
@@ -32,7 +42,7 @@ const VALID_CONFIG = {
   ],
   matchRules: [{ keyword: '設計', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 10 }],
   signboardColumns: [],
-  projectKey: null,
+  projectKey: 'PAY',
   globalVersion: 3,
   projectVersion: null,
   inherited: { titlePatterns: true, phaseDefinitions: true, matchRules: true, signboardColumns: true, subtaskPatterns: true, subPhaseOrders: true },
@@ -40,6 +50,10 @@ const VALID_CONFIG = {
 
 /**
  * Trả lời mọi lời gọi API bằng dữ liệu hợp lệ.
+ *
+ * `/api/me` LUÔN phải trả đúng shape: `ProjectProvider` đọc nó để quyết định
+ * có cho vào `/p/PAY/...` hay đá về trang chọn dự án — me hỏng là mọi test
+ * dưới đây chết theo.
  *
  * So đường dẫn bằng HÀM chứ không bằng glob `**\/api\/**`: glob đó chặn luôn
  * `/src/api/client.ts` — mã nguồn của chính app, vì thư mục cũng tên `api`.
@@ -50,11 +64,14 @@ async function stubConfigOk(page: Page): Promise<void> {
     (url) => url.pathname.startsWith('/api/'),
     (route) => {
       const path = new URL(route.request().url()).pathname;
-      const body = path.endsWith('/unmatched')
-        ? { labels: [] }
-        : path.endsWith('/versions')
-          ? { versions: [] }
-          : VALID_CONFIG;
+      const body =
+        path === '/api/me'
+          ? ME
+          : path.endsWith('/unmatched')
+            ? { labels: [] }
+            : path.endsWith('/versions')
+              ? { versions: [] }
+              : VALID_CONFIG;
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     },
   );
@@ -70,9 +87,12 @@ function collectErrors(page: Page): string[] {
   return errors;
 }
 
-test('mở app hiện được layout với đủ mục điều hướng', async ({ page }) => {
+test('mở `/` tự chuyển vào dự án của người dùng và hiện đủ mục điều hướng', async ({ page }) => {
   await stubConfigOk(page);
   await page.goto('/');
+
+  // Một dự án duy nhất → vào thẳng, không dừng ở trang chọn dự án.
+  await expect(page).toHaveURL(/\/p\/PAY\/epics$/);
 
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   await expect(nav).toBeVisible();
@@ -82,15 +102,15 @@ test('mở app hiện được layout với đủ mục điều hướng', async
   }
   await expect(nav.getByRole('link')).toHaveCount(NAV_LABELS.length);
 
-  // Vào `/` phải nhảy sang màn hình mặc định, không để trang trống.
-  await expect(page).toHaveURL(/\/epics$/);
+  // Bộ chuyển dự án hiện tên dự án từ /api/me.
+  await expect(page.getByLabel('Dự án đang mở')).toHaveValue('PAY');
 });
 
 test('bấm qua mọi route không sinh lỗi console', async ({ page }) => {
   await stubConfigOk(page);
   const errors = collectErrors(page);
 
-  await page.goto('/');
+  await page.goto('/p/PAY/epics');
 
   for (const label of NAV_LABELS) {
     // `exact: true` là BẮT BUỘC: "Signboard" là tiền tố của "Signboard columns",
@@ -99,6 +119,8 @@ test('bấm qua mọi route không sinh lỗi console', async ({ page }) => {
     // Tiêu đề trên thanh trên đổi theo — chứng tỏ route đã đổi thật, không phải
     // chỉ đổi màu mục đang chọn.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(label);
+    // URL vẫn nằm trong dự án — không mục nào rơi ra ngoài `/p/PAY/`.
+    await expect(page).toHaveURL(/\/p\/PAY\//);
   }
 
   expect(errors, `Lỗi console: ${errors.join(' | ')}`).toEqual([]);
@@ -106,33 +128,49 @@ test('bấm qua mọi route không sinh lỗi console', async ({ page }) => {
 
 test('mục đang chọn được đánh dấu để trình đọc màn hình biết', async ({ page }) => {
   await stubConfigOk(page);
-  await page.goto('/signboard');
+  await page.goto('/p/PAY/signboard');
 
   await expect(
     page.getByRole('link', { name: 'Signboard', exact: true }),
   ).toHaveAttribute('aria-current', 'page');
 });
 
+test('không có quyền vào dự án trên URL thì về trang chọn dự án', async ({ page }) => {
+  await stubConfigOk(page);
+  await page.goto('/p/KHONG-CO/epics');
+
+  // `ProjectProvider` đá về `/`, và `/` lại chuyển vào dự án hợp lệ duy nhất.
+  await expect(page).toHaveURL(/\/p\/PAY\/epics$/);
+});
+
 test('màn hình cấu hình đọc được dữ liệu từ API và vẽ ra màn hình', async ({ page }) => {
   // Đây là bằng chứng cho cả chuỗi khung: client → TanStack Query → component.
   // Nội dung nghiệp vụ của màn hình do `phase-config.spec.ts` (T-21) kiểm.
   await stubConfigOk(page);
-  await page.goto('/config/phase');
+  await page.goto('/p/PAY/config/phase');
 
   await expect(page.getByText('② Phase list')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Vietnamese label, row 1' })).toHaveValue('Thiết kế');
 });
 
 test('API trả lỗi thì màn hình hiện ErrorState, không hiện trang trắng', async ({ page }) => {
-  await page.route('**/api/config/phase*', (route) =>
-    route.fulfill({
-      status: 500,
-      contentType: 'application/json',
-      body: JSON.stringify({ error: 'INTERNAL_ERROR', message: 'Lỗi hệ thống.' }),
-    }),
+  // /api/me vẫn phải OK — hỏng nó là ProjectProvider chặn từ ngoài cửa.
+  await page.route(
+    (url) => url.pathname.startsWith('/api/'),
+    (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/me') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ME) });
+      }
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'INTERNAL_ERROR', message: 'Lỗi hệ thống.' }),
+      });
+    },
   );
 
-  await page.goto('/config/phase');
+  await page.goto('/p/PAY/config/phase');
 
   const alert = page.getByRole('alert');
   await expect(alert).toBeVisible();
@@ -144,9 +182,18 @@ test('API trả lỗi thì màn hình hiện ErrorState, không hiện trang tr�
 });
 
 test('mất mạng thì báo bằng câu của mình, không phải chuỗi thô của trình duyệt', async ({ page }) => {
-  await page.route('**/api/config/phase*', (route) => route.abort('failed'));
+  await page.route(
+    (url) => url.pathname.startsWith('/api/'),
+    (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/me') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ME) });
+      }
+      return route.abort('failed');
+    },
+  );
 
-  await page.goto('/config/phase');
+  await page.goto('/p/PAY/config/phase');
 
   const alert = page.getByRole('alert');
   await expect(alert).toContainText('Cannot reach the server');
@@ -164,6 +211,5 @@ test('đường dẫn không tồn tại thì hiện thông báo, không phải 
   await stubConfigOk(page);
   await page.goto('/khong-co-trang-nay');
 
-  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Không tìm thấy trang' })).toBeVisible();
 });

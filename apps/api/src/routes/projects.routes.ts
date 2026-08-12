@@ -1,26 +1,67 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   PROJECT_KEY_PATTERN,
+  updateProjectJiraRequestSchema,
+  upsertMemberRequestSchema,
   upsertProjectRequestSchema,
+  type JiraTestResponse,
+  type ListMembersResponse,
   type Principal,
+  type ProjectMemberView,
   type ProjectView,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
-import type { ProjectStore } from '../adapters/project.adapters.js';
-import type { AppUserAdminStore } from '../adapters/app-user.adapters.js';
+import { normalizeIdentity } from '../adapters/principal.js';
+import type { AuthzGuards } from '../adapters/project-scope.js';
+import type { ProjectMemberStore, ProjectStore } from '../adapters/project.adapters.js';
 
 /**
- * Danh mục Project — `/api/projects`, CHỈ ADMIN.
+ * Quản trị TENANT — `/api/admin/projects...`, CHỈ ADMIN (guard `requireAdmin`).
  *
- * Admin đăng ký trước các project ở đây; màn hình cấp quyền chỉ cho gán PM vào
- * project đã đăng ký (users.routes kiểm lại phía server). Một project gắn được
- * nhiều PM — `pmCount` cho Admin thấy con số đó.
+ *   GET    /api/admin/projects                        danh mục tenant
+ *   PUT    /api/admin/projects/:projectKey            đăng ký / sửa (idempotent)
+ *   DELETE /api/admin/projects/:projectKey            xoá (chặn khi còn dữ liệu)
+ *   PUT    /api/admin/projects/:projectKey/jira       kết nối Jira riêng
+ *   POST   /api/admin/projects/:projectKey/jira/test  thử kết nối 3 bước
+ *   GET/PUT/DELETE .../members[...]                   thành viên + role dự án
+ *
+ * Token Jira là WRITE-ONLY: nhận vào thì mã hóa (AES-256-GCM) rồi lưu, API chỉ
+ * trả `hasJiraToken`. Không log, không echo, không trả lại dưới bất kỳ dạng nào.
  */
+
+/** Cổng "Test connection" — bộ chuyển đổi thật ở adapters/jira-test.adapters.ts. */
+export interface JiraConnectionTester {
+  test(args: {
+    baseUrl: string | null;
+    email: string | null;
+    apiToken: string | null;
+    fieldsConfig: unknown;
+    projectKey: string;
+  }): Promise<JiraTestResponse>;
+}
+
+/** Hộp seal/open token — `null` khi APP_ENCRYPTION_KEY chưa được đặt. */
+export interface TokenBox {
+  seal(plaintext: string): string;
+  open(sealed: string): string;
+}
+
 export interface ProjectsRouteDeps {
   resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
   readonly projects: ProjectStore;
-  /** Đọc danh sách người dùng để đếm PM/đảm bảo không xoá project đang có PM. */
-  readonly users: Pick<AppUserAdminStore, 'list'>;
+  readonly members: ProjectMemberStore;
+  readonly tokenBox: TokenBox | null;
+  readonly jiraTester: JiraConnectionTester;
+  /** env JIRA_* — đường fallback cho tenant chưa khai kết nối riêng. */
+  readonly envJira: {
+    baseUrl: string;
+    email: string;
+    apiToken: string;
+    fieldsConfig: unknown;
+  } | null;
+  /** Kiểm cấu trúc fieldsConfig (zod của @app/jira, tiêm từ điểm lắp ráp). */
+  validateFieldsConfig(v: unknown): { ok: true } | { ok: false; message: string };
 }
 
 /** Chuẩn hoá key: trim + viết HOA (khớp key Jira như PAY, CRM). */
@@ -28,6 +69,14 @@ export function normalizeProjectKey(raw: string | undefined): string | null {
   if (raw === undefined) return null;
   const v = raw.trim().toUpperCase();
   return v === '' ? null : v;
+}
+
+/** Mã lỗi Prisma "vi phạm khoá ngoại" — dùng để đổi thành lỗi nghiệp vụ rõ nghĩa. */
+const PRISMA_FK_VIOLATION = 'P2003';
+
+function prismaErrorCode(err: unknown): string | null {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : null;
 }
 
 export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRouteDeps): void {
@@ -43,94 +92,261 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
         });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API danh mục Project');
+      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API quản trị tenant');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };
 
-  const requireAdmin = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) {
-      throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
+  const admin = { preHandler: deps.guards.requireAdmin };
+
+  const keyParam = (req: FastifyRequest): string => {
+    const key = normalizeProjectKey((req.params as { projectKey?: string }).projectKey);
+    if (key === null || !PROJECT_KEY_PATTERN.test(key)) {
+      throw new ApiError(
+        400,
+        'BAD_REQUEST',
+        'A project key must be uppercase, start with a letter, and use only A–Z, 0–9 and _ (e.g. PAY, CRM).',
+      );
     }
-    if (p.role !== 'ADMIN') {
-      throw new ApiError(403, 'FORBIDDEN', 'Only Admins can manage projects.');
-    }
-    return p;
+    return key;
   };
 
-  /** Đếm số PM gắn vào mỗi project (chỉ PM mới có `projects` khác rỗng). */
-  const pmCounts = async (): Promise<Map<string, number>> => {
-    const users = await deps.users.list();
-    const counts = new Map<string, number>();
-    for (const u of users) {
-      for (const key of u.projects) counts.set(key, (counts.get(key) ?? 0) + 1);
+  const projectOrThrow = async (projectKey: string): Promise<ProjectView> => {
+    const row = await deps.projects.find(projectKey);
+    if (row === null) {
+      throw new ApiError(404, 'PROJECT_NOT_FOUND', `${projectKey} is not in the project list.`);
     }
-    return counts;
+    return row;
   };
 
-  app.get('/api/projects', async (req, reply) =>
-    handle(reply, async () => {
-      requireAdmin(req);
-      const [rows, counts] = await Promise.all([deps.projects.list(), pmCounts()]);
-      const projects: ProjectView[] = rows.map((r) => ({
-        projectKey: r.projectKey,
-        displayName: r.displayName,
-        pmCount: counts.get(r.projectKey) ?? 0,
-      }));
-      return { projects };
-    }),
+  // ---- Danh mục tenant -----------------------------------------------------
+
+  app.get('/api/admin/projects', admin, async (_req, reply) =>
+    handle(reply, async () => ({ projects: [...(await deps.projects.list())] })),
   );
 
-  app.post('/api/projects', async (req, reply) =>
+  app.put('/api/admin/projects/:projectKey', admin, async (req, reply) =>
     handle(reply, async () => {
-      requireAdmin(req);
-      const parsed = upsertProjectRequestSchema.safeParse(req.body);
+      const projectKey = keyParam(req);
+      // `projectKey` trong body bị ghi đè bằng key của URL — một nguồn sự thật.
+      const parsed = upsertProjectRequestSchema.safeParse({
+        ...(req.body as Record<string, unknown>),
+        projectKey,
+      });
       if (!parsed.success) throw badRequest(parsed.error);
 
-      const projectKey = normalizeProjectKey(parsed.data.projectKey);
-      if (projectKey === null || !PROJECT_KEY_PATTERN.test(projectKey)) {
-        throw new ApiError(
-          400,
-          'BAD_REQUEST',
-          'A project key must be uppercase, start with a letter, and use only A–Z, 0–9 and _ (e.g. PAY, CRM).',
-        );
-      }
-
-      await deps.projects.upsert({ projectKey, displayName: parsed.data.displayName });
-
-      const counts = await pmCounts();
-      const view: ProjectView = {
+      await deps.projects.upsert({
         projectKey,
         displayName: parsed.data.displayName,
-        pmCount: counts.get(projectKey) ?? 0,
-      };
-      return view;
+        status: parsed.data.status,
+        hierarchyDepth: parsed.data.hierarchyDepth,
+        timezone: parsed.data.timezone,
+        defaultCalendarId: parsed.data.defaultCalendarId,
+      });
+      return projectOrThrow(projectKey);
     }),
   );
 
-  app.delete('/api/projects/:projectKey', async (req, reply) =>
+  app.delete('/api/admin/projects/:projectKey', admin, async (req, reply) =>
     handle(reply, async () => {
-      requireAdmin(req);
-      const projectKey = normalizeProjectKey((req.params as { projectKey?: string }).projectKey);
-      if (projectKey === null) {
-        throw new ApiError(400, 'BAD_REQUEST', 'The URL is missing the project key.');
+      const projectKey = keyParam(req);
+      try {
+        const removed = await deps.projects.remove(projectKey);
+        if (!removed) {
+          throw new ApiError(404, 'PROJECT_NOT_FOUND', `${projectKey} is not in the project list.`);
+        }
+      } catch (err) {
+        // Còn Epic/issue trỏ vào tenant (FK NoAction) thì KHÔNG xoá được — nói
+        // rõ phải gỡ dữ liệu trước thay vì nổ 500 mờ mịt. Thành viên thì rơi
+        // theo CASCADE nên không chặn.
+        if (prismaErrorCode(err) === PRISMA_FK_VIOLATION) {
+          throw new ApiError(
+            409,
+            'PROJECT_IN_USE',
+            `${projectKey} still has tracked Epics or synced data. Remove its Epics first, then delete the project.`,
+          );
+        }
+        throw err;
+      }
+      return { ok: true };
+    }),
+  );
+
+  // ---- Kết nối Jira của tenant --------------------------------------------
+
+  app.put('/api/admin/projects/:projectKey/jira', admin, async (req, reply) =>
+    handle(reply, async () => {
+      const projectKey = keyParam(req);
+      const before = await deps.projects.connection(projectKey);
+      if (before === null) {
+        throw new ApiError(404, 'PROJECT_NOT_FOUND', `${projectKey} is not in the project list.`);
       }
 
-      // Một project đang có PM thì KHÔNG xoá được — gỡ khỏi các PM trước, để không
-      // để lại tham chiếu treo (PM gắn một project không còn trong danh mục).
-      const counts = await pmCounts();
-      const used = counts.get(projectKey) ?? 0;
-      if (used > 0) {
-        throw new ApiError(
-          409,
-          'PROJECT_IN_USE',
-          `${projectKey} is still assigned to ${used} PM${used === 1 ? '' : 's'}. Remove it from them first.`,
-        );
+      const parsed = updateProjectJiraRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw badRequest(parsed.error);
+
+      if (parsed.data.fieldsConfig !== null) {
+        const checked = deps.validateFieldsConfig(parsed.data.fieldsConfig);
+        if (!checked.ok) {
+          throw new ApiError(
+            400,
+            'BAD_REQUEST',
+            `fieldsConfig không hợp lệ: ${checked.message}. ` +
+              'Cần cùng cấu trúc với config/jira-fields.yaml — { fieldMapping: { wbsStartDate, wbsEndDate } }.',
+          );
+        }
       }
 
-      const removed = await deps.projects.remove(projectKey);
-      if (!removed) throw new ApiError(404, 'NOT_FOUND', `${projectKey} is not in the project list.`);
+      // apiToken: undefined = GIỮ token cũ; null = XÓA; chuỗi = mã hóa rồi lưu.
+      let jiraTokenEnc: string | null | undefined;
+      if (parsed.data.apiToken === undefined) jiraTokenEnc = undefined;
+      else if (parsed.data.apiToken === null) jiraTokenEnc = null;
+      else {
+        if (deps.tokenBox === null) {
+          // KHÔNG được lưu token thô. Thiếu khóa thì từ chối rõ ràng kèm cách
+          // sinh khóa — thà không lưu còn hơn lưu không mã hóa (C-9).
+          throw new ApiError(
+            400,
+            'ENCRYPTION_KEY_MISSING',
+            'Chưa đặt APP_ENCRYPTION_KEY nên không thể lưu API token một cách an toàn. ' +
+              'Sinh khóa bằng: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))" ' +
+              'rồi đặt vào biến môi trường APP_ENCRYPTION_KEY (cả api lẫn worker) và thử lại.',
+          );
+        }
+        jiraTokenEnc = deps.tokenBox.seal(parsed.data.apiToken);
+      }
+
+      // CHỐT AN TOÀN: đổi base URL mà không nhập token mới → TỰ XÓA token đã
+      // lưu. Nếu cứ giữ, một ADMIN (hoặc phiên ADMIN bị chiếm) có thể trỏ URL
+      // sang server tự kiểm soát rồi bấm Test connection — token bị gửi sang
+      // đó. Bắt nhập lại token khi đổi site là cái giá nhỏ, đúng C-9.
+      const baseUrlChanged = parsed.data.jiraBaseUrl !== before.jiraBaseUrl;
+      if (baseUrlChanged && jiraTokenEnc === undefined && before.jiraTokenEnc !== null) {
+        jiraTokenEnc = null;
+      }
+
+      // Kết nối đổi thì bản field mapping đã resolve của lần trước hết tin được
+      // — xóa để lần dùng tới resolve lại từ cấu hình mới.
+      await deps.projects.updateJira(projectKey, {
+        jiraBaseUrl: parsed.data.jiraBaseUrl,
+        jiraEmail: parsed.data.jiraEmail,
+        ...(jiraTokenEnc !== undefined ? { jiraTokenEnc } : {}),
+        jiraFieldsJson: parsed.data.fieldsConfig,
+        jiraResolvedJson: null,
+      });
+
+      // Trả view chuẩn (KHÔNG BAO GIỜ chứa token — chỉ hasJiraToken).
+      return projectOrThrow(projectKey);
+    }),
+  );
+
+  app.post('/api/admin/projects/:projectKey/jira/test', admin, async (req, reply) =>
+    handle(reply, async (): Promise<JiraTestResponse> => {
+      const projectKey = keyParam(req);
+      const conn = await deps.projects.connection(projectKey);
+      if (conn === null) {
+        throw new ApiError(404, 'PROJECT_NOT_FOUND', `${projectKey} is not in the project list.`);
+      }
+
+      // Cho phép thử với giá trị CHƯA LƯU (điền form rồi bấm Test trước khi
+      // Save): body ghi đè giá trị đã lưu; thiếu thì rơi về DB rồi về env JIRA_*.
+      const parsed = updateProjectJiraRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw badRequest(parsed.error);
+
+      const baseUrl = parsed.data.jiraBaseUrl ?? conn.jiraBaseUrl ?? deps.envJira?.baseUrl ?? null;
+      const email = parsed.data.jiraEmail ?? conn.jiraEmail ?? deps.envJira?.email ?? null;
+
+      let apiToken: string | null;
+      if (typeof parsed.data.apiToken === 'string') {
+        apiToken = parsed.data.apiToken;
+      } else if (conn.jiraTokenEnc !== null) {
+        if (deps.tokenBox === null) {
+          throw new ApiError(
+            400,
+            'ENCRYPTION_KEY_MISSING',
+            'Dự án này có token đã mã hóa nhưng APP_ENCRYPTION_KEY chưa được đặt nên không giải mã được. ' +
+              'Khôi phục khóa cũ hoặc nhập lại token rồi thử lại.',
+          );
+        }
+        apiToken = deps.tokenBox.open(conn.jiraTokenEnc);
+      } else {
+        apiToken = deps.envJira?.apiToken ?? null;
+      }
+
+      const fieldsConfig =
+        parsed.data.fieldsConfig ?? conn.jiraFieldsJson ?? deps.envJira?.fieldsConfig ?? null;
+
+      return deps.jiraTester.test({ baseUrl, email, apiToken, fieldsConfig, projectKey });
+    }),
+  );
+
+  // ---- Thành viên dự án ----------------------------------------------------
+
+  app.get('/api/admin/projects/:projectKey/members', admin, async (req, reply) =>
+    handle(reply, async (): Promise<ListMembersResponse> => {
+      const projectKey = keyParam(req);
+      await projectOrThrow(projectKey);
+      const rows = await deps.members.list(projectKey);
+      const members: ProjectMemberView[] = rows.map((m) => ({
+        userId: m.userId,
+        role: m.role,
+        displayName: m.displayName,
+        addedBy: m.addedBy,
+        addedAt: m.addedAt.toISOString(),
+      }));
+      return { members };
+    }),
+  );
+
+  app.put('/api/admin/projects/:projectKey/members', admin, async (req, reply) =>
+    handle(reply, async () => {
+      const adminPrincipal = deps.resolvePrincipal(req)!;
+      const projectKey = keyParam(req);
+      await projectOrThrow(projectKey);
+
+      const parsed = upsertMemberRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw badRequest(parsed.error);
+
+      const userId = normalizeIdentity(parsed.data.userId);
+      if (userId === null) throw new ApiError(400, 'BAD_REQUEST', 'The user email is empty.');
+
+      try {
+        await deps.members.upsert({
+          projectKey,
+          userId,
+          role: parsed.data.role,
+          addedBy: adminPrincipal.userId,
+        });
+      } catch (err) {
+        // FK `project_member.user_id → app_user`: user chưa được cấp ở màn
+        // Users thì chưa thêm vào dự án được — thứ tự cấp quyền là có chủ đích.
+        if (prismaErrorCode(err) === PRISMA_FK_VIOLATION) {
+          throw new ApiError(
+            400,
+            'USER_NOT_PROVISIONED',
+            `${userId} chưa được cấp tài khoản trong hệ thống. ` +
+              'Thêm người này ở màn hình Users (POST /api/admin/users) trước, rồi mới gán vào dự án.',
+          );
+        }
+        throw err;
+      }
+
+      return { ok: true, projectKey, userId, role: parsed.data.role };
+    }),
+  );
+
+  app.delete('/api/admin/projects/:projectKey/members/:userId', admin, async (req, reply) =>
+    handle(reply, async () => {
+      const projectKey = keyParam(req);
+      await projectOrThrow(projectKey);
+
+      const userId = normalizeIdentity((req.params as { userId?: string }).userId);
+      if (userId === null) throw new ApiError(400, 'BAD_REQUEST', 'The URL is missing the user email.');
+
+      const removed = await deps.members.remove(projectKey, userId);
+      if (!removed) {
+        throw new ApiError(404, 'NOT_FOUND', `${userId} is not a member of ${projectKey}.`);
+      }
       return { ok: true };
     }),
   );

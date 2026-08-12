@@ -2,11 +2,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type {
   PlanConflictCountsResponse,
   PlanConflictsResponse,
-  Principal,
   WorkSide,
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
-import { assertCanRead } from './burndown.routes.js';
+import { resolveEpicInProject } from '../services/epic-scope.js';
+import { projectCtxOf, type AuthzGuards } from '../adapters/project-scope.js';
 import {
   computePlanConflicts,
   type PlanCheckSubtask,
@@ -14,7 +14,13 @@ import {
 } from '../services/plan-conflicts.service.js';
 
 /**
- * API kiểm tra plan rơi vào ngày nghỉ — T-37.
+ * API kiểm tra plan rơi vào ngày nghỉ — T-37 — mount theo tenant:
+ *
+ *   GET /api/projects/:projectKey/epics/:epicKey/plan-conflicts  (VIEWER trở lên)
+ *   GET /api/projects/:projectKey/plan-conflicts/summary          (VIEWER trở lên)
+ *
+ * Bản tổng hợp CHỈ đếm Epic của tenant trong URL — không còn đường đọc số liệu
+ * xuyên dự án.
  *
  * Hệ thống đồng bộ MỘT CHIỀU từ Jira về, nên "kiểm tra khi làm plan" nghĩa là:
  * sau mỗi lần sync, báo cáo Sub-task nào có ngày bắt đầu/kết thúc kế hoạch rơi
@@ -29,9 +35,9 @@ import {
 export interface PlanConflictReadPort {
   /** `null` = Epic không có trong sổ theo dõi. */
   epicMeta(epicKey: string): Promise<{ projectKey: string; calendarId: string } | null>;
-  /** Epic trong sổ (lọc theo project nếu có) — cho endpoint tổng hợp. */
+  /** Epic trong sổ của MỘT project — cho endpoint tổng hợp. */
   listEpics(
-    projectKey: string | null,
+    projectKey: string,
   ): Promise<readonly { epicKey: string; projectKey: string; calendarId: string }[]>;
   /** Sub-task còn hoạt động có ít nhất một ngày kế hoạch, kèm Phase của Task cha. */
   subtasksForCheck(epicKey: string): Promise<readonly PlanCheckSubtask[]>;
@@ -43,7 +49,7 @@ export interface PlanConflictReadPort {
 
 export interface PlanConflictRouteDeps {
   readonly reads: PlanConflictReadPort;
-  resolvePrincipal(req: FastifyRequest): Principal | null;
+  readonly guards: AuthzGuards;
 }
 
 /** Lịch chuẩn phía khách hàng — phía JP review theo lịch này. */
@@ -63,11 +69,7 @@ export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConfl
     }
   };
 
-  const requirePrincipal = (req: FastifyRequest): Principal => {
-    const p = deps.resolvePrincipal(req);
-    if (!p) throw new ApiError(401, 'UNAUTHENTICATED', 'This request has no signed-in user. Reload the page to sign in again.');
-    return p;
-  };
+  const asViewer = { preHandler: deps.guards.requireProject('VIEWER') };
 
   const conflictsOf = async (epic: {
     epicKey: string;
@@ -91,37 +93,28 @@ export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConfl
     });
   };
 
-  app.get('/api/epics/:epicKey/plan-conflicts', async (req, reply) =>
-    handle(reply, async (): Promise<PlanConflictsResponse> => {
-      const principal = requirePrincipal(req);
-      const epicKey = epicKeyParam(req);
-
-      const meta = await deps.reads.epicMeta(epicKey);
-      if (meta === null) {
-        throw new ApiError(
-          404,
-          'EPIC_NOT_FOUND',
-          `Epic ${epicKey} is not tracked. Add it on the Epics screen first.`,
+  app.get(
+    '/api/projects/:projectKey/epics/:epicKey/plan-conflicts',
+    asViewer,
+    async (req, reply) =>
+      handle(reply, async (): Promise<PlanConflictsResponse> => {
+        const epicKey = epicKeyParam(req);
+        const meta = await resolveEpicInProject(
+          (k) => deps.reads.epicMeta(k),
+          epicKey,
+          projectCtxOf(req).projectKey,
         );
-      }
-      assertCanRead(principal, meta.projectKey);
-
-      return conflictsOf({ epicKey, ...meta });
-    }),
+        return conflictsOf({ epicKey, ...meta });
+      }),
   );
 
   /**
-   * Tổng hợp cho màn hình Epics: số vi phạm của TỪNG Epic trong một lần gọi.
-   * PM chỉ nhận số của project mình phụ trách — cùng luật với biểu đồ (§9.3).
+   * Tổng hợp cho màn hình Epics: số vi phạm của TỪNG Epic trong một lần gọi —
+   * chỉ Epic của tenant trong URL.
    */
-  app.get('/api/plan-conflicts/summary', async (req, reply) =>
+  app.get('/api/projects/:projectKey/plan-conflicts/summary', asViewer, async (req, reply) =>
     handle(reply, async (): Promise<PlanConflictCountsResponse> => {
-      const principal = requirePrincipal(req);
-      const project = queryString(req, 'project');
-
-      const epics = (await deps.reads.listEpics(project)).filter(
-        (e) => principal.role !== 'PM' || principal.projects.includes(e.projectKey),
-      );
+      const epics = await deps.reads.listEpics(projectCtxOf(req).projectKey);
 
       // Tuần tự sẽ chậm khi có nhiều Epic; chạy đồng thời cả danh sách — mỗi
       // Epic chỉ là vài query đọc.
@@ -139,10 +132,4 @@ function epicKeyParam(req: FastifyRequest): string {
   const key = (req.params as { epicKey?: string }).epicKey?.trim();
   if (!key) throw new ApiError(400, 'BAD_REQUEST', 'The URL is missing the Epic key.');
   return key;
-}
-
-function queryString(req: FastifyRequest, name: string): string | null {
-  const raw = (req.query as Record<string, unknown>)[name];
-  if (typeof raw !== 'string' || raw.trim() === '') return null;
-  return raw.trim();
 }

@@ -3,12 +3,15 @@ import type { PrismaClient } from '../client.js';
 /**
  * Ghi nhật ký log giờ — PRD §4.2, E-03, E-17.
  *
- * `worklog_id` là ID gốc từ Jira và cũng là khoá chính, nên bản thân bảng đã tự
- * chống trùng: chạy job hai lần không thể sinh dòng thứ hai (C-6).
+ * Khoá chính là (project_key, worklog_id): ID gốc từ Jira chỉ duy nhất TRONG
+ * MỘT SITE, ghép với tenant thì bảng tự chống trùng như cũ — chạy job hai lần
+ * không thể sinh dòng thứ hai (C-6), và hai tenant khác site trùng ID số cũng
+ * không đè lên nhau.
  */
 
 export interface WorklogUpsertRow {
   worklogId: bigint;
+  projectKey: string;
   issueKey: string;
   epicKey: string;
   authorAccountId: string | null;
@@ -40,8 +43,8 @@ export async function upsertWorklogs(
     };
 
     await prisma.worklogEntry.upsert({
-      where: { worklogId: r.worklogId },
-      create: { worklogId: r.worklogId, ...data },
+      where: { projectKey_worklogId: { projectKey: r.projectKey, worklogId: r.worklogId } },
+      create: { worklogId: r.worklogId, projectKey: r.projectKey, ...data },
       update: data,
     });
   }
@@ -55,11 +58,15 @@ export async function upsertWorklogs(
  */
 export async function markWorklogsDeleted(
   prisma: PrismaClient,
+  projectKey: string,
   worklogIds: readonly bigint[],
 ): Promise<number> {
   if (worklogIds.length === 0) return 0;
+  // BẮT BUỘC scope theo tenant: /worklog/deleted của Jira trả ID của CẢ SITE —
+  // thiếu project_key thì danh sách xoá của site A có thể đóng dấu nhầm dòng
+  // của tenant nằm ở site B trùng ID số.
   const result = await prisma.worklogEntry.updateMany({
-    where: { worklogId: { in: [...worklogIds] }, isDeleted: false },
+    where: { projectKey, worklogId: { in: [...worklogIds] }, isDeleted: false },
     data: { isDeleted: true },
   });
   return result.count;

@@ -5,38 +5,49 @@ import {
   type PlanConflictCountsResponse,
   type PlanConflictsResponse,
 } from '@app/shared';
-import { apiClient, type ApiClient } from './client.js';
+import { useProjectKey } from '../project/project-context.js';
+import { apiClient, projectApiPath, type ApiClient } from './client.js';
 
 /**
- * Kiểm tra plan rơi vào ngày nghỉ — T-37.
+ * Kiểm tra plan rơi vào ngày nghỉ — T-37, theo phạm vi dự án.
  *
  * Chi tiết theo Epic cho màn Phase sub-tasks; bản tổng hợp (chỉ số đếm) cho màn
  * Epics — một lần gọi cho cả danh sách thay vì N lần.
  */
 
 export const planConflictKeys = {
-  epic: (epicKey: string) => ['plan-conflicts', epicKey] as const,
-  summary: ['plan-conflicts', 'summary'] as const,
+  epic: (projectKey: string, epicKey: string) => [projectKey, 'plan-conflicts', epicKey] as const,
+  summary: (projectKey: string) => [projectKey, 'plan-conflicts', 'summary'] as const,
 };
 
 export function usePlanConflicts(
   epicKey: string | null,
   client: ApiClient = apiClient,
 ): UseQueryResult<PlanConflictsResponse, Error> {
+  const projectKey = useProjectKey();
   return useQuery({
-    queryKey: planConflictKeys.epic(epicKey ?? ''),
+    queryKey: planConflictKeys.epic(projectKey, epicKey ?? ''),
     enabled: epicKey !== null && epicKey !== '',
     queryFn: ({ signal }) =>
-      client.get(`/epics/${epicKey ?? ''}/plan-conflicts`, planConflictsResponseSchema, { signal }),
+      client.get(
+        projectApiPath(projectKey, `/epics/${epicKey ?? ''}/plan-conflicts`),
+        planConflictsResponseSchema,
+        { signal },
+      ),
   });
 }
 
 export function usePlanConflictSummary(
   client: ApiClient = apiClient,
 ): UseQueryResult<PlanConflictCountsResponse, Error> {
+  const projectKey = useProjectKey();
   return useQuery({
-    queryKey: planConflictKeys.summary,
+    queryKey: planConflictKeys.summary(projectKey),
     queryFn: ({ signal }) =>
-      client.get('/plan-conflicts/summary', planConflictCountsResponseSchema, { signal }),
+      client.get(
+        projectApiPath(projectKey, '/plan-conflicts/summary'),
+        planConflictCountsResponseSchema,
+        { signal },
+      ),
   });
 }
