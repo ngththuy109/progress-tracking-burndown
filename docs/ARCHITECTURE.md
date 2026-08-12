@@ -32,12 +32,12 @@ ProgressTracking/
 ├── packages/
 │   ├── engine/              THUẦN TÍNH TOÁN — trái tim của hệ thống
 │   │   └── src/
-│   │       ├── parser/      tách tiêu đề Task & Sub-task (PRD §2.2, §2.9)
+│   │       ├── parser/      tách tiêu đề Task & Sub-task; GroupKeyResolver → group_path (PRD §2.2, §2.9; DYNAMIC-TIERS)
 │   │       ├── calendar/    ngày làm việc, múi giờ (PRD §9.4)
 │   │       ├── remaining/   3 quy tắc tính Remaining (PRD §4.3.2)
-│   │       ├── rollup/      tổng hợp ngày Phase (PRD §2.7)
+│   │       ├── rollup/      tổng hợp ngày Phase + N tầng (computeGroupRollups) (PRD §2.7)
 │   │       ├── planned/     đường Kế hoạch (PRD §4.3.1)
-│   │       ├── snapshot/    dựng snapshot 1 ngày (PRD §4.4)
+│   │       ├── snapshot/    snapshot 1 ngày + cây theo tầng (buildTierSnapshotForDay) (PRD §4.4)
 │   │       └── signboard/   cây quyết định trạng thái (PRD §6.3)
 │   ├── db/                  Prisma schema, migration, query
 │   │   ├── prisma/schema.prisma

@@ -45,10 +45,11 @@ compares against the stored snapshot, and names the culprit — who edited the e
 
 | Screen | What it answers |
 |---|---|
-| **Epics** | Which Epics are tracked, how each is syncing, and what data is missing |
-| **Burndown chart** | Whole Epic or a single Phase, Planned vs Actual over time |
+| **Epics** | Which Epics (or flat JQL scopes) are tracked, how each is syncing, and what data is missing |
+| **Burndown chart** | Whole Epic, a single Phase, or drill-down by tier, Planned vs Actual over time |
 | **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase |
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
+| **Tier structure** | Define 1..N logical grouping tiers per project; mark exactly one as the Phase tier |
 | **Signboard columns** | Which task types become columns |
 | **Phase settings** | Title patterns and matching rules, with a preview before saving |
 | **Days off** | Public holidays and make-up workdays for the Vietnam and Japan calendars |
@@ -219,6 +220,7 @@ All under [`docs/`](./docs), in Vietnamese:
 | File | For whom |
 |---|---|
 | [`PRD_Burndown_Engine.md`](./docs/PRD_Burndown_Engine.md) | The full product spec — rules, edge cases, risks |
+| [`DYNAMIC-TIERS-DESIGN.md`](./docs/DYNAMIC-TIERS-DESIGN.md) | Configurable 1..N grouping tiers + CONTAINER/QUERY scopes — design & what shipped |
 | [`PHASE-MAPPING.md`](./docs/PHASE-MAPPING.md) | How a ticket gets its Phase, and when a settings change shows up on screens |
 | [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Package boundaries and why they exist |
 | [`ONBOARDING.md`](./docs/ONBOARDING.md) | A new developer, day one |

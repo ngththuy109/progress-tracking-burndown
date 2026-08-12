@@ -186,7 +186,8 @@ Lý do: mọi màn hình đều phải xử lý ba trạng thái giống nhau (�
 | 2 | [tasks/README.md](./tasks/README.md) | 34 card, sơ đồ phụ thuộc, và **hai mục "Điều rút ra"** |
 | 3 | [tasks/CONVENTIONS.md](./tasks/CONVENTIONS.md) | 14 quy ước bắt buộc |
 | 4 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Cấu trúc thư mục và quy tắc phụ thuộc |
-| 5 | `packages/engine/test/fixtures/GD-01/` | Bộ dữ liệu dễ đọc nhất; hiểu nó là hiểu engine làm gì |
+| 5 | [DYNAMIC-TIERS-DESIGN.md](./DYNAMIC-TIERS-DESIGN.md) | Phân tầng linh động 1..N + scope CONTAINER/QUERY — vì sao 3 tầng nay là *mặc định* |
+| 6 | `packages/engine/test/fixtures/GD-01/` | Bộ dữ liệu dễ đọc nhất; hiểu nó là hiểu engine làm gì |
 
 **Đọc kỹ hai mục "Điều rút ra".** Chúng ghi lại những lỗi đã thật sự xảy ra trong dự án này, phần lớn là **lỗi im lặng** — mọi lệnh báo xanh trong khi có thứ đang hỏng.
 

@@ -35,6 +35,15 @@
 | 13 | **US-09** Kế thừa theo project | Mở một project, bấm **Override** phần mẫu tiêu đề | Khu Phase và khu luật khớp **vẫn** hiện nhãn *inherited from the Default set* | ☐ |
 | 14 | **US-09** Quay lại version cũ | Mở tab **History**, bấm **Roll back to** một version | Tạo version mới; version bị bỏ **vẫn còn** trong danh sách | ☐ |
 
+## Cấu trúc tầng & scope linh động (phân tầng linh động)
+
+| # | User story | Thao tác | Đạt khi thấy | ☐ |
+|---|---|---|---|---|
+| 14a | **Tầng** Khai cấu trúc tầng | Mở *Cấu trúc tầng*, thêm/xoá/di chuyển tầng, chọn nguồn khoá | Sửa được danh sách tầng, giá trị/luật/mẫu của từng tầng; ba preset (3 tầng / 2 tầng / phẳng) dựng sẵn được | ☐ |
+| 14b | **Tầng** Đúng một tầng Phase | Bỏ đánh dấu Phase hoặc đánh dấu hai tầng rồi Lưu | Chặn lưu, báo rõ "phải đúng một tầng Phase" | ☐ |
+| 14c | **Tầng** Không đổi hành vi mặc định | Với Epic 3 tầng cũ, không đổi cấu hình | Burndown/Signboard/số liệu **y hệt trước** (config mặc định = 1 tầng Phase) | ☐ |
+| 14d | **Scope QUERY** Đăng ký project phẳng | Màn *Epics* → panel *Theo dõi project phẳng (JQL)* → đặt ID scope + JQL + project key → Thêm | Scope được thêm (không cần Epic trên Jira), đẩy backfill; sau đồng bộ có biểu đồ | ☐ |
+
 ## Biểu đồ Burndown
 
 | # | User story | Thao tác | Đạt khi thấy | ☐ |
@@ -47,6 +56,7 @@
 | 20 | **US-06** Dấu mốc phát sinh việc | Xem khu *Chart markers* | Ngày có phát sinh việc ghi rõ thêm bao nhiêu giờ và Sub-task nào gây ra | ☐ |
 | 21 | **US-06** Kế hoạch bị dời | Nếu Epic từng bị dời mốc | Ghi rõ dời từ ngày nào sang ngày nào, mấy ngày làm việc, do Sub-task nào | ☐ |
 | 22 | **US-03** Nói rõ đường Kế hoạch trôi | Đọc chú thích dưới biểu đồ | Ghi rõ đường Kế hoạch được tính lại sau mỗi lần đồng bộ, **kể cả phần đã qua** | ☐ |
+| 23 | **Phân tầng** Drill-down theo tầng | Với Epic **đa tầng**, bấm tab *Theo tầng* | Tab chỉ hiện khi Epic đa tầng; đi từ gốc → tầng 1 → … bằng breadcrumb, mỗi mức vẽ con trực tiếp; Epic 1 tầng **không** thấy tab này | ☐ |
 
 ## Bảng Signboard
 

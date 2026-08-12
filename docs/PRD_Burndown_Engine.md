@@ -160,6 +160,14 @@ Ma trận **Function × loại task**: hàng là chức năng nghiệp vụ (l�
 
 ### 2.1. Cấu trúc 3 tầng
 
+> **⚠ Cập nhật — Phân tầng linh động (đã triển khai):** Mô hình 3 tầng dưới đây nay là
+> **cấu hình MẶC ĐỊNH** của một mô hình **1..N tầng cấu hình được**. Bất biến là **VAI TRÒ**
+> chứ không phải loại issue: gốc = đơn vị theo dõi (một issue container **hoặc** một phạm vi
+> JQL), **đúng một tầng** đánh dấu là Phase, lá = đơn vị mang số liệu (khai theo cấu hình,
+> không cứng là "Sub-task"). Mỗi lá mang một **vectơ khoá** `group_path` (mặc định `[phase_code]`);
+> cộng dồn chảy từ lá lên **mọi nút tiền tố**. Chi tiết + mọi thay đổi schema/engine/UI xem
+> [`DYNAMIC-TIERS-DESIGN.md`](./DYNAMIC-TIERS-DESIGN.md). Epic 3 tầng đang chạy **không đổi hành vi**.
+
 ```mermaid
 flowchart TD
     E["EPIC<br/>= Toàn bộ dự án / mảng dự án<br/>VD: PAY-100 Cổng thanh toán"]
@@ -182,6 +190,10 @@ flowchart TD
 **Nguyên tắc vàng:**
 
 > **Chỉ Sub-task mới mang số liệu thật.** Task (Phase) và Epic **không tự có** số giờ riêng — số của chúng là **tổng cộng dồn** từ các Sub-task bên dưới. Nếu ai đó lỡ nhập Original Estimate trực tiếp vào Task, hệ thống **bỏ qua** giá trị đó để tránh đếm 2 lần.
+>
+> *(Phân tầng linh động: "Sub-task" ở đây là **lá của cấu hình mặc định**. Tổng quát, lá =
+> đơn vị mang số liệu do cấu hình khai — vẫn giữ nguyên tắc "chỉ lá mang số, tầng trên là tổng
+> cộng dồn".)*
 
 ### 2.2. Quy tắc nhận diện Phase từ tiêu đề
 
@@ -417,6 +429,10 @@ Dự án đích hiển thị trạng thái bằng tiếng Nhật. Tên hiển th
 
 ### 2.4. Cách cộng dồn số liệu
 
+> *(Phân tầng linh động: công thức 3 tầng dưới đây là trường hợp mặc định. Tổng quát, số liệu
+> mỗi lá cộng vào **mọi nút tiền tố** của `group_path` — `computeGroupRollups`/`buildTierSnapshotForDay`.
+> Quy tắc C-11 "cộng dồn KHÔNG lọc bỏ gì" giữ nguyên.)*
+
 Cộng dồn theo đúng 3 tầng, tính lần lượt từ dưới lên:
 
 ```
@@ -500,6 +516,12 @@ Hai trường cuối là custom field chứa ngày kế hoạch của Sub-task �
 ### 2.6. Sổ đăng ký Epic — danh sách Epic đang theo dõi
 
 Hệ thống **không tự động theo dõi mọi Epic** trên Jira. PM phải chủ động thêm Epic vào danh sách. Bảng `tracked_epic` là **nguồn duy nhất** trả lời câu hỏi *"job đêm phải chạy cho những Epic nào?"*.
+
+> **⚠ Cập nhật — Tracked scope (phân tầng linh động).** "Epic" ở đây là kiểu scope **CONTAINER**
+> mặc định. Nay đăng ký được thêm scope **QUERY** (project phẳng): người dùng đặt một ID scope
+> tuỳ ý + JQL tìm lá, KHÔNG cần Epic trên Jira nên **bỏ qua** cửa kiểm "phải là Epic"
+> (`NOT_AN_EPIC`) ở §2.6.3, và `epic_id` để trống. `POST /api/epics` nhận thêm trường `scope`
+> `{scopeJql, leafIssueTypes, projectKey}`. Xem [`DYNAMIC-TIERS-DESIGN.md`](./DYNAMIC-TIERS-DESIGN.md) §6.
 
 #### 2.6.1. Vòng đời của một Epic trong hệ thống
 
@@ -1906,6 +1928,21 @@ async function reconstructEpic(
 
 ### 4.6. Thiết kế Database — PostgreSQL
 
+> **⚠ Cập nhật — Phân tầng linh động (đã triển khai).** Sơ đồ dưới là **nền 3 tầng gốc**;
+> tính năng tầng linh động THÊM (chỉ thêm, C-13) các thứ sau — xem migration
+> `20260812000000_dynamic_tiers`, `_group_rollup`, `_query_scope` và `schema.prisma`:
+>
+> - **Bảng cấu hình tầng** (con của `phase_config_set`, versioned như `phase_*`):
+>   `group_tier`, `group_tier_definition`, `group_tier_rule`, `group_tier_title_pattern`.
+> - **Bảng `group_rollup`** — tổng quát `phase_rollup` cho MỌI nút tiền tố của `group_path`
+>   (khoá `(epic_key, group_key)` với `group_key = JSON.stringify(group_path)`). Chỉ ghi khi
+>   Epic đa tầng; Epic 1 tầng vẫn dùng `phase_rollup`.
+> - **Cột thêm:** `jira_issue.group_path JSONB` (vectơ khoá tầng của lá, mặc định `[phase_code]`);
+>   `daily_snapshot.per_tier JSONB` (cây tổng hợp theo tầng, song song `per_phase`);
+>   `tracked_epic.scope_type` (`CONTAINER`|`QUERY`, mặc định CONTAINER) + `scope_jql` +
+>   `leaf_issue_types TEXT[]`; và `tracked_epic.epic_id` **nay NULLABLE** (scope QUERY không có
+>   issue container). `phase_code` GIỮ NGUYÊN = phần tử tầng Phase (tương thích ngược).
+>
 > **Thứ tự tạo bảng khi viết migration:** các bảng dưới đây được sắp xếp theo **chủ đề** cho dễ đọc, không phải theo thứ tự chạy được ngay. Có hai ràng buộc khoá ngoại đi ngược:
 >
 > - `tracked_epic` (bảng 4) tham chiếu `work_calendar` (bảng 8)
@@ -2380,7 +2417,13 @@ CREATE TABLE project (
 | **Một Phase** | Chỉ khối lượng các Sub-task thuộc Phase đó | Co lại đúng `plan_start` → `plan_end` của Phase |
 | **So sánh** | Nhiều Phase chồng lên nhau, mỗi Phase một màu | Hợp của các Phase được chọn |
 
-Đổi Phase **không phải tải lại trang** — dữ liệu mọi Phase đã nằm sẵn trong `per_phase` của snapshot.
+> **⚠ Cập nhật giao diện thực tế:** màn hình hiện có **hai** chế độ cơ bản — *Tổng Epic* và
+> *Một Phase* (chế độ **So sánh** đã gỡ khỏi UI, xem UAT mục 17; hợp đồng API `/phases/compare`
+> vẫn còn). Phân tầng linh động THÊM chế độ **"Theo tầng"** (drill-down): chỉ hiện khi Epic
+> **đa tầng**, đi từ gốc → tầng 1 → … → lá bằng breadcrumb; mỗi mức vẽ CON TRỰC TIẾP của nút
+> đang mở. Nguồn dữ liệu là `tierSeries` (mọi nút tiền tố), gom từ `daily_snapshot.per_tier`.
+
+Đổi Phase **không phải tải lại trang** — dữ liệu mọi Phase đã nằm sẵn trong `per_phase` của snapshot (và mọi nút tầng nằm sẵn trong `per_tier`).
 
 ### 5.2. Giao diện
 
@@ -2969,6 +3012,14 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 | リリース | Phát hành | → `phase_code = RELEASE` |
 
 ## Phụ lục B — API cung cấp cho Frontend
+
+> **⚠ Cập nhật — Phân tầng linh động (đã triển khai):**
+> - `GET /api/burndown/epic/:epicKey` trả THÊM `tierSeries` (một chuỗi cho mỗi nút tiền tố của
+>   cây tầng, kèm `groupPath`/`tierOrder`) để màn hình drill-down "Theo tầng". Trống với Epic 1 tầng.
+> - `GET /api/config/phase` trả THÊM `tiers`; lưu qua cùng `PUT /api/config/phase` (trường `tiers`
+>   nằm trong payload). Validate thêm luật tầng (đúng một tầng Phase, không trùng mã/thứ tự).
+> - `POST /api/epics` nhận thêm trường tuỳ chọn `scope { scopeJql, leafIssueTypes, projectKey }` —
+>   đăng ký scope QUERY (không tra Jira Epic, bỏ qua `NOT_AN_EPIC`).
 
 | Method | Đường dẫn | Mô tả |
 |---|---|---|

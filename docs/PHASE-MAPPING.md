@@ -10,6 +10,14 @@
 
 ## 1. Ai có Phase, và Phase đến từ đâu
 
+> **⚠ Cập nhật — Phân tầng linh động.** Sơ đồ dưới là **cấu hình mặc định (một tầng Phase,
+> nguồn `PARENT_TASK_TITLE`)**. Nay Phase chỉ là **một tầng** (tầng `role=PHASE`) trong vectơ
+> `group_path` gồm 1..N tầng; mỗi tầng có nguồn khoá riêng: `PARENT_TASK_TITLE`, `SELF_TITLE`
+> (bóc từ chính title lá), `SUBTASK_TITLE_TOKEN`, `LABEL`, `CUSTOM_FIELD` (v2). Bộ giải khoá là
+> `GroupKeyResolver` (`packages/engine/src/parser/resolve-group-keys.ts`). `phase_code` GIỮ
+> NGUYÊN = phần tử tầng Phase (Signboard + tương thích ngược). Xem
+> [`DYNAMIC-TIERS-DESIGN.md`](./DYNAMIC-TIERS-DESIGN.md).
+
 ```
 EPIC      → không có Phase (phase_code = NULL)
 TASK      → suy ra TỪ TITLE của chính nó — nơi DUY NHẤT việc "mapping" xảy ra
@@ -114,13 +122,15 @@ Kết quả mapping nằm trên **bảng `jira_issue`**, ghi MỘT LẦN lúc đ
 
 | Cột | Giữ gì |
 |---|---|
-| `phase_code` | **Nguồn sự thật DUY NHẤT** về Phase của ticket. Task = kết quả parse; Sub-task = copy từ cha; Epic = NULL |
+| `group_path` | **Vectơ khoá đầy đủ** theo tầng (JSONB, chỉ lá). Engine cộng dồn theo mọi tiền tố. Mặc định 1 tầng ⇒ `[phase_code]` |
+| `phase_code` | Phần tử **tầng Phase** của `group_path` (giữ cho Signboard + tương thích ngược). Task = kết quả parse; Sub-task = copy từ cha; Epic = NULL |
 | `raw_phase_label` | Chữ bóc từ title Task khi **không** khớp luật nào — nuôi panel Unmatched |
 | `sb_phase_raw` | Chữ `[Phase]` trong title Sub-task — **chỉ để đối chiếu**, không bao giờ dùng phân loại |
 
 Quy tắc mapping nằm ở bộ bảng cấu hình có version (`phase_config_set` +
 `phase_title_pattern`, `phase_match_rule`, `phase_definition`,
-`subtask_title_pattern` — schema ở `packages/db/prisma/schema.prisma`).
+`subtask_title_pattern`, và bộ **`group_tier*`** cho tầng linh động —
+schema ở `packages/db/prisma/schema.prisma`).
 
 **Mọi thứ phía sau chỉ ĐỌC `phase_code`, không parse lại:** `phase_rollup` gom
 ngày kế hoạch theo Phase, `daily_snapshot.per_phase` giữ số liệu từng Phase mỗi
@@ -206,8 +216,9 @@ thất bại, đã trả về set).
 | Chuẩn hoá chuỗi | `packages/engine/src/parser/normalize.ts` |
 | Dịch mẫu `{name}` sang regex | `packages/engine/src/parser/compile-pattern.ts` |
 | Gộp kế thừa GLOBAL/PROJECT | `packages/engine/src/config/merge-inheritance.ts` |
-| Gán `phase_code` lúc đồng bộ (giai đoạn 3) | `apps/worker/src/pipeline/persist-issues.ts` |
-| Đọc cây issue 2 tầng (chỗ quyết định lan truyền) | `apps/worker/src/pipeline/fetch-epic-tree.ts` |
+| Gán `phase_code` + `group_path` lúc đồng bộ (giai đoạn 3) | `apps/worker/src/pipeline/persist-issues.ts` |
+| Đọc cây issue theo scope (CONTAINER 2 tầng; nhánh QUERY bằng JQL) | `apps/worker/src/pipeline/fetch-epic-tree.ts` |
+| Suy vectơ khoá tầng `group_path` của lá | `packages/engine/src/parser/resolve-group-keys.ts` |
 | Dựng lại rollup + snapshot (giai đoạn 4–5) | `apps/worker/src/jobs/reconstruct-epic.job.ts` |
 | Signboard truy vấn theo `phase_code` của Sub-task | `apps/api/src/adapters/signboard.adapters.ts` |
 | Lưu config + đánh dấu `dirty:epics` | `apps/api/src/services/phase-config.service.ts` |
