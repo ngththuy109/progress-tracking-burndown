@@ -414,6 +414,70 @@ describe('xoá mềm', () => {
     expect(store.worklogRows.get('9001')).toBeDefined();
     expect(store.worklogRows.get('9001')!.isDeleted).toBe(true);
   });
+
+  it('full resync đánh dấu worklog đã biến mất khỏi Jira, dù /worklog/deleted rỗng', async () => {
+    // Task đã Done, log giờ 10/8 và 11/8 → cả hai được ghi (actual = 10/8~11/8).
+    const both = [
+      { id: '9001', issueId: '2000', issueKey: 'PAY-200', seconds: 3600, started: '2026-08-10T01:00:00.000+0000', created: '2026-08-10T02:00:00.000+0000' },
+      { id: '9002', issueId: '2000', issueKey: 'PAY-200', seconds: 3600, started: '2026-08-11T01:00:00.000+0000', created: '2026-08-11T02:00:00.000+0000' },
+    ];
+    await run({ issues: sampleTree(), worklogs: both }).result;
+    expect(store.worklogRows.get('9002')!.isDeleted).toBe(false);
+
+    // Phát hiện log nhầm → xoá worklog 11/8 trên Jira → chạy lại FULL RESYNC.
+    // Jira KHÔNG còn trả 9002, và /worklog/deleted rỗng vì full resync không có
+    // mốc `since`. Trước khi sửa, 9002 kẹt ở is_deleted=false nên actual_end vẫn
+    // là 11/8 chứ không lùi về 10/8.
+    const r = await run(
+      { issues: sampleTree(), worklogs: [both[0]!] },
+      'PAY-100',
+      { ignoreWatermark: true },
+    ).result;
+
+    expect(r.worklogsDeleted).toBe(1);
+    expect(store.worklogRows.get('9002')).toBeDefined(); // dòng vẫn còn (E-17)
+    expect(store.worklogRows.get('9002')!.isDeleted).toBe(true);
+    // 10/8 vẫn sống — chỉ worklog thật sự biến mất mới bị đánh dấu.
+    expect(store.worklogRows.get('9001')!.isDeleted).toBe(false);
+  });
+
+  it('full resync đối soát đúng cả khi worklog cuối cùng của issue bị xoá', async () => {
+    // Chỉ có đúng một worklog: xoá nó đi thì lượt lấy đầy đủ trả về rỗng cho
+    // issue. Vẫn phải đánh dấu, nếu không "issue không còn worklog" sẽ bị bỏ sót.
+    const one = [
+      { id: '9003', issueId: '2001', issueKey: 'PAY-201', seconds: 3600, started: '2026-08-10T01:00:00.000+0000', created: '2026-08-10T02:00:00.000+0000' },
+    ];
+    await run({ issues: sampleTree(), worklogs: one }).result;
+    expect(store.worklogRows.get('9003')!.isDeleted).toBe(false);
+
+    const r = await run({ issues: sampleTree(), worklogs: [] }, 'PAY-100', {
+      ignoreWatermark: true,
+    }).result;
+
+    expect(r.worklogsDeleted).toBe(1);
+    expect(store.worklogRows.get('9003')!.isDeleted).toBe(true);
+  });
+
+  it('đồng bộ TĂNG DẦN KHÔNG đối soát xoá nhầm worklog không đổi', async () => {
+    // Đối soát chỉ an toàn khi có TẬP ĐẦY ĐỦ (full resync). Ở chế độ tăng dần,
+    // worklog lấy về chỉ gồm bản vừa đổi — đối soát sẽ xoá nhầm sạch phần còn lại.
+    const both = [
+      { id: '9001', issueId: '2000', issueKey: 'PAY-200', seconds: 3600, started: '2026-03-05T01:00:00.000+0000', created: '2026-03-05T02:00:00.000+0000' },
+      { id: '9002', issueId: '2000', issueKey: 'PAY-200', seconds: 3600, started: '2026-03-06T01:00:00.000+0000', created: '2026-03-06T02:00:00.000+0000' },
+    ];
+    await run({ issues: sampleTree(), worklogs: both }).result;
+
+    // Chuyển sang tăng dần: chỉ 9001 nằm trong cửa sổ /worklog/updated.
+    store.epicState.set('PAY-100', {
+      status: 'ACTIVE',
+      lastSyncedAt: new Date('2026-03-08T00:00:00.000Z'),
+      lastError: null,
+    });
+    const r = await run({ issues: sampleTree(), worklogs: [both[0]!] }).result;
+
+    expect(r.worklogsDeleted).toBe(0);
+    expect(store.worklogRows.get('9002')!.isDeleted).toBe(false);
+  });
 });
 
 describe('log giờ lùi ngày', () => {

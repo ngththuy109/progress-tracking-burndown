@@ -100,6 +100,7 @@ export {
 export {
   upsertWorklogs,
   markWorklogsDeleted,
+  markWorklogsDeletedMissing,
   type WorklogUpsertRow,
 } from './repositories/worklog.repository.js';
 
