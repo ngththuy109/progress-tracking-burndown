@@ -3,8 +3,10 @@ import {
   UNCLASSIFIED_PHASE,
   type EffectiveConfig,
   type GroupTier,
+  type SubtaskParseResult,
 } from '@app/shared';
 import { TaskTitleParser } from './parse-task-title.js';
+import { SubtaskTitleParser } from './parse-subtask-title.js';
 import type { SafeRegexRunner } from './safe-regex.js';
 
 /**
@@ -29,9 +31,20 @@ export interface ResolvedGroupKeys {
 export interface ResolveGroupKeysInput {
   /** Phase của Task cha, đã tính sẵn ở persist-issues — nguồn cho tầng `PARENT_TASK_TITLE`. */
   readonly parentPhase: string;
-  /** Tiêu đề CHÍNH lá — nguồn cho tầng `SELF_TITLE` (case project 2 tầng / phẳng §2.4–2.5). */
+  /** Tiêu đề CHÍNH lá — nguồn cho tầng `SELF_TITLE` / `SUBTASK_TITLE_TOKEN` (§2.4–2.5). */
   readonly leafTitle: string;
+  /** Nhãn (labels) Jira của lá — nguồn cho tầng `LABEL`. */
+  readonly leafLabels?: readonly string[];
 }
+
+/** Token trong mẫu tiêu đề Sub-task → trường tương ứng của `SubtaskParseResult`. */
+const TOKEN_FIELD: Record<string, (p: SubtaskParseResult) => string | null> = {
+  project: (p) => p.sbProject,
+  team: (p) => p.sbTeam,
+  phase: (p) => p.sbPhaseRaw,
+  function: (p) => p.functionKey,
+  task: (p) => p.sbTaskRaw,
+};
 
 export class GroupKeyResolver {
   private readonly tiers: readonly GroupTier[];
@@ -39,6 +52,8 @@ export class GroupKeyResolver {
   private readonly phaseTierIndex: number;
   /** Parser dựng SẴN cho tầng `SELF_TITLE`; `null` cho tầng không cần parse tiêu đề lá. */
   private readonly selfParsers: readonly (TaskTitleParser | null)[];
+  /** Parser Sub-task dùng chung cho mọi tầng `SUBTASK_TITLE_TOKEN`; `null` nếu không có tầng nào. */
+  private readonly subtaskParser: SubtaskTitleParser | null;
 
   constructor(config: EffectiveConfig, runner?: SafeRegexRunner) {
     // Vắng `tiers` (payload cũ, hoặc mergeInheritance chưa mang tầng) ⇒ mirror 1 tầng
@@ -59,6 +74,11 @@ export class GroupKeyResolver {
         ? new TaskTitleParser(tierAsEffectiveConfig(t, config), runner)
         : null,
     );
+
+    // Chỉ dựng parser Sub-task khi thực sự có tầng token — tránh cảnh báo/chi phí thừa.
+    this.subtaskParser = tiers.some((t) => t.sourceType === 'SUBTASK_TITLE_TOKEN')
+      ? new SubtaskTitleParser(config, runner)
+      : null;
   }
 
   resolve(input: ResolveGroupKeysInput): ResolvedGroupKeys {
@@ -72,11 +92,16 @@ export class GroupKeyResolver {
         // từ khoá của tầng). Dùng cho project 2 tầng / phẳng (§2.4–2.5).
         case 'SELF_TITLE':
           return this.selfParsers[i]!.parse(input.leafTitle).phaseCode;
+        // Lấy một token trong mẫu tiêu đề Sub-task ({project}/{team}/{function}…).
+        case 'SUBTASK_TITLE_TOKEN':
+          return resolveToken(this.subtaskParser, t, input);
+        // Lấy từ nhãn Jira của lá theo tiền tố (VD `team:` → "alpha").
+        case 'LABEL':
+          return resolveLabel(t, input.leafLabels ?? []);
         default:
-          // SUBTASK_TITLE_TOKEN / LABEL / CUSTOM_FIELD chỉ tới được khi Config UI đa
-          // tầng ra đời (Vòng 3). Fail-fast — không đoán bừa một khoá sai.
+          // CUSTOM_FIELD để v2 (cần map field như wbs_*). Fail-fast — không đoán bừa.
           throw new Error(
-            `GroupKeyResolver: nguồn khoá "${t.sourceType}" (tầng ${t.code}) chưa hỗ trợ ở Vòng 2.`,
+            `GroupKeyResolver: nguồn khoá "${t.sourceType}" (tầng ${t.code}) chưa hỗ trợ.`,
           );
       }
     });
@@ -106,4 +131,36 @@ function tierAsEffectiveConfig(tier: GroupTier, base: EffectiveConfig): Effectiv
       matchPriority: r.matchPriority,
     })),
   };
+}
+
+/** Lấy khoá cho tầng `SUBTASK_TITLE_TOKEN`: parse tiêu đề lá rồi lấy token đã khai. */
+function resolveToken(
+  parser: SubtaskTitleParser | null,
+  tier: GroupTier,
+  input: ResolveGroupKeysInput,
+): string {
+  if (parser === null) {
+    throw new Error(`GroupKeyResolver: tầng ${tier.code} khai SUBTASK_TITLE_TOKEN nhưng thiếu parser.`);
+  }
+  const token = String(tier.sourceConfig?.['token'] ?? '').toLowerCase();
+  const pick = TOKEN_FIELD[token];
+  if (pick === undefined) {
+    throw new Error(
+      `GroupKeyResolver: tầng ${tier.code} khai token "${token}" không hợp lệ ` +
+        `(chọn một trong: ${Object.keys(TOKEN_FIELD).join(', ')}).`,
+    );
+  }
+  const raw = pick(parser.parse(input.leafTitle, input.parentPhase));
+  return raw !== null && raw.trim() !== '' ? raw : UNCLASSIFIED_PHASE;
+}
+
+/** Lấy khoá cho tầng `LABEL`: nhãn đầu tiên khớp tiền tố, đã cắt tiền tố. */
+function resolveLabel(tier: GroupTier, labels: readonly string[]): string {
+  const prefix = String(tier.sourceConfig?.['prefix'] ?? '');
+  for (const label of labels) {
+    // Không khai tiền tố ⇒ lấy nhãn đầu tiên nguyên vẹn.
+    if (prefix === '') return label;
+    if (label.startsWith(prefix)) return label.slice(prefix.length);
+  }
+  return UNCLASSIFIED_PHASE;
 }

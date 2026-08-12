@@ -223,7 +223,11 @@ export function buildRecords(args: {
     // Vectơ khoá nhóm N tầng (DYNAMIC-TIERS-DESIGN.md §5). Config mặc định (1 tầng
     // PHASE/PARENT_TASK_TITLE) ⇒ groupPath = [parentPhase] và phaseCode = parentPhase —
     // ĐÚNG bằng `parsed.phaseCode` hôm nay (Sub-task luôn kế thừa Phase của Task cha).
-    const keys = groupResolver.resolve({ parentPhase, leafTitle: summary });
+    const keys = groupResolver.resolve({
+      parentPhase,
+      leafTitle: summary,
+      leafLabels: labelsOf(s.fields),
+    });
 
     issues.push({
       ...baseRecord(s, ISSUE_TYPE.SUBTASK, epicKey, fields),
@@ -358,6 +362,12 @@ function parentKeyOf(fields: Record<string, unknown>): string | null {
 
 function stringField(v: unknown): string {
   return typeof v === 'string' ? v : '';
+}
+
+/** Nhãn Jira (`labels`) của issue — mảng chuỗi; nguồn cho tầng nhóm dựa `LABEL`. */
+function labelsOf(fields: Record<string, unknown>): string[] {
+  const raw = fields['labels'];
+  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
 }
 
 /** Jira để `null` khi trường thời gian trống — coi như 0, không phải NaN. */

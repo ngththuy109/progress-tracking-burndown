@@ -30,11 +30,16 @@ import {
  * field mở sau — chỉ hiện những nguồn engine đã chạy được.
  */
 
-/** Chỉ hiện nguồn khoá engine ĐÃ hỗ trợ (resolver Vòng 2/3). Mở dần khi engine mở. */
+/** Chỉ hiện nguồn khoá engine ĐÃ hỗ trợ (resolver Vòng 3). CUSTOM_FIELD để v2. */
 const SUPPORTED_SOURCES: readonly { readonly value: GroupSourceType; readonly label: string }[] = [
   { value: 'PARENT_TASK_TITLE', label: 'Tiêu đề Task cha' },
   { value: 'SELF_TITLE', label: 'Tiêu đề chính lá' },
+  { value: 'SUBTASK_TITLE_TOKEN', label: 'Token trong tiêu đề Sub-task' },
+  { value: 'LABEL', label: 'Nhãn Jira (label)' },
 ];
+
+/** Token bóc được từ mẫu tiêu đề Sub-task chuẩn. */
+const TOKEN_OPTIONS = ['project', 'team', 'phase', 'function', 'task'] as const;
 
 /** Bóc phần ConfigPayload ra khỏi EffectiveConfig (bỏ meta scope/version/inherited). */
 function payloadFromConfig(c: EffectiveConfig): ConfigPayload {
@@ -261,6 +266,8 @@ function TierCard({
         <DeleteButton label={name} onClick={() => dispatch({ type: 'REMOVE_TIER', index })} />
       </div>
 
+      <TierSourceParam tier={tier} index={index} dispatch={dispatch} />
+
       <IssueList issues={errors.atRow('tiers', index)} />
 
       <TierDefinitions tier={tier} index={index} dispatch={dispatch} />
@@ -268,6 +275,55 @@ function TierCard({
       <TierPatterns tier={tier} index={index} dispatch={dispatch} />
     </li>
   );
+}
+
+/** Tham số phụ của nguồn khoá: tên token (SUBTASK_TITLE_TOKEN) hoặc tiền tố (LABEL). */
+function TierSourceParam({
+  tier,
+  index,
+  dispatch,
+}: {
+  readonly tier: GroupTier;
+  readonly index: number;
+  readonly dispatch: (a: TierAction) => void;
+}) {
+  if (tier.sourceType === 'SUBTASK_TITLE_TOKEN') {
+    const token = String(tier.sourceConfig?.['token'] ?? '');
+    return (
+      <label className="field field--inline">
+        <span>Token</span>
+        <select
+          className="input"
+          value={token}
+          aria-label={`Token nguồn tầng ${index + 1}`}
+          onChange={(e) => dispatch({ type: 'SET_SOURCE_CONFIG', index, key: 'token', value: e.target.value })}
+        >
+          <option value="">(chọn token)</option>
+          {TOKEN_OPTIONS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  if (tier.sourceType === 'LABEL') {
+    const prefix = String(tier.sourceConfig?.['prefix'] ?? '');
+    return (
+      <label className="field field--inline">
+        <span>Tiền tố nhãn</span>
+        <input
+          className="input input--code"
+          value={prefix}
+          placeholder="team:"
+          aria-label={`Tiền tố nhãn tầng ${index + 1}`}
+          onChange={(e) => dispatch({ type: 'SET_SOURCE_CONFIG', index, key: 'prefix', value: e.target.value })}
+        />
+      </label>
+    );
+  }
+  return null;
 }
 
 function TierDefinitions({

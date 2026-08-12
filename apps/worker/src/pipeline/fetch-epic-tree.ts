@@ -92,6 +92,8 @@ export async function fetchEpicTree(
     'timespent',
     'created',
     'updated',
+    // Nhãn Jira — nguồn khoá cho tầng nhóm dựa `LABEL` (DYNAMIC-TIERS-DESIGN.md §2.3).
+    'labels',
     ...fieldIdsForSearch(args.fields),
   ];
 

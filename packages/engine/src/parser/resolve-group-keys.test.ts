@@ -139,8 +139,81 @@ describe('nhiều tầng — phaseCode lấy đúng tầng role=PHASE (project p
   });
 });
 
-describe('nguồn khoá chưa hỗ trợ ở Vòng 2 — fail-fast', () => {
-  it('LABEL / SUBTASK_TITLE_TOKEN / CUSTOM_FIELD ném lỗi rõ ràng', () => {
+describe('tầng SUBTASK_TITLE_TOKEN — bóc token trong tiêu đề Sub-task', () => {
+  const config = mkConfig({
+    subtaskPatterns: [{ patternText: '[{project}][{team}][{phase}][{function}]_{task}', sortOrder: 1 }],
+    tiers: [
+      {
+        tierOrder: 1,
+        code: 'TEAM',
+        labelVi: 'Team',
+        labelJa: null,
+        role: 'PHASE',
+        sourceType: 'SUBTASK_TITLE_TOKEN',
+        sourceConfig: { token: 'team' },
+        definitions: [],
+        rules: [],
+        titlePatterns: [],
+        displayOrder: 0,
+      },
+    ],
+  });
+
+  it('lấy đúng token {team} từ tiêu đề lá', () => {
+    const resolver = new GroupKeyResolver(config);
+    expect(resolver.resolve({ parentPhase: 'x', leafTitle: '[PAY][TeamA][Design][Login]_Create' })).toEqual({
+      groupPath: ['TeamA'],
+      phaseCode: 'TeamA',
+    });
+  });
+
+  it('tiêu đề không khớp mẫu ⇒ token rỗng ⇒ UNCLASSIFIED', () => {
+    const resolver = new GroupKeyResolver(config);
+    expect(resolver.resolve({ parentPhase: 'x', leafTitle: 'tiêu đề trần' }).phaseCode).toBe('UNCLASSIFIED');
+  });
+
+  it('token không hợp lệ ⇒ ném lỗi rõ ràng', () => {
+    const bad = mkConfig({
+      subtaskPatterns: [{ patternText: '[{project}][{team}][{phase}][{function}]_{task}', sortOrder: 1 }],
+      tiers: [
+        { tierOrder: 1, code: 'X', labelVi: 'X', labelJa: null, role: 'PHASE', sourceType: 'SUBTASK_TITLE_TOKEN', sourceConfig: { token: 'bogus' }, definitions: [], rules: [], titlePatterns: [], displayOrder: 0 },
+      ],
+    });
+    const resolver = new GroupKeyResolver(bad);
+    expect(() => resolver.resolve({ parentPhase: 'x', leafTitle: '[PAY][TeamA][Design][Login]_Create' })).toThrow(/không hợp lệ/);
+  });
+});
+
+describe('tầng LABEL — bóc khoá từ nhãn Jira theo tiền tố', () => {
+  const labelTier = (prefix: string | null) =>
+    mkConfig({
+      tiers: [
+        { tierOrder: 1, code: 'TEAM', labelVi: 'Team', labelJa: null, role: 'PHASE', sourceType: 'LABEL', sourceConfig: prefix === null ? null : { prefix }, definitions: [], rules: [], titlePatterns: [], displayOrder: 0 },
+      ],
+    });
+
+  it('nhãn khớp tiền tố ⇒ cắt tiền tố làm khoá', () => {
+    const resolver = new GroupKeyResolver(labelTier('team:'));
+    expect(resolver.resolve({ parentPhase: 'x', leafTitle: 'y', leafLabels: ['urgent', 'team:alpha'] })).toEqual({
+      groupPath: ['alpha'],
+      phaseCode: 'alpha',
+    });
+  });
+
+  it('không nhãn nào khớp / không có nhãn ⇒ UNCLASSIFIED', () => {
+    const resolver = new GroupKeyResolver(labelTier('team:'));
+    expect(resolver.resolve({ parentPhase: 'x', leafTitle: 'y', leafLabels: ['urgent'] }).phaseCode).toBe('UNCLASSIFIED');
+    expect(resolver.resolve({ parentPhase: 'x', leafTitle: 'y' }).phaseCode).toBe('UNCLASSIFIED');
+  });
+
+  it('không khai tiền tố ⇒ lấy nhãn đầu tiên nguyên vẹn', () => {
+    const resolver = new GroupKeyResolver(labelTier(null));
+    expect(resolver.resolve({ parentPhase: 'x', leafTitle: 'y', leafLabels: ['alpha', 'beta'] }).phaseCode).toBe('alpha');
+  });
+});
+
+describe('nguồn khoá chưa hỗ trợ — fail-fast', () => {
+  it('CUSTOM_FIELD (để v2) ném lỗi rõ ràng', () => {
     const config = mkConfig({
       tiers: [
         {
@@ -149,7 +222,7 @@ describe('nguồn khoá chưa hỗ trợ ở Vòng 2 — fail-fast', () => {
           labelVi: 'Team',
           labelJa: null,
           role: 'PHASE',
-          sourceType: 'LABEL',
+          sourceType: 'CUSTOM_FIELD',
           sourceConfig: null,
           definitions: [],
           rules: [],
