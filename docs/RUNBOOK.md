@@ -375,6 +375,13 @@ khởi động lại gì — *Admin → Projects → (dự án) → Kết nối 
 → **Test connection** → Lưu. Registry client tự nhận token mới ở lần dùng kế
 tiếp (fingerprint đổi → client được dựng lại), không có cache nào phải xóa tay.
 
+> **Hai chốt an toàn của nhóm thao tác này** (khuyến nghị từ lần đánh giá rủi
+> ro rò rỉ token 2026-08-12): (1) **đổi base URL sẽ tự xoá token đã lưu** —
+> token cũ không bao giờ được gửi sang site khác, phải nhập token mới; (2) mọi
+> lần **sửa/test kết nối đều được ghi audit** (ai, lúc nào, đổi gì, test
+> ok/fail — không ghi giá trị nhạy cảm): xem `GET
+> /api/admin/projects/:projectKey/audit` hoặc bảng `admin_audit_log`.
+
 **Dự án dùng fallback env (chế độ cũ):**
 
 ```bash

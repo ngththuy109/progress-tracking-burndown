@@ -653,6 +653,29 @@ model ProjectMember {
 }
 
 // ============================================================================
+// Bảng 15: Nhật ký thao tác quản trị nhạy cảm (audit log).
+//
+// VÌ SAO CẦN: ADMIN không đọc lại được token Jira, nhưng ĐỔI ĐƯỢC jira_base_url
+// của một dự án — trỏ sang server tự kiểm soát rồi bấm Test connection là token
+// đã lưu bị gửi sang đó. Không chặn được hoàn toàn hành vi của ADMIN, nhưng
+// PHẢI để lại dấu vết truy được ai-đổi-gì-lúc-nào. `detail` là JSON chỉ chứa
+// cờ/enum (baseUrlChanged, token: SET|CLEARED|KEPT|AUTO_CLEARED...) — TUYỆT ĐỐI
+// không chứa token, URL đích hay giá trị nhạy cảm nào.
+// ============================================================================
+model AdminAuditLog {
+  id      BigInt  @id @default(autoincrement())
+  actorId String  @map("actor_id") @db.VarChar(254)
+  // JIRA_CONNECTION_UPDATED | JIRA_CONNECTION_TESTED | ...
+  action     String  @map("action") @db.VarChar(48)
+  projectKey String? @map("project_key") @db.VarChar(32)
+  detail     Json?
+  at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([projectKey, at(sort: Desc)], map: "idx_audit_project")
+  @@map("admin_audit_log")
+}
+
+// ============================================================================
 // Bảng 13: Project — GỐC TENANT của multi-tenant (từ 20260812000000).
 //
 // Tenant định danh bằng chính Jira project key (chữ HOA, ví dụ PAY, CRM) —

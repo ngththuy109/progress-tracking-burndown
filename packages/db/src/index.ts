@@ -117,6 +117,13 @@ export {
 } from './repositories/project-member.repository.js';
 
 export {
+  insertAuditEntry,
+  listAuditEntries,
+  type AuditEntryRow,
+  type InsertAuditArgs,
+} from './repositories/audit-log.repository.js';
+
+export {
   upsertIssues,
   markRemovedIssues,
   knownIdToKey,

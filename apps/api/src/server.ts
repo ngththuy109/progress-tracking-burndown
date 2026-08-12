@@ -42,6 +42,7 @@ import {
 import { createPrincipalResolver, type AuthConfig } from './adapters/principal.js';
 import { createAppUserStore, createAppUserAdminStore } from './adapters/app-user.adapters.js';
 import {
+  createAuditLogStore,
   createProjectDirectory,
   createProjectMemberStore,
   createProjectStore,
@@ -166,6 +167,7 @@ export function createServer(deps: ServerDeps): FastifyInstance {
     guards,
     projects: projectStore,
     members: createProjectMemberStore(deps.prisma),
+    audit: createAuditLogStore(deps.prisma),
     tokenBox: deps.tokenBox,
     jiraTester: deps.jiraTester,
     envJira: deps.envJira,

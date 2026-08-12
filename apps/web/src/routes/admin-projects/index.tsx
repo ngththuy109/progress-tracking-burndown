@@ -400,6 +400,14 @@ function JiraSection({ project }: { readonly project: ProjectView }) {
           onChange={(e) => setJiraBaseUrl(e.target.value)}
         />
       </label>
+      {/* Chốt an toàn phía server: token đã lưu KHÔNG đi theo URL mới. */}
+      {project.hasJiraToken &&
+        (jiraBaseUrl.trim() === '' ? null : jiraBaseUrl.trim()) !== project.jiraBaseUrl && (
+          <p className="field-hint field-hint--warning">
+            Đổi base URL sẽ <strong>tự xoá token đã lưu</strong> — nhập token mới bên dưới
+            (token cũ không bao giờ được gửi sang site khác).
+          </p>
+        )}
 
       <label className="field">
         <span>Email tài khoản Jira</span>

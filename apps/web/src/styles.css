@@ -342,6 +342,17 @@ code {
   color: var(--text-muted);
 }
 
+/* Ghi chú ngay dưới một ô nhập — bản --warning dùng cho cảnh báo an toàn
+   (ví dụ: đổi Jira base URL sẽ tự xoá token đã lưu). */
+.field-hint {
+  margin: -4px 0 10px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.field-hint--warning {
+  color: var(--danger, #b45309);
+}
+
 /* --- Bộ chọn Epic (Burndown / Signboard / Phase sub-tasks) -------------- */
 
 /* Ba màn hình đọc Epic từ URL. Khi vào từ thanh bên mà chưa có Epic, bộ chọn này

@@ -2,12 +2,16 @@ import {
   deleteProject,
   findProject,
   findProjectConnection,
+  insertAuditEntry,
+  listAuditEntries,
   listMembers,
   listProjects,
   removeMember,
   updateProjectJira,
   upsertMember,
   upsertProject,
+  type AuditEntryRow,
+  type InsertAuditArgs,
   type PrismaClient,
   type ProjectConnectionRow,
   type ProjectMemberRow,
@@ -79,5 +83,22 @@ export function createProjectMemberStore(prisma: PrismaClient): ProjectMemberSto
     list: (projectKey) => listMembers(prisma, projectKey),
     upsert: (args) => upsertMember(prisma, args),
     remove: (projectKey, userId) => removeMember(prisma, projectKey, userId),
+  };
+}
+
+/**
+ * Cổng audit log quản trị — ghi lại MỌI lần sửa/test kết nối Jira (khuyến nghị
+ * từ lần đánh giá rủi ro rò rỉ token). `detail` chỉ được chứa cờ/enum; route là
+ * nơi chịu trách nhiệm không nhét bí mật vào.
+ */
+export interface AuditLogStore {
+  record(entry: InsertAuditArgs): Promise<void>;
+  listForProject(projectKey: string, limit?: number): Promise<readonly AuditEntryRow[]>;
+}
+
+export function createAuditLogStore(prisma: PrismaClient): AuditLogStore {
+  return {
+    record: (entry) => insertAuditEntry(prisma, entry),
+    listForProject: (projectKey, limit) => listAuditEntries(prisma, projectKey, limit),
   };
 }

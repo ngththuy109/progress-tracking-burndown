@@ -399,3 +399,31 @@ export const upsertMemberRequestSchema = z.object({
 });
 export type UpsertMemberRequest = z.infer<typeof upsertMemberRequestSchema>;
 
+// ---------------------------------------------------------------------------
+// Audit log quản trị — GET /api/admin/projects/:projectKey/audit
+// ---------------------------------------------------------------------------
+
+export const AUDIT_ACTION = ['JIRA_CONNECTION_UPDATED', 'JIRA_CONNECTION_TESTED'] as const;
+export type AuditAction = (typeof AUDIT_ACTION)[number];
+
+/** Token đã lưu bị tác động thế nào trong một lần sửa kết nối. */
+export const AUDIT_TOKEN_EFFECT = ['SET', 'CLEARED', 'KEPT', 'AUTO_CLEARED'] as const;
+export type AuditTokenEffect = (typeof AUDIT_TOKEN_EFFECT)[number];
+
+/**
+ * Một dòng audit. `detail` chỉ chứa cờ/enum (không token, không URL) — API
+ * cố ý giữ kiểu lỏng `unknown` để thêm cờ mới không vỡ client cũ.
+ */
+export const auditEntrySchema = z.object({
+  id: z.string(),
+  actorId: z.string(),
+  action: z.string(),
+  projectKey: z.string().nullable(),
+  detail: z.unknown().nullable(),
+  at: z.string(),
+});
+export type AuditEntryView = z.infer<typeof auditEntrySchema>;
+
+export const listAuditResponseSchema = z.object({ entries: z.array(auditEntrySchema) });
+export type ListAuditResponse = z.infer<typeof listAuditResponseSchema>;
+
