@@ -233,3 +233,19 @@ Mốc **p95 ≤ 800ms** cần PostgreSQL thật với vài chục nghìn dòng `
   nhất)` — Epic trễ hạn không còn bị cắt mất những ngày gần nhất. Chế độ một
   Phase vẫn co đúng khoảng kế hoạch của Phase; `?from/?to` người gọi chỉ định
   luôn được tôn trọng.
+
+## Cập nhật sau bàn giao — 2026-08 (nhánh `claude/burndown-chart-plan-dates`)
+
+- **Đường Kế hoạch nay được chiếu về CẢ HAI phía của khoảng snapshot**, không chỉ
+  đuôi sau. Trước đây chỉ những ngày *sau* snapshot cuối mới được chiếu tiếp; ngày
+  *trước* snapshot đầu tiên rơi vào nhánh "trước snapshot cuối" nên trả `null`.
+  Hệ quả: một Phase có `plan_start` sớm hơn ngày snapshot đầu tiên (Epic được thêm
+  vào theo dõi muộn hơn kế hoạch) khiến đường Kế hoạch bắt đầu muộn hơn trục —
+  trục lấy `MIN(plan_start)` làm cận dưới còn đường lại trống ở mép trái. Giờ đuôi
+  trước được chiếu ngược bằng đúng công thức T-16 (đường Thực tế vẫn `null` vì quãng
+  đó chưa có số đo). Lỗ thủng **giữa** hai đầu snapshot vẫn giữ nguyên `null` (E-12)
+  — chỉ hai đuôi ngoài khoảng mới được chiếu.
+- **`missingSnapshotDays` nay giới hạn trong `[snapshot đầu, snapshot cuối]`** (tinh
+  chỉnh quy tắc "≤ snapshot cuối" ở mục trên): ngày *trước* snapshot đầu tiên là quá
+  khứ TRƯỚC KHI Epic bắt đầu chốt sổ, không phải job đêm bỏ lỡ — đếm vào đó là báo
+  động giả, và mâu thuẫn với việc đuôi trước giờ đã có đường Kế hoạch.
