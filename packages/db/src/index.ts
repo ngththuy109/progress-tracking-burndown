@@ -117,11 +117,11 @@ export {
 } from './repositories/project-member.repository.js';
 
 export {
-  findSsoConfig,
-  upsertSsoConfig,
-  type SsoConfigRow,
-  type UpsertSsoConfigArgs,
-} from './repositories/auth-sso.repository.js';
+  findLdapConfig,
+  upsertLdapConfig,
+  type LdapConfigRow,
+  type UpsertLdapConfigArgs,
+} from './repositories/auth-ldap.repository.js';
 
 export {
   upsertIssues,

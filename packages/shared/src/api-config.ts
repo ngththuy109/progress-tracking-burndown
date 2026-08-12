@@ -400,62 +400,100 @@ export const upsertMemberRequestSchema = z.object({
 export type UpsertMemberRequest = z.infer<typeof upsertMemberRequestSchema>;
 
 // ---------------------------------------------------------------------------
-// SSO (OIDC in-app) — /api/auth/mode (public) + /api/admin/auth/sso (ADMIN)
+// Đăng nhập LDAP — /api/auth/mode (public), /auth/login, /api/admin/auth/ldap
 // ---------------------------------------------------------------------------
 
 /**
  * Chế độ xác thực đang hiệu lực — web hỏi TRƯỚC KHI đăng nhập nên endpoint
- * này công khai (không lộ gì ngoài "có SSO hay không").
- *   HEADER — mô hình cổng/proxy cũ (hoặc dev header); web không hiện nút login.
- *   OIDC   — app tự đăng nhập; web đưa người dùng tới `loginUrl`.
+ * này công khai (không lộ gì ngoài "có LDAP hay không").
+ *   HEADER — mô hình cổng/proxy cũ (hoặc dev header); web không hiện form login.
+ *   LDAP   — app tự đăng nhập bằng form username/password.
  */
 export const authModeResponseSchema = z.object({
-  mode: z.enum(['HEADER', 'OIDC']),
-  /** '/auth/login' khi mode = OIDC; null khi HEADER. */
-  loginUrl: z.string().nullable(),
+  mode: z.enum(['HEADER', 'LDAP']),
 });
 export type AuthModeResponse = z.infer<typeof authModeResponseSchema>;
 
-/** Cấu hình SSO cho màn hình quản trị. Client secret KHÔNG BAO GIỜ xuất hiện. */
-export const ssoConfigSchema = z.object({
+/** POST /auth/login — thành công: 204 + Set-Cookie phiên; sai: 401 LOGIN_FAILED. */
+export const loginRequestSchema = z.object({
+  username: z.string().trim().min(1).max(254),
+  password: z.string().min(1).max(1024),
+});
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+/** Cấu hình LDAP cho màn hình quản trị. Bind password KHÔNG BAO GIỜ xuất hiện. */
+export const ldapConfigSchema = z.object({
   enabled: z.boolean(),
-  issuerUrl: z.string().nullable(),
-  clientId: z.string().nullable(),
-  hasClientSecret: z.boolean(),
-  scopes: z.string(),
-  emailClaim: z.string(),
+  serverUrl: z.string().nullable(),
+  bindDn: z.string().nullable(),
+  hasBindPassword: z.boolean(),
+  userDnTemplate: z.string().nullable(),
+  searchBase: z.string().nullable(),
+  userFilter: z.string(),
+  emailAttribute: z.string(),
+  allowSelfSigned: z.boolean(),
   sessionTtlHours: z.number().int(),
   updatedBy: z.string().nullable(),
   updatedAt: z.string().nullable(),
 });
-export type SsoConfigView = z.infer<typeof ssoConfigSchema>;
+export type LdapConfigView = z.infer<typeof ldapConfigSchema>;
 
 /**
- * Cập nhật cấu hình SSO. `clientSecret`: chuỗi = mã hóa rồi lưu; `null` = xóa;
- * không gửi trường = GIỮ secret cũ (cùng quy ước với token Jira).
- * Server TỪ CHỐI `enabled: true` khi bài test discovery/JWKS chưa pass —
- * bật SSO hỏng là tự khóa mình ra ngoài.
+ * Cập nhật cấu hình LDAP. `bindPassword`: chuỗi = mã hóa rồi lưu; `null` = xóa;
+ * không gửi trường = GIỮ mật khẩu cũ (cùng quy ước với token Jira).
+ *
+ * Hai cách xác định DN của user — khai MỘT trong hai:
+ *   - `userDnTemplate` (direct bind), ví dụ 'uid={username},ou=users,dc=x,dc=vn'
+ *   - `searchBase` + `userFilter` + tài khoản dịch vụ bindDn/bindPassword
+ *     (search-then-bind — cách chuẩn với Active Directory).
+ *
+ * Server TỪ CHỐI `enabled: true` khi bài test CONNECT/BIND chưa pass —
+ * bật LDAP hỏng là tự khóa mình ra ngoài.
  */
-export const updateSsoConfigRequestSchema = z.object({
+export const updateLdapConfigRequestSchema = z.object({
   enabled: z.boolean().default(false),
-  issuerUrl: z.string().trim().url().nullable().default(null),
-  clientId: z.string().trim().min(1).nullable().default(null),
-  clientSecret: z.string().trim().min(1).nullable().optional(),
-  scopes: z.string().trim().min(1).default('openid profile email'),
-  emailClaim: z.string().trim().min(1).default('email'),
+  serverUrl: z
+    .string()
+    .trim()
+    .regex(/^ldaps?:\/\/.+/, 'Server URL phải bắt đầu bằng ldap:// hoặc ldaps://')
+    .nullable()
+    .default(null),
+  bindDn: z.string().trim().min(1).nullable().default(null),
+  bindPassword: z.string().min(1).nullable().optional(),
+  userDnTemplate: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((v) => v.includes('{username}'), 'Template phải chứa {username}')
+    .nullable()
+    .default(null),
+  searchBase: z.string().trim().min(1).nullable().default(null),
+  userFilter: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((v) => v.includes('{username}'), 'Filter phải chứa {username}')
+    .default('(mail={username})'),
+  emailAttribute: z.string().trim().min(1).default('mail'),
+  allowSelfSigned: z.boolean().default(false),
   sessionTtlHours: z.number().int().min(1).max(168).default(12),
 });
-export type UpdateSsoConfigRequest = z.infer<typeof updateSsoConfigRequestSchema>;
+export type UpdateLdapConfigRequest = z.infer<typeof updateLdapConfigRequestSchema>;
 
-/** Kết quả từng bước "Test SSO" — cùng khuôn với test kết nối Jira. */
-export const ssoTestStepSchema = z.object({
-  step: z.enum(['DISCOVERY', 'JWKS', 'CLIENT']),
+/**
+ * Kết quả từng bước "Test LDAP" — cùng khuôn với test kết nối Jira.
+ *   CONNECT — nối được tới server (TCP/TLS).
+ *   BIND    — bind bằng tài khoản dịch vụ (hoặc xác nhận cấu hình direct-bind đủ).
+ *   SEARCH  — chạy thử user_filter trong search_base (bỏ qua khi direct-bind).
+ */
+export const ldapTestStepSchema = z.object({
+  step: z.enum(['CONNECT', 'BIND', 'SEARCH']),
   ok: z.boolean(),
   detail: z.string(),
 });
-export const ssoTestResponseSchema = z.object({
+export const ldapTestResponseSchema = z.object({
   ok: z.boolean(),
-  steps: z.array(ssoTestStepSchema),
+  steps: z.array(ldapTestStepSchema),
 });
-export type SsoTestResponse = z.infer<typeof ssoTestResponseSchema>;
+export type LdapTestResponse = z.infer<typeof ldapTestResponseSchema>;
 

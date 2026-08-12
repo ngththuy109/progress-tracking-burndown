@@ -12,32 +12,42 @@ oauth2-proxy cho Microsoft Entra ID) nằm ở [`config/auth-proxy/`](../config/
 Hệ thống có hai chế độ xác thực; **quyền luôn tra DB** ở cả hai (không bao giờ
 tin role từ bên ngoài):
 
-### Chế độ OIDC in-app (khuyến nghị — cấu hình qua UI)
+### Chế độ LDAP in-app (khuyến nghị — cấu hình qua UI)
 
-App **tự đăng nhập OIDC** (authorization code + PKCE): ADMIN vào **Admin →
-SSO** nhập issuer URL / client ID / client secret (secret mã hóa AES-256-GCM
-bằng `APP_ENCRYPTION_KEY`, write-only như token Jira), bấm **Test** rồi bật.
+App **tự đăng nhập bằng LDAP**: người dùng nhập username/password vào form của
+app, API bind vào LDAP server của công ty để xác thực. ADMIN vào **Admin →
+LDAP** cấu hình (server URL, cách xác định DN, bind password mã hóa AES-256-GCM
+bằng `APP_ENCRYPTION_KEY` — write-only như token Jira), bấm **Test** rồi bật.
 Không cần dựng oauth2-proxy nữa.
 
 ```
-Trình duyệt ──▶ /auth/login ──302──▶ IdP (OIDC + PKCE) ──▶ /auth/callback
-                                                             │ verify id_token (chữ ký JWKS,
-                                                             │ iss/aud/exp/nonce)
-                                                             ▼
-                                              session Redis + cookie ptb_sess (HttpOnly)
-                                              → API tra app_user + project_member
+Trình duyệt ──POST /auth/login {username, password}──▶ API
+                 │  Direct bind:      bind(DN từ template, password)
+                 │  Search-then-bind: bind(tài khoản dịch vụ) → search user
+                 │                    theo filter → bind(DN tìm được, password)
+                 ▼
+   LDAP server (ldap:// hoặc ldaps://)
+                 │ bind OK → đọc attribute email (danh tính app_user)
+                 ▼
+   session Redis + cookie ptb_sess (HttpOnly) → API tra app_user + project_member
 ```
 
-- Server **từ chối bật SSO** khi bài test discovery/JWKS chưa pass — không thể
+- **Hai cách xác định DN** (chọn một ở màn hình cấu hình): *direct bind* bằng
+  template (`uid={username},ou=users,dc=congty,dc=vn` — hợp OpenLDAP) hoặc
+  *search-then-bind* bằng tài khoản dịch vụ (cách chuẩn với **Active
+  Directory**, filter kiểu `(sAMAccountName={username})`).
+- Server **từ chối bật LDAP** khi bài test CONNECT/BIND chưa pass — không thể
   tự khóa mình bằng một cấu hình hỏng.
-- Đã bật SSO thì header `x-user-id` bị **bỏ qua hoàn toàn** (chống giả mạo khi
+- Đã bật LDAP thì header `x-user-id` bị **bỏ qua hoàn toàn** (chống giả mạo khi
   app lộ ra ngoài không qua cổng). Thoát hiểm khi kẹt: env `AUTH_FORCE_HEADER=1`
   (xem RUNBOOK).
-- Redirect URI khai với IdP: `<PUBLIC_BASE_URL>/auth/callback`.
+- Đăng nhập chỉ xác thực DANH TÍNH — người bind LDAP thành công nhưng chưa được
+  cấp quyền (`app_user`/membership) vẫn "không thấy dự án nào", đúng mô hình
+  quyền-ở-DB.
 
-### Chế độ header qua cổng (legacy — vẫn hỗ trợ khi SSO tắt)
+### Chế độ header qua cổng (legacy — vẫn hỗ trợ khi LDAP tắt)
 
-Khi SSO chưa bật (mặc định sau nâng cấp), giữ nguyên mô hình cũ: một **auth
+Khi LDAP chưa bật (mặc định sau nâng cấp), giữ nguyên mô hình cũ: một **auth
 proxy** đứng trước, đăng nhập rồi bơm header danh tính:
 
 - Cổng chỉ khẳng định **DANH TÍNH** — header `x-user-id` = email đã xác thực.
