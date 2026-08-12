@@ -1,5 +1,5 @@
+import { randomBytes } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
-import { randomToken } from '../services/oidc.service.js';
 
 /**
  * Phiên đăng nhập SSO in-app — lưu trên Redis, nhận diện qua cookie `ptb_sess`.
@@ -43,6 +43,14 @@ export interface LoginStateStore {
   put(state: string, data: LoginState): Promise<void>;
   /** Lấy VÀ XOÁ — state là dùng-một-lần (chặn replay callback). */
   take(state: string): Promise<LoginState | null>;
+}
+
+/**
+ * Token ngẫu nhiên từ CSPRNG, mã hoá base64url (an toàn cho cookie/URL).
+ * 32 byte = 256 bit — xem chú thích "VÌ SAO KHÔNG KÝ COOKIE" ở đầu file.
+ */
+export function randomToken(bytes: number): string {
+  return randomBytes(bytes).toString('base64url');
 }
 
 const SESSION_KEY_PREFIX = 'sess:';

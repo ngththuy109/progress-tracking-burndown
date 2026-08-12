@@ -26,9 +26,13 @@ import {
   type StatusMapCache,
 } from '@app/jira';
 import { withTimeout, TimeoutError } from '@app/shared';
+import { Client as LdaptsClient } from 'ldapts';
 import { createServer, DEFAULT_PORT, type ServerDeps } from './server.js';
 import { authConfigFromEnv } from './adapters/principal.js';
 import { createJiraConnectionTester } from './adapters/jira-test.adapters.js';
+import { createLdapConfigStore } from './adapters/ldap-config.adapters.js';
+import { createRedisSessionStore } from './adapters/session.adapters.js';
+import type { LdapClientFactory } from './services/ldap.service.js';
 import type { TokenBox } from './routes/projects.routes.js';
 
 /**
@@ -281,6 +285,20 @@ async function bootstrap(): Promise<void> {
     defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });
 
+  // Client LDAP thật, dựng MỚI cho từng lượt bind/test. `allowSelfSigned` chỉ
+  // có nghĩa với ldaps:// — chứng chỉ tự ký thường gặp ở LDAP nội bộ; ldap://
+  // thường không TLS nên không có gì để nới lỏng. Timeout ngắn để một server
+  // LDAP treo không giữ request đăng nhập mãi.
+  const ldapClientFactory: LdapClientFactory = ({ url, allowSelfSigned }) =>
+    new LdaptsClient({
+      url,
+      connectTimeout: 5_000,
+      timeout: 10_000,
+      ...(allowSelfSigned && url.startsWith('ldaps://')
+        ? { tlsOptions: { rejectUnauthorized: false } }
+        : {}),
+    });
+
   const deps: ServerDeps = {
     prisma,
     redis,
@@ -290,6 +308,14 @@ async function bootstrap(): Promise<void> {
     // Danh tính do cổng SSO đặt vào header; quyền tra `app_user`. Cấu hình
     // qua AUTH_* (xem adapters/principal.ts và config/auth-proxy/).
     auth: authConfigFromEnv(process.env),
+    // Đăng nhập LDAP in-app: phiên trên Redis (cookie `ptb_sess`), cấu hình ở
+    // bảng `auth_ldap_config`, bind password mã hoá bằng chính TokenBox trên.
+    sessions: createRedisSessionStore(redis),
+    ldapConfigs: createLdapConfigStore(prisma),
+    ldapClientFactory,
+    // AUTH_FORCE_HEADER=1: van thoát hiểm khi LDAP bật nhầm cấu hình hỏng —
+    // ép quay về danh tính header mà không cần sửa database.
+    forceHeaderAuth: process.env['AUTH_FORCE_HEADER'] === '1',
     tokenBox,
     // "Test connection" dựng JiraClient theo yêu cầu — không đụng registry để
     // giá trị đang thử (chưa lưu) không lẫn vào cache kết nối thật.

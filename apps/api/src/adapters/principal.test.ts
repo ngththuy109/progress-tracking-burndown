@@ -3,10 +3,12 @@ import type { FastifyRequest } from 'fastify';
 import type { GlobalRole, ProjectRole } from '@app/shared';
 import {
   authConfigFromEnv,
+  createAuthResolver,
   createPrincipalResolver,
   normalizeIdentity,
   type AppUserStore,
   type AuthConfig,
+  type AuthResolverSources,
 } from './principal.js';
 
 /** Chỉ cần `headers` để phân giải; phần còn lại của request không dùng tới. */
@@ -103,6 +105,70 @@ describe('createPrincipalResolver', () => {
       { ...BASE, identityHeader: 'x-forwarded-email' },
     );
     expect(await resolve(req({ 'x-forwarded-email': 'a@x.com' }))).toMatchObject({ isAdmin: true });
+  });
+});
+
+describe('createAuthResolver (phiên LDAP + header)', () => {
+  const STORE = storeOf({
+    'alice@x.vn': { role: 'MEMBER', memberships: { PAY: 'PM' } },
+    'header@x.com': { role: 'ADMIN', memberships: {} },
+  });
+
+  function sources(over: Partial<AuthResolverSources> = {}): AuthResolverSources {
+    return {
+      sessionUserId: () => Promise.resolve(null),
+      ldapEnabled: () => Promise.resolve(false),
+      forceHeader: false,
+      ...over,
+    };
+  }
+
+  it('cookie phiên hợp lệ THẮNG header — quyền vẫn tra app_user', async () => {
+    const resolve = createAuthResolver(
+      STORE,
+      BASE,
+      sources({
+        sessionUserId: () => Promise.resolve('Alice@X.vn'), // chuẩn hoá lowercase
+        ldapEnabled: () => Promise.resolve(true),
+      }),
+    );
+    // Header trỏ sang ADMIN nhưng phiên mới là danh tính thật.
+    const p = await resolve(req({ 'x-user-id': 'header@x.com' }));
+    expect(p).toEqual({ userId: 'alice@x.vn', isAdmin: false, memberships: { PAY: 'PM' } });
+  });
+
+  it('LDAP đang bật + không có phiên → header BỊ BỎ QUA (không giả danh được)', async () => {
+    const resolve = createAuthResolver(
+      STORE,
+      BASE,
+      sources({ ldapEnabled: () => Promise.resolve(true) }),
+    );
+    expect(await resolve(req({ 'x-user-id': 'header@x.com' }))).toBeNull();
+  });
+
+  it('LDAP tắt → đường header cũ nguyên vẹn (luồng dev VITE_DEV_USER)', async () => {
+    const resolve = createAuthResolver(STORE, BASE, sources());
+    expect(await resolve(req({ 'x-user-id': 'header@x.com' }))).toMatchObject({
+      userId: 'header@x.com',
+      isAdmin: true,
+    });
+  });
+
+  it('AUTH_FORCE_HEADER=1 → header được tin dù LDAP bật (van thoát hiểm)', async () => {
+    const resolve = createAuthResolver(
+      STORE,
+      BASE,
+      sources({ ldapEnabled: () => Promise.resolve(true), forceHeader: true }),
+    );
+    expect(await resolve(req({ 'x-user-id': 'header@x.com' }))).toMatchObject({
+      userId: 'header@x.com',
+      isAdmin: true,
+    });
+  });
+
+  it('không phiên, không header → null', async () => {
+    const resolve = createAuthResolver(STORE, BASE, sources());
+    expect(await resolve(req({}))).toBeNull();
   });
 });
 

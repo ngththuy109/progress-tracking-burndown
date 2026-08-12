@@ -9,8 +9,17 @@ import type {
   TrackedEpicSummary,
   UnmatchedLabel,
 } from '@app/shared';
+import type { LdapConfigRow, UpsertLdapConfigArgs } from '@app/db';
 import { createAuthzGuards, type AuthzGuards } from './adapters/project-scope.js';
+import type { LdapConfigStore } from './adapters/ldap-config.adapters.js';
+import type { SessionStore } from './adapters/session.adapters.js';
 import type { JiraConnectionTester } from './routes/projects.routes.js';
+import type {
+  LdapClient,
+  LdapClientFactory,
+  LdapEntry,
+  LdapSearchOptions,
+} from './services/ldap.service.js';
 import type {
   DirtyEpicQueue,
   IssueReadPort,
@@ -442,3 +451,144 @@ export const FAKE_TOKEN_BOX = {
     return m[1]!;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Đăng nhập LDAP in-app
+// ---------------------------------------------------------------------------
+
+/** Session store trong bộ nhớ — id đoán được (`sess-1`, `sess-2`…) để test soi. */
+export class FakeSessionStore implements SessionStore {
+  readonly sessions = new Map<string, { userId: string; ttlHours: number }>();
+  private seq = 0;
+
+  create(userId: string, ttlHours: number): Promise<string> {
+    this.seq += 1;
+    const sessionId = `sess-${this.seq}`;
+    this.sessions.set(sessionId, { userId, ttlHours });
+    return Promise.resolve(sessionId);
+  }
+
+  find(sessionId: string): Promise<{ userId: string } | null> {
+    const found = this.sessions.get(sessionId);
+    return Promise.resolve(found === undefined ? null : { userId: found.userId });
+  }
+
+  destroy(sessionId: string): Promise<void> {
+    this.sessions.delete(sessionId);
+    return Promise.resolve();
+  }
+}
+
+/**
+ * Client LDAP giả theo kịch bản: `onBind`/`onSearch` NÉM lỗi (vd
+ * `InvalidCredentialsError` của ldapts) để mô phỏng từ chối/đứt mạng, còn mọi
+ * lời gọi đều được ghi lại để test khẳng định DN/filter đã được escape đúng.
+ */
+export class FakeLdapClient implements LdapClient {
+  readonly bindCalls: Array<{ dn: string; password: string }> = [];
+  readonly searchCalls: Array<{ base: string; options: LdapSearchOptions }> = [];
+  unbindCount = 0;
+
+  constructor(
+    private readonly script: {
+      onBind?(dn: string, password: string): void;
+      onSearch?(base: string, options: LdapSearchOptions): LdapEntry[];
+    } = {},
+  ) {}
+
+  bind(dn: string, password: string): Promise<void> {
+    this.bindCalls.push({ dn, password });
+    this.script.onBind?.(dn, password);
+    return Promise.resolve();
+  }
+
+  search(base: string, options: LdapSearchOptions): Promise<{ searchEntries: LdapEntry[] }> {
+    this.searchCalls.push({ base, options });
+    return Promise.resolve({ searchEntries: this.script.onSearch?.(base, options) ?? [] });
+  }
+
+  unbind(): Promise<void> {
+    this.unbindCount += 1;
+    return Promise.resolve();
+  }
+}
+
+/**
+ * Factory ghi lại MỌI client đã dựng (và tham số dựng) — cách duy nhất kiểm
+ * được "search-then-bind dùng KẾT NỐI MỚI cho bind của người dùng" và
+ * "mật khẩu rỗng không tạo ra một kết nối nào".
+ */
+export function fakeLdapFactory(create: (index: number) => FakeLdapClient): {
+  factory: LdapClientFactory;
+  clients: FakeLdapClient[];
+  factoryArgs: Array<{ url: string; allowSelfSigned: boolean }>;
+} {
+  const clients: FakeLdapClient[] = [];
+  const factoryArgs: Array<{ url: string; allowSelfSigned: boolean }> = [];
+  return {
+    clients,
+    factoryArgs,
+    factory: (opts) => {
+      factoryArgs.push(opts);
+      const client = create(clients.length);
+      clients.push(client);
+      return client;
+    },
+  };
+}
+
+/** Dựng nhanh một dòng cấu hình LDAP (mặc định: direct bind, đã bật). */
+export function ldapConfigRow(over: Partial<LdapConfigRow> = {}): LdapConfigRow {
+  return {
+    enabled: true,
+    serverUrl: 'ldap://ldap.x.vn:389',
+    bindDn: null,
+    bindPasswordEnc: null,
+    userDnTemplate: 'uid={username},ou=users,dc=x,dc=vn',
+    searchBase: null,
+    userFilter: '(mail={username})',
+    emailAttribute: 'mail',
+    allowSelfSigned: false,
+    sessionTtlHours: 12,
+    updatedBy: null,
+    updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+    ...over,
+  };
+}
+
+/** Store cấu hình LDAP trong bộ nhớ — áp đúng quy ước tri-state của bindPasswordEnc. */
+export class FakeLdapConfigStore implements LdapConfigStore {
+  row: LdapConfigRow | null;
+  readonly upserts: UpsertLdapConfigArgs[] = [];
+
+  constructor(row: LdapConfigRow | null = null) {
+    this.row = row;
+  }
+
+  find(): Promise<LdapConfigRow | null> {
+    return Promise.resolve(this.row);
+  }
+
+  upsert(args: UpsertLdapConfigArgs): Promise<void> {
+    this.upserts.push(args);
+    this.row = {
+      enabled: args.enabled,
+      serverUrl: args.serverUrl,
+      bindDn: args.bindDn,
+      // undefined = GIỮ mật khẩu cũ; null = xóa; chuỗi = giá trị đã mã hóa.
+      bindPasswordEnc:
+        args.bindPasswordEnc === undefined
+          ? (this.row?.bindPasswordEnc ?? null)
+          : args.bindPasswordEnc,
+      userDnTemplate: args.userDnTemplate,
+      searchBase: args.searchBase,
+      userFilter: args.userFilter,
+      emailAttribute: args.emailAttribute,
+      allowSelfSigned: args.allowSelfSigned,
+      sessionTtlHours: args.sessionTtlHours,
+      updatedBy: args.updatedBy,
+      updatedAt: new Date('2026-08-02T00:00:00.000Z'),
+    };
+    return Promise.resolve();
+  }
+}
