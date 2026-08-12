@@ -202,6 +202,12 @@
   .sbcell .k { font-family: var(--mono); font-size: 10.5px; opacity: .92; display: block; }
   .sbcell.empty { background: var(--surface-2); color: var(--faint); border: 1px dashed var(--border-strong); font-weight: 500; }
 
+  .tabsep { width: 1px; align-self: center; height: 15px; background: var(--border-strong); margin: 0 10px 0 4px; }
+  .inp { font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; display: inline-block; min-width: 170px; }
+  .formrow { display: grid; grid-template-columns: 128px 1fr; gap: 11px 14px; align-items: center; font-size: 12.5px; }
+  .formrow .lb { color: var(--muted); }
+  .mini-track { background: var(--surface-2); border-radius: 5px; height: 8px; overflow: hidden; }
+  .mini-fill { height: 100%; border-radius: 5px; }
   .note { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; padding: 10px 13px; font-size: 12.5px; color: var(--ink); margin-top: 14px; }
   .note b { font-weight: 640; }
   .foot { margin-top: 26px; color: var(--faint); font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
@@ -232,11 +238,17 @@
 <main class="wrap">
   <div class="tabs" id="tabs" role="tablist">
     <button role="tab" data-tab="overview" aria-selected="true"><span class="ti">00</span> Tổng quan</button>
+    <span class="tabsep" aria-hidden="true"></span>
     <button role="tab" data-tab="config" aria-selected="false"><span class="ti">01</span> Cấu trúc phân tầng</button>
     <button role="tab" data-tab="phase" aria-selected="false"><span class="ti">02</span> Phase settings</button>
     <button role="tab" data-tab="sbcol" aria-selected="false"><span class="ti">03</span> Signboard columns</button>
-    <button role="tab" data-tab="burndown" aria-selected="false"><span class="ti">04</span> Burndown</button>
-    <button role="tab" data-tab="signboard" aria-selected="false"><span class="ti">05</span> Signboard</button>
+    <span class="tabsep" aria-hidden="true"></span>
+    <button role="tab" data-tab="epics" aria-selected="false"><span class="ti">04</span> Epics / Scopes</button>
+    <button role="tab" data-tab="monitoring" aria-selected="false"><span class="ti">05</span> Monitoring</button>
+    <button role="tab" data-tab="users" aria-selected="false"><span class="ti">06</span> Users</button>
+    <span class="tabsep" aria-hidden="true"></span>
+    <button role="tab" data-tab="burndown" aria-selected="false"><span class="ti">07</span> Burndown</button>
+    <button role="tab" data-tab="signboard" aria-selected="false"><span class="ti">08</span> Signboard</button>
   </div>
 
   <!-- ============ OVERVIEW ============ -->
@@ -267,7 +279,9 @@
                 <tr><td><b>Signboard columns</b><div class="now">cột loại task · mẫu tiêu đề Sub-task · thứ tự Sub-phase</div></td><td>Vẫn gắn <b>tầng Phase</b> + parse lá (Signboard là tính năng của tầng Phase).</td></tr>
                 <tr><td><b>Burndown</b><div class="now">đường KH/thực tế, per-phase</div></td><td>Không đổi; thêm <b>drill-down</b> theo tầng bất kỳ.</td></tr>
                 <tr><td><b>Signboard</b><div class="now">bảng trạng thái</div></td><td>Không đổi khái niệm — lưới Phase × loại task.</td></tr>
-                <tr><td><b>Sổ theo dõi Epic</b><div class="now">đăng ký Epic</div></td><td>Thành <b>tracked scope</b>: CONTAINER (issue) hoặc QUERY (JQL).</td></tr>
+                <tr><td><b>Epics (sổ theo dõi)</b><div class="now">đăng ký Epic</div></td><td>Thành <b>tracked scope</b>: CONTAINER (issue) hoặc QUERY (JQL) + <code>leaf_issue_types</code>.</td></tr>
+                <tr><td><b>Monitoring</b><div class="now">sync runs · data quality</div></td><td>Chạy theo <b>tracked scope</b>; data-quality (UNCLASSIFIED) đo theo <b>từng tầng</b>.</td></tr>
+                <tr><td><b>Users &amp; roles</b><div class="now">ADMIN / PM / VIEWER</div></td><td>Gần như không đổi; thêm quyền <b>sửa cấu hình tầng</b> &amp; đăng ký scope.</td></tr>
               </tbody>
             </table>
           </div>
@@ -404,6 +418,61 @@
     </div>
   </section>
 
+  <!-- ============ EPICS / SCOPES ============ -->
+  <section class="view" id="view-epics" role="tabpanel">
+    <div class="card">
+      <div class="card-hd">
+        <div class="eyebrow">Vận hành · sổ theo dõi</div>
+        <h2 class="sec">Epics → Tracked scopes</h2>
+        <p class="lead">Sổ theo dõi Epic hôm nay trở thành <b>tracked scope</b>: đăng ký một <b>issue container</b> (Epic/Task) hoặc một <b>JQL</b>. Đây là nơi khai <code>scope_type</code>, <code>scope_jql</code>, <code>leaf_issue_types</code> mình đã thêm vào schema.</p>
+      </div>
+      <div class="card-bd">
+        <div id="epicsAdd"></div>
+        <div class="tbl-scroll" style="margin-top:16px"><table class="t" id="epicsTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MONITORING ============ -->
+  <section class="view" id="view-monitoring" role="tabpanel">
+    <div class="stack">
+      <div class="card">
+        <div class="card-hd">
+          <div class="eyebrow">Vận hành · sức khoẻ job</div>
+          <h2 class="sec">Monitoring — lần chạy đồng bộ</h2>
+          <p class="lead">Nhật ký job (bảng <code>sync_run</code>). Cấu trúc không đổi; chỉ khác là chạy cho <b>tracked scope</b> (CONTAINER/QUERY), không chỉ Epic.</p>
+        </div>
+        <div class="card-bd tbl-scroll"><table class="t" id="syncTable"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <div class="eyebrow plain">Data quality · theo TỪNG tầng</div>
+          <h2 class="sec">Chất lượng phân loại</h2>
+          <p class="lead">Điểm mới: tỉ lệ <code>UNCLASSIFIED</code> và panel <i>Unmatched</i> đo ở <b>mỗi tầng</b>, không chỉ tầng Phase.</p>
+        </div>
+        <div class="card-bd" id="dqBox"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USERS ============ -->
+  <section class="view" id="view-users" role="tabpanel">
+    <div class="stack">
+      <div class="card">
+        <div class="card-hd">
+          <div class="eyebrow">Quản trị · phân quyền</div>
+          <h2 class="sec">Users &amp; roles</h2>
+          <p class="lead">Nguồn sự thật phân quyền (bảng <code>app_user</code>). Gần như không đổi — chỉ thêm câu hỏi: ai được <b>sửa cấu hình tầng</b> và <b>đăng ký scope</b>.</p>
+        </div>
+        <div class="card-bd tbl-scroll"><table class="t" id="usersTable"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="eyebrow plain">Ai làm được gì</div><h2 class="sec">Quyền theo vai trò</h2></div>
+        <div class="card-bd tbl-scroll" id="permBox"></div>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <span>ⓘ</span>
     <span>Cùng một engine cộng dồn (<code>groupBy(khoá tầng của lá)</code>) phục vụ cả 3 dạng — khác nhau chỉ ở <b>selector</b>, <b>số tầng</b>, <b>nguồn khoá</b>. Thiết kế: <code>docs/DYNAMIC-TIERS-DESIGN.md</code>.</span>
@@ -434,6 +503,32 @@
     { code: "Create", label: "Tạo mới", side: "VN" },
     { code: "Review", label: "Review", side: "JP" },
     { code: "Fix", label: "Fix comment", side: "VN" }
+  ];
+
+  var EPIC_EXAMPLES = [
+    { scope: "CRM-200", type: "CONTAINER", leaf: "Sub-task", cal: "VN_STANDARD", status: "ACTIVE", sync: "hôm nay 00:01" },
+    { scope: "project = OPS AND type = Task", type: "QUERY", leaf: "Task", cal: "JP_STANDARD", status: "BACKFILLING", sync: "—" },
+    { scope: "SHOP-40", type: "CONTAINER", leaf: "Sub-task", cal: "VN_STANDARD", status: "PAUSED", sync: "5 ngày trước" }
+  ];
+  var EPIC_STATUS_COLOR = { ACTIVE: "var(--st-done)", BACKFILLING: "var(--st-onsch)", PAUSED: "var(--st-nys)", ERROR: "var(--st-dend)", PENDING: "var(--st-dstart)" };
+  var SYNC_RUNS = [
+    { type: "DAILY", status: "SUCCESS", days: 1, api: 15, dur: "4.2s", when: "hôm nay 00:01" },
+    { type: "BACKFILL", status: "SUCCESS", days: 92, api: 135, dur: "41s", when: "hôm qua 14:22" },
+    { type: "RECOMPUTE", status: "SUCCESS", days: 1, api: 0, dur: "1.1s", when: "hôm qua 09:15" },
+    { type: "DAILY", status: "FAILED", days: 0, api: 8, dur: "2.0s", when: "3 ngày trước", err: "FETCH_HISTORY" }
+  ];
+  var USERS = [
+    { id: "admin@cmc.com", role: "ADMIN", projects: [] },
+    { id: "pm.pay@cmc.com", role: "PM", projects: ["PAY"] },
+    { id: "pm.crm@cmc.com", role: "PM", projects: ["CRM", "OPS"] },
+    { id: "viewer@cmc.com", role: "VIEWER", projects: [] }
+  ];
+  var ROLE_COLOR = { ADMIN: "var(--st-noplan)", PM: "var(--st-onsch)", VIEWER: "var(--st-nys)" };
+  var PERMS = [
+    ["Xem Burndown / Signboard", "✓", "✓", "✓"],
+    ["Sửa cấu hình tầng (Phase settings…)", "✓", "✓ project của mình", "—"],
+    ["Đăng ký / sửa tracked scope", "✓", "✓ project của mình", "—"],
+    ["Quản lý người dùng", "✓", "—", "—"]
   ];
 
   var SC = {
@@ -525,7 +620,7 @@
     var scopeNode = el("div", "mapnode");
     scopeNode.innerHTML = '<div class="mh"><span class="badge">Scope</span><span class="mt">' + (sc.type === "CONTAINER" ? esc(sc.container) : "QUERY") + "</span></div>" +
       '<div class="md">selector <span class="code-chip">' + sc.type + "</span>" + (sc.type === "QUERY" ? ' · <span class="code-chip">' + esc(sc.jql) + "</span>" : "") + ' · lá = <span class="code-chip">' + esc(sc.leaf) + "</span></div>" +
-      '<div class="tagrow"><span class="tag">Sổ theo dõi</span></div>';
+      '<div class="tagrow"><span class="tag screen" data-goto="epics">✎ Tracked scopes</span></div>';
     box.appendChild(scopeNode);
     box.appendChild(el("div", "mapconn"));
 
@@ -765,17 +860,80 @@
     g.innerHTML = head + rows;
   }
 
+  // ---------- Epics / scopes ----------
+  function renderEpics() {
+    var s = SC[state.sc], sc = s.scope;
+    var add = '<div class="ed-sec"><div class="ed-hd"><span class="num">+</span><span class="t">Đăng ký scope mới</span><span class="d">CONTAINER (issue) hoặc QUERY (JQL)</span></div><div class="ed-bd">';
+    add += '<div class="scope-row" style="margin-bottom:13px"><span class="pill' + (sc.type === "CONTAINER" ? " on" : "") + '">CONTAINER</span><span class="pill' + (sc.type === "QUERY" ? " on" : "") + '">QUERY</span></div>';
+    add += '<div class="formrow">';
+    if (sc.type === "CONTAINER") add += '<span class="lb">Issue key</span><span><span class="inp">' + esc(sc.container.split(" ")[0]) + '</span> <button class="linkbtn">Validate</button></span>';
+    else add += '<span class="lb">JQL</span><span class="inp" style="min-width:280px">' + esc(sc.jql) + '</span>';
+    add += '<span class="lb">Leaf issue type</span><span class="inp">' + esc(sc.leaf) + '</span>';
+    add += '<span class="lb">Lịch / múi giờ</span><span class="inp">VN_STANDARD · Asia/Ho_Chi_Minh</span>';
+    add += '</div></div></div>';
+    $("epicsAdd").innerHTML = add;
+
+    var cur = { scope: (sc.type === "CONTAINER" ? sc.container.split(" ")[0] : sc.jql), type: sc.type, leaf: sc.leaf, cal: "VN_STANDARD", status: "ACTIVE", sync: "hôm nay 00:01", cur: true };
+    var rows = [cur].concat(EPIC_EXAMPLES);
+    var h = '<thead><tr><th>Scope</th><th>Type</th><th>Lá</th><th>Lịch</th><th>Trạng thái</th><th>Sync gần nhất</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      h += '<tr' + (r.cur ? ' style="background:color-mix(in srgb,var(--accent) 6%,transparent)"' : '') + '>' +
+        '<td><span class="mono" style="font-size:12px">' + esc(r.scope) + '</span>' + (r.cur ? ' <span class="win">● đang xem</span>' : '') + '</td>' +
+        '<td><span class="code-chip">' + r.type + '</span></td><td>' + esc(r.leaf) + '</td><td class="now">' + esc(r.cal) + '</td>' +
+        '<td>' + chip(r.status, EPIC_STATUS_COLOR[r.status] || "var(--muted)") + '</td><td class="now">' + esc(r.sync) + '</td></tr>';
+    });
+    $("epicsTable").innerHTML = h + '</tbody>';
+  }
+
+  // ---------- Monitoring ----------
+  function renderMonitoring() {
+    var h = '<thead><tr><th>Loại</th><th>Trạng thái</th><th>Ngày tính</th><th>API</th><th>Thời lượng</th><th>Khi nào</th></tr></thead><tbody>';
+    SYNC_RUNS.forEach(function (r) {
+      var c = r.status === "SUCCESS" ? "var(--st-done)" : r.status === "FAILED" ? "var(--st-dend)" : "var(--st-nys)";
+      h += '<tr><td><span class="code-chip">' + r.type + '</span></td><td>' + chip(r.status, c) + (r.err ? ' <span class="now">@ ' + esc(r.err) + '</span>' : '') +
+        '</td><td class="prio">' + r.days + '</td><td class="prio">' + r.api + '</td><td class="prio">' + esc(r.dur) + '</td><td class="now">' + esc(r.when) + '</td></tr>';
+    });
+    $("syncTable").innerHTML = h + '</tbody>';
+
+    var s = SC[state.sc], dh = "";
+    s.tiers.forEach(function (t, i) {
+      var groups = {}; s.leaves.forEach(function (l) { groups[l.path[i]] = 1; });
+      var n = Object.keys(groups).length, isPhase = t.role === "PHASE", col = isPhase ? "var(--t-phase)" : tierColor(t.code);
+      dh += '<div class="bar-row" style="grid-template-columns:150px 1fr 150px"><div class="bar-lbl"><span class="sw" style="background:' + col + '"></span>' + esc(t.name) +
+        (isPhase ? ' <span class="role phase" style="margin-left:2px">Phase</span>' : '') + '</div>' +
+        '<div class="mini-track"><div class="mini-fill" style="width:100%;background:' + col + '"></div></div>' +
+        '<div class="bar-val">' + s.leaves.length + '/' + s.leaves.length + ' phân loại · ' + n + ' nhóm</div></div>';
+    });
+    $("dqBox").innerHTML = '<div class="bars">' + dh + '</div>' +
+      '<div class="note"><b>Trước:</b> chỉ đo UNCLASSIFIED ở tầng Phase. <b>Sau:</b> mỗi tầng có ngưỡng &amp; panel Unmatched riêng — dữ liệu mẫu ở đây sạch nên đều 100%.</div>';
+  }
+
+  // ---------- Users ----------
+  function cellMark(v) { return v === "—" ? '<span class="now">—</span>' : '<span style="color:var(--st-done);font-weight:640">' + esc(v) + '</span>'; }
+  function renderUsers() {
+    var h = '<thead><tr><th>Người dùng</th><th>Vai trò</th><th>Projects</th></tr></thead><tbody>';
+    USERS.forEach(function (u) {
+      h += '<tr><td class="mono" style="font-size:12px">' + esc(u.id) + '</td><td>' + chip(u.role, ROLE_COLOR[u.role] || "var(--muted)") + '</td>' +
+        '<td>' + (u.projects.length ? u.projects.map(function (p) { return '<span class="tag">' + esc(p) + '</span>'; }).join(" ") : '<span class="now">— (tất cả)</span>') + '</td></tr>';
+    });
+    $("usersTable").innerHTML = h + '</tbody>';
+    var ph = '<table class="t" style="min-width:440px"><thead><tr><th>Hành động</th><th>ADMIN</th><th>PM</th><th>VIEWER</th></tr></thead><tbody>';
+    PERMS.forEach(function (r) { ph += '<tr><td>' + esc(r[0]) + '</td><td>' + cellMark(r[1]) + '</td><td>' + cellMark(r[2]) + '</td><td>' + cellMark(r[3]) + '</td></tr>'; });
+    $("permBox").innerHTML = ph + '</tbody></table>';
+  }
+
   // ---------- master ----------
   function renderAll() {
     renderMap(); renderScope(); renderTiers(); renderPreview();
     renderTierEditSelect(); renderEditor(); renderSbCol();
     renderDrill(); var t = renderStats(); renderBurnChart(t.scope, t.rem); renderBars();
     renderSignboard();
+    renderEpics(); renderMonitoring(); renderUsers();
   }
   function switchTab(tab) {
     state.tab = tab;
     Array.prototype.forEach.call($("tabs").querySelectorAll("button"), function (x) { x.setAttribute("aria-selected", x.dataset.tab === tab ? "true" : "false"); });
-    ["overview", "config", "phase", "sbcol", "burndown", "signboard"].forEach(function (v) { $("view-" + v).classList.toggle("on", v === tab); });
+    ["overview", "config", "phase", "sbcol", "epics", "monitoring", "users", "burndown", "signboard"].forEach(function (v) { $("view-" + v).classList.toggle("on", v === tab); });
   }
 
   $("scenarioSeg").addEventListener("click", function (e) {
