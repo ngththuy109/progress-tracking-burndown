@@ -67,6 +67,27 @@
   .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
   .tabs button[aria-selected="true"] .ti { color: var(--accent); }
 
+  /* ----- App shell: top bar + left sidebar ----- */
+  .shell { max-width: 1180px; margin: 20px auto 0; padding: 0 20px 72px; display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .side { position: sticky; top: 98px; display: flex; flex-direction: column; gap: 15px; }
+  .navgroup { display: flex; flex-direction: column; gap: 3px; }
+  .navgroup .gh { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); padding: 7px 10px 3px; display: flex; align-items: center; gap: 8px; }
+  .navgroup .gh .gn { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--accent-ink); background: var(--accent); width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; }
+  .navitem { display: flex; align-items: center; gap: 9px; font: inherit; font-size: 13.5px; font-weight: 540; color: var(--muted); background: transparent; border: 0; border-radius: 8px; padding: 8px 11px; cursor: pointer; text-align: left; width: 100%; }
+  .navitem .ic { color: var(--faint); font-size: 12px; width: 15px; text-align: center; flex: none; }
+  .navitem:hover { background: var(--surface-2); color: var(--ink); }
+  .navitem[aria-current="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 620; }
+  .navitem[aria-current="true"] .ic { color: var(--accent); }
+  .navitem:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .content { min-width: 0; }
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; gap: 14px; margin-top: 12px; }
+    .side { position: static; flex-direction: row; overflow-x: auto; gap: 12px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
+    .navgroup { flex-direction: row; align-items: center; gap: 4px; flex: none; }
+    .navgroup .gh { padding: 0 4px 0 0; white-space: nowrap; }
+    .navitem { white-space: nowrap; padding: 7px 10px; width: auto; }
+  }
+
   .view { display: none; animation: fade .25s ease; }
   .view.on { display: block; }
   @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -220,7 +241,7 @@
       <span class="mark">1..N</span>
       <div>
         <h1>Phân tầng linh động</h1>
-        <div class="sub">Cấu hình burndown 1..N tầng — gồm cả Phase settings &amp; Signboard columns</div>
+        <div class="sub">Theo dõi tiến độ · Cấu hình dự án — mô hình phân tầng 1..N</div>
       </div>
     </div>
     <div class="seg" id="scenarioSeg" role="group" aria-label="Chọn dạng dự án">
@@ -235,21 +256,28 @@
   </div>
 </header>
 
-<main class="wrap">
-  <div class="tabs" id="tabs" role="tablist">
-    <button role="tab" data-tab="overview" aria-selected="true"><span class="ti">00</span> Tổng quan</button>
-    <span class="tabsep" aria-hidden="true"></span>
-    <button role="tab" data-tab="config" aria-selected="false"><span class="ti">01</span> Cấu trúc phân tầng</button>
-    <button role="tab" data-tab="phase" aria-selected="false"><span class="ti">02</span> Phase settings</button>
-    <button role="tab" data-tab="sbcol" aria-selected="false"><span class="ti">03</span> Signboard columns</button>
-    <span class="tabsep" aria-hidden="true"></span>
-    <button role="tab" data-tab="epics" aria-selected="false"><span class="ti">04</span> Epics / Scopes</button>
-    <button role="tab" data-tab="monitoring" aria-selected="false"><span class="ti">05</span> Monitoring</button>
-    <button role="tab" data-tab="users" aria-selected="false"><span class="ti">06</span> Users</button>
-    <span class="tabsep" aria-hidden="true"></span>
-    <button role="tab" data-tab="burndown" aria-selected="false"><span class="ti">07</span> Burndown</button>
-    <button role="tab" data-tab="signboard" aria-selected="false"><span class="ti">08</span> Signboard</button>
-  </div>
+<div class="shell">
+  <nav class="side" id="side" aria-label="Điều hướng">
+    <div class="navgroup">
+      <button class="navitem" data-nav="overview" aria-current="true"><span class="ic">◈</span> Tổng quan</button>
+    </div>
+    <div class="navgroup">
+      <div class="gh"><span class="gn">1</span> Theo dõi tiến độ</div>
+      <button class="navitem" data-nav="epics"><span class="ic">▤</span> Epics · danh sách</button>
+      <button class="navitem" data-nav="burndown"><span class="ic">▧</span> Burndown</button>
+      <button class="navitem" data-nav="signboard"><span class="ic">▦</span> Signboard</button>
+      <button class="navitem" data-nav="monitoring"><span class="ic">◉</span> Monitoring</button>
+    </div>
+    <div class="navgroup">
+      <div class="gh"><span class="gn">2</span> Cấu hình dự án</div>
+      <button class="navitem" data-nav="config"><span class="ic">⧉</span> Cấu trúc tầng</button>
+      <button class="navitem" data-nav="phase"><span class="ic">✎</span> Phase settings</button>
+      <button class="navitem" data-nav="sbcol"><span class="ic">▥</span> Signboard columns</button>
+      <button class="navitem" data-nav="holidays"><span class="ic">▢</span> Ngày nghỉ</button>
+      <button class="navitem" data-nav="users"><span class="ic">◑</span> Users</button>
+    </div>
+  </nav>
+  <main class="content">
 
   <!-- ============ OVERVIEW ============ -->
   <section class="view on" id="view-overview" role="tabpanel">
@@ -473,11 +501,27 @@
     </div>
   </section>
 
+  <!-- ============ NGÀY NGHỈ ============ -->
+  <section class="view" id="view-holidays" role="tabpanel">
+    <div class="card">
+      <div class="card-hd">
+        <div class="eyebrow">Cấu hình dự án · lịch</div>
+        <h2 class="sec">Ngày nghỉ &amp; lịch làm việc</h2>
+        <p class="lead">Ngày công, giờ/ngày, ngày nghỉ lễ và ngày làm bù. <b>Không đổi do phân tầng</b> — mỗi tracked scope vẫn gắn một lịch (<code>calendar_id</code>) như hiện tại.</p>
+      </div>
+      <div class="card-bd">
+        <div class="ed-selectbar"><label class="field">Lịch <select id="calSel"></select></label></div>
+        <div id="holBox" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <span>ⓘ</span>
     <span>Cùng một engine cộng dồn (<code>groupBy(khoá tầng của lá)</code>) phục vụ cả 3 dạng — khác nhau chỉ ở <b>selector</b>, <b>số tầng</b>, <b>nguồn khoá</b>. Thiết kế: <code>docs/DYNAMIC-TIERS-DESIGN.md</code>.</span>
   </div>
-</main>
+  </main>
+</div>
 
 <script>
 (function () {
@@ -594,7 +638,27 @@
     }
   };
 
-  var state = { sc: "A", tab: "overview", drill: 0, editTier: 0 };
+  var CALENDARS = {
+    VN_STANDARD: {
+      tz: "Asia/Ho_Chi_Minh", workdays: "Thứ 2 – Thứ 6", hours: 8,
+      holidays: [
+        { d: "2026-01-01", l: "Tết Dương lịch" }, { d: "2026-02-16", l: "30 Tết" }, { d: "2026-02-17", l: "Mùng 1 Tết" },
+        { d: "2026-02-18", l: "Mùng 2 Tết" }, { d: "2026-04-30", l: "Giải phóng miền Nam" }, { d: "2026-05-01", l: "Quốc tế Lao động" },
+        { d: "2026-09-02", l: "Quốc khánh" }
+      ],
+      makeup: [{ d: "2026-02-14", l: "Làm bù nghỉ Tết (T7)" }]
+    },
+    JP_STANDARD: {
+      tz: "Asia/Tokyo", workdays: "月 – 金 (T2–T6)", hours: 8,
+      holidays: [
+        { d: "2026-01-01", l: "元日" }, { d: "2026-01-12", l: "成人の日" }, { d: "2026-05-05", l: "こどもの日" },
+        { d: "2026-07-20", l: "海の日" }, { d: "2026-11-23", l: "勤労感謝の日" }
+      ],
+      makeup: []
+    }
+  };
+
+  var state = { sc: "A", tab: "overview", drill: 0, editTier: 0, cal: "VN_STANDARD" };
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]; }); }
@@ -922,18 +986,36 @@
     $("permBox").innerHTML = ph + '</tbody></table>';
   }
 
+  // ---------- Ngày nghỉ ----------
+  function renderHolidays() {
+    var sel = $("calSel");
+    if (!sel.dataset.filled) { Object.keys(CALENDARS).forEach(function (k) { var o = el("option"); o.value = k; o.textContent = k; sel.appendChild(o); }); sel.dataset.filled = "1"; }
+    sel.value = state.cal;
+    var c = CALENDARS[state.cal];
+    var h = '<div class="kv" style="margin-top:0"><dt>Múi giờ</dt><dd><span class="code-chip">' + esc(c.tz) + '</span></dd><dt>Ngày công</dt><dd>' + esc(c.workdays) + '</dd><dt>Giờ / ngày</dt><dd>' + c.hours + 'h</dd></div>';
+    h += '<div class="ed-sec" style="margin-top:16px"><div class="ed-hd"><span class="num">◆</span><span class="t">Ngày nghỉ lễ</span><span class="d">' + c.holidays.length + ' ngày</span></div><div class="ed-bd tbl-scroll"><table class="t" style="min-width:320px"><thead><tr><th>Ngày</th><th>Tên</th></tr></thead><tbody>';
+    c.holidays.forEach(function (x) { h += '<tr><td class="mono" style="font-size:12px">' + esc(x.d) + '</td><td>' + esc(x.l) + '</td></tr>'; });
+    h += '</tbody></table></div></div>';
+    h += '<div class="ed-sec" style="margin-top:14px"><div class="ed-hd"><span class="num">↺</span><span class="t">Ngày làm bù</span><span class="d">cuối tuần xếp làm việc</span></div><div class="ed-bd">';
+    if (c.makeup.length) { h += '<div class="tbl-scroll"><table class="t" style="min-width:320px"><thead><tr><th>Ngày</th><th>Ghi chú</th></tr></thead><tbody>'; c.makeup.forEach(function (x) { h += '<tr><td class="mono" style="font-size:12px">' + esc(x.d) + '</td><td>' + esc(x.l) + '</td></tr>'; }); h += '</tbody></table></div>'; }
+    else h += '<span class="now">— không có</span>';
+    h += '</div></div>';
+    $("holBox").innerHTML = h;
+  }
+
   // ---------- master ----------
   function renderAll() {
     renderMap(); renderScope(); renderTiers(); renderPreview();
     renderTierEditSelect(); renderEditor(); renderSbCol();
     renderDrill(); var t = renderStats(); renderBurnChart(t.scope, t.rem); renderBars();
     renderSignboard();
-    renderEpics(); renderMonitoring(); renderUsers();
+    renderEpics(); renderMonitoring(); renderUsers(); renderHolidays();
   }
-  function switchTab(tab) {
-    state.tab = tab;
-    Array.prototype.forEach.call($("tabs").querySelectorAll("button"), function (x) { x.setAttribute("aria-selected", x.dataset.tab === tab ? "true" : "false"); });
-    ["overview", "config", "phase", "sbcol", "epics", "monitoring", "users", "burndown", "signboard"].forEach(function (v) { $("view-" + v).classList.toggle("on", v === tab); });
+  var VIEWS = ["overview", "config", "phase", "sbcol", "epics", "monitoring", "users", "holidays", "burndown", "signboard"];
+  function switchView(id) {
+    state.tab = id;
+    Array.prototype.forEach.call($("side").querySelectorAll(".navitem"), function (x) { x.setAttribute("aria-current", x.dataset.nav === id ? "true" : "false"); });
+    VIEWS.forEach(function (v) { $("view-" + v).classList.toggle("on", v === id); });
   }
 
   $("scenarioSeg").addEventListener("click", function (e) {
@@ -942,13 +1024,14 @@
     Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
     renderAll();
   });
-  $("tabs").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) switchTab(b.dataset.tab); });
+  $("side").addEventListener("click", function (e) { var b = e.target.closest(".navitem"); if (b) switchView(b.dataset.nav); });
   $("drillSel").addEventListener("change", function () { state.drill = parseInt(this.value, 10); renderBars(); });
   $("tierEditSel").addEventListener("change", function () { state.editTier = parseInt(this.value, 10); renderEditor(); });
+  $("calSel").addEventListener("change", function () { state.cal = this.value; renderHolidays(); });
   document.addEventListener("click", function (e) {
     var g = e.target.closest("[data-goto]"); if (!g) return;
     if (g.dataset.tier != null) state.editTier = parseInt(g.dataset.tier, 10);
-    switchTab(g.dataset.goto);
+    switchView(g.dataset.goto);
     if (g.dataset.goto === "phase") { renderTierEditSelect(); renderEditor(); }
   });
 
