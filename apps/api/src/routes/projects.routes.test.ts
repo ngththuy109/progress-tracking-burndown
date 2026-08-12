@@ -3,8 +3,6 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { fieldMappingConfigSchema } from '@app/jira';
 import type { Principal } from '@app/shared';
 import type {
-  AuditEntryRow,
-  InsertAuditArgs,
   ProjectConnectionRow,
   ProjectMemberRow,
   ProjectRow,
@@ -12,11 +10,7 @@ import type {
   UpsertProjectArgs,
 } from '@app/db';
 import { registerProjectsRoutes } from './projects.routes.js';
-import type {
-  AuditLogStore,
-  ProjectMemberStore,
-  ProjectStore,
-} from '../adapters/project.adapters.js';
+import type { ProjectMemberStore, ProjectStore } from '../adapters/project.adapters.js';
 import { asAdmin, asPm, asNobody, testGuards, FakeJiraTester, FAKE_TOKEN_BOX } from '../test-fakes.js';
 
 /** Mô phỏng lỗi FK của Prisma — route chỉ nhìn `code === 'P2003'`. */
@@ -140,31 +134,6 @@ class FakeMemberStore implements ProjectMemberStore {
   }
 }
 
-/** Audit log giả — gom entry vào mảng để test soi được cờ đã ghi. */
-class FakeAuditLog implements AuditLogStore {
-  readonly entries: InsertAuditArgs[] = [];
-  record(entry: InsertAuditArgs): Promise<void> {
-    this.entries.push(entry);
-    return Promise.resolve();
-  }
-  listForProject(projectKey: string, limit = 50): Promise<readonly AuditEntryRow[]> {
-    return Promise.resolve(
-      this.entries
-        .filter((e) => e.projectKey === projectKey)
-        .slice(-limit)
-        .reverse()
-        .map((e, i) => ({
-          id: String(i + 1),
-          actorId: e.actorId,
-          action: e.action,
-          projectKey: e.projectKey ?? null,
-          detail: e.detail ?? null,
-          at: new Date('2026-08-13T00:00:00.000Z'),
-        })),
-    );
-  }
-}
-
 const FIELDS_CONFIG = { fieldMapping: { wbsStartDate: 'customfield_1', wbsEndDate: 'customfield_2' } };
 
 function project(projectKey: string, over: Partial<FakeProject> = {}): FakeProject {
@@ -190,7 +159,6 @@ let principal: Principal | null;
 let store: FakeProjectStore;
 let members: FakeMemberStore;
 let tester: FakeJiraTester;
-let audit: FakeAuditLog;
 let app: FastifyInstance;
 
 const ENV_JIRA = {
@@ -207,14 +175,12 @@ function build(
   store = new FakeProjectStore(seed);
   members = new FakeMemberStore(store);
   tester = new FakeJiraTester();
-  audit = new FakeAuditLog();
   const instance = Fastify({ logger: false });
   registerProjectsRoutes(instance, {
     resolvePrincipal: () => principal,
     guards: testGuards({ principal: () => principal }),
     projects: store,
     members,
-    audit,
     tokenBox: opts.tokenBox === undefined ? FAKE_TOKEN_BOX : opts.tokenBox,
     jiraTester: tester,
     envJira: opts.envJira === undefined ? ENV_JIRA : opts.envJira,
@@ -320,11 +286,6 @@ describe('PUT /api/admin/projects/:projectKey/jira', () => {
     });
     expect(keep.statusCode).toBe(200);
     expect(store.projects.get('PAY')?.jiraTokenEnc).toBe('sealed(old)');
-    expect(audit.entries.at(-1)).toMatchObject({
-      action: 'JIRA_CONNECTION_UPDATED',
-      projectKey: 'PAY',
-      detail: { baseUrlChanged: false, token: 'KEPT' },
-    });
 
     const clear = await app.inject({
       method: 'PUT',
@@ -334,7 +295,6 @@ describe('PUT /api/admin/projects/:projectKey/jira', () => {
     expect(clear.statusCode).toBe(200);
     expect(store.projects.get('PAY')?.jiraTokenEnc).toBeNull();
     expect(clear.json().hasJiraToken).toBe(false);
-    expect(audit.entries.at(-1)?.detail).toMatchObject({ token: 'CLEARED' });
   });
 
   it('đổi base URL mà không nhập token mới → token đã lưu bị TỰ XÓA (chống trỏ URL sang server lạ)', async () => {
@@ -352,11 +312,6 @@ describe('PUT /api/admin/projects/:projectKey/jira', () => {
     // Token cũ KHÔNG được phép đi theo URL mới.
     expect(store.projects.get('PAY')?.jiraTokenEnc).toBeNull();
     expect(res.json().hasJiraToken).toBe(false);
-    expect(audit.entries.at(-1)).toMatchObject({
-      actorId: 'admin@x.com',
-      action: 'JIRA_CONNECTION_UPDATED',
-      detail: { baseUrlChanged: true, token: 'AUTO_CLEARED' },
-    });
   });
 
   it('đổi base URL KÈM token mới → lưu token mới bình thường (SET, không auto-clear)', async () => {
@@ -372,7 +327,6 @@ describe('PUT /api/admin/projects/:projectKey/jira', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(store.projects.get('PAY')?.jiraTokenEnc).toBe('sealed(new-secret)');
-    expect(audit.entries.at(-1)?.detail).toMatchObject({ baseUrlChanged: true, token: 'SET' });
   });
 
   it('gửi token khi APP_ENCRYPTION_KEY chưa đặt → 400 rõ ràng, KHÔNG lưu thô', async () => {
@@ -450,48 +404,6 @@ describe('POST /api/admin/projects/:projectKey/jira/test', () => {
     const res = await app.inject({ method: 'POST', url: '/api/admin/projects/PAY/jira/test', payload: {} });
     expect(res.statusCode).toBe(200);
     expect(tester.calls[0]).toMatchObject({ baseUrl: null, email: null, apiToken: null });
-  });
-});
-
-describe('audit log kết nối Jira — /api/admin/projects/:projectKey/audit', () => {
-  it('test connection để lại dấu vết: ai, ok/fail, có dùng giá trị chưa-lưu không', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/admin/projects/PAY/jira/test',
-      payload: { jiraBaseUrl: 'https://try.atlassian.net', apiToken: 'tmp' },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(audit.entries.at(-1)).toMatchObject({
-      actorId: 'admin@x.com',
-      action: 'JIRA_CONNECTION_TESTED',
-      projectKey: 'PAY',
-      detail: { usedUnsavedBaseUrl: true, usedUnsavedToken: true },
-    });
-    // Dấu vết KHÔNG được chứa giá trị nhạy cảm nào.
-    expect(JSON.stringify(audit.entries.at(-1))).not.toContain('tmp');
-    expect(JSON.stringify(audit.entries.at(-1))).not.toContain('try.atlassian.net');
-  });
-
-  it('GET trả các dòng gần nhất theo listAuditResponseSchema, CHỈ ADMIN', async () => {
-    await app.inject({
-      method: 'PUT',
-      url: '/api/admin/projects/PAY/jira',
-      payload: { jiraBaseUrl: 'https://a.atlassian.net', apiToken: 's' },
-    });
-    const res = await app.inject({ method: 'GET', url: '/api/admin/projects/PAY/audit' });
-    expect(res.statusCode).toBe(200);
-    const body = res.json() as { entries: Array<{ action: string; at: string }> };
-    expect(body.entries.length).toBeGreaterThan(0);
-    expect(body.entries[0]).toMatchObject({ action: 'JIRA_CONNECTION_UPDATED' });
-    expect(new Date(body.entries[0]!.at).toString()).not.toBe('Invalid Date');
-
-    principal = asPm('PAY');
-    expect((await app.inject({ method: 'GET', url: '/api/admin/projects/PAY/audit' })).statusCode).toBe(403);
-  });
-
-  it('dự án không tồn tại → 404', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/admin/projects/NOPE/audit' });
-    expect(res.statusCode).toBe(404);
   });
 });
 

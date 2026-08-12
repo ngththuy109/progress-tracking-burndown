@@ -4,9 +4,7 @@ import {
   updateProjectJiraRequestSchema,
   upsertMemberRequestSchema,
   upsertProjectRequestSchema,
-  type AuditTokenEffect,
   type JiraTestResponse,
-  type ListAuditResponse,
   type ListMembersResponse,
   type Principal,
   type ProjectMemberView,
@@ -15,11 +13,7 @@ import {
 import { ApiError } from '../services/phase-config.service.js';
 import { normalizeIdentity } from '../adapters/principal.js';
 import type { AuthzGuards } from '../adapters/project-scope.js';
-import type {
-  AuditLogStore,
-  ProjectMemberStore,
-  ProjectStore,
-} from '../adapters/project.adapters.js';
+import type { ProjectMemberStore, ProjectStore } from '../adapters/project.adapters.js';
 
 /**
  * Quản trị TENANT — `/api/admin/projects...`, CHỈ ADMIN (guard `requireAdmin`).
@@ -57,8 +51,6 @@ export interface ProjectsRouteDeps {
   readonly guards: AuthzGuards;
   readonly projects: ProjectStore;
   readonly members: ProjectMemberStore;
-  /** Nhật ký thao tác nhạy cảm — ghi mọi lần sửa/test kết nối Jira. */
-  readonly audit: AuditLogStore;
   readonly tokenBox: TokenBox | null;
   readonly jiraTester: JiraConnectionTester;
   /** env JIRA_* — đường fallback cho tenant chưa khai kết nối riêng. */
@@ -184,7 +176,6 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
 
   app.put('/api/admin/projects/:projectKey/jira', admin, async (req, reply) =>
     handle(reply, async () => {
-      const adminPrincipal = deps.resolvePrincipal(req)!;
       const projectKey = keyParam(req);
       const before = await deps.projects.connection(projectKey);
       if (before === null) {
@@ -208,14 +199,9 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
 
       // apiToken: undefined = GIỮ token cũ; null = XÓA; chuỗi = mã hóa rồi lưu.
       let jiraTokenEnc: string | null | undefined;
-      let tokenEffect: AuditTokenEffect;
-      if (parsed.data.apiToken === undefined) {
-        jiraTokenEnc = undefined;
-        tokenEffect = 'KEPT';
-      } else if (parsed.data.apiToken === null) {
-        jiraTokenEnc = null;
-        tokenEffect = 'CLEARED';
-      } else {
+      if (parsed.data.apiToken === undefined) jiraTokenEnc = undefined;
+      else if (parsed.data.apiToken === null) jiraTokenEnc = null;
+      else {
         if (deps.tokenBox === null) {
           // KHÔNG được lưu token thô. Thiếu khóa thì từ chối rõ ràng kèm cách
           // sinh khóa — thà không lưu còn hơn lưu không mã hóa (C-9).
@@ -228,7 +214,6 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
           );
         }
         jiraTokenEnc = deps.tokenBox.seal(parsed.data.apiToken);
-        tokenEffect = 'SET';
       }
 
       // CHỐT AN TOÀN: đổi base URL mà không nhập token mới → TỰ XÓA token đã
@@ -238,7 +223,6 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
       const baseUrlChanged = parsed.data.jiraBaseUrl !== before.jiraBaseUrl;
       if (baseUrlChanged && jiraTokenEnc === undefined && before.jiraTokenEnc !== null) {
         jiraTokenEnc = null;
-        tokenEffect = 'AUTO_CLEARED';
       }
 
       // Kết nối đổi thì bản field mapping đã resolve của lần trước hết tin được
@@ -249,20 +233,6 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
         ...(jiraTokenEnc !== undefined ? { jiraTokenEnc } : {}),
         jiraFieldsJson: parsed.data.fieldsConfig,
         jiraResolvedJson: null,
-      });
-
-      // Dấu vết cho thao tác nhạy cảm — CHỈ cờ/enum, không giá trị nhập vào.
-      await deps.audit.record({
-        actorId: adminPrincipal.userId,
-        action: 'JIRA_CONNECTION_UPDATED',
-        projectKey,
-        detail: {
-          baseUrlChanged,
-          emailChanged: parsed.data.jiraEmail !== before.jiraEmail,
-          fieldsConfigChanged:
-            JSON.stringify(parsed.data.fieldsConfig) !== JSON.stringify(before.jiraFieldsJson),
-          token: tokenEffect,
-        },
       });
 
       // Trả view chuẩn (KHÔNG BAO GIỜ chứa token — chỉ hasJiraToken).
@@ -306,49 +276,7 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
       const fieldsConfig =
         parsed.data.fieldsConfig ?? conn.jiraFieldsJson ?? deps.envJira?.fieldsConfig ?? null;
 
-      const result = await deps.jiraTester.test({
-        baseUrl,
-        email,
-        apiToken,
-        fieldsConfig,
-        projectKey,
-      });
-
-      // Test connection GỬI token đã lưu tới baseUrl đang thử — đây chính là
-      // thao tác nhạy cảm nhất của nhóm route này, phải để lại dấu vết. Chỉ
-      // ghi cờ: thử với giá trị đã lưu hay giá trị chưa-lưu từ form, kết quả.
-      await deps.audit.record({
-        actorId: deps.resolvePrincipal(req)!.userId,
-        action: 'JIRA_CONNECTION_TESTED',
-        projectKey,
-        detail: {
-          ok: result.ok,
-          usedUnsavedBaseUrl: parsed.data.jiraBaseUrl !== null,
-          usedUnsavedToken: typeof parsed.data.apiToken === 'string',
-          failedStep: result.ok ? null : (result.steps.find((s) => !s.ok)?.step ?? null),
-        },
-      });
-
-      return result;
-    }),
-  );
-
-  // Lịch sử thao tác trên kết nối Jira của một dự án — 50 dòng gần nhất.
-  app.get('/api/admin/projects/:projectKey/audit', admin, async (req, reply) =>
-    handle(reply, async (): Promise<ListAuditResponse> => {
-      const projectKey = keyParam(req);
-      await projectOrThrow(projectKey);
-      const rows = await deps.audit.listForProject(projectKey, 50);
-      return {
-        entries: rows.map((r) => ({
-          id: r.id,
-          actorId: r.actorId,
-          action: r.action,
-          projectKey: r.projectKey,
-          detail: r.detail ?? null,
-          at: r.at.toISOString(),
-        })),
-      };
+      return deps.jiraTester.test({ baseUrl, email, apiToken, fieldsConfig, projectKey });
     }),
   );
 
