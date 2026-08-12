@@ -20,6 +20,7 @@ interface SubtaskRow {
   status_category: string | null;
   original_estimate_s: bigint | number | null;
   time_spent_s: bigint | number | null;
+  remaining_estimate_s: bigint | number | null;
   wbs_start_date: Date | null;
   wbs_end_date: Date | null;
   actual_start: Date | null;
@@ -50,7 +51,8 @@ export function createPhaseSubtaskReadPort(prisma: PrismaClient): PhaseSubtaskRe
         // Ngày thực tế LEFT JOIN từ `subtask_actual_dates` (job dựng lại ghi,
         // T-14) — ticket chưa được tính vẫn phải hiện ra, chỉ trống hai ô đó.
         `SELECT i.issue_key, i.summary, i.parent_key, i.phase_code, i.status_category,
-                i.original_estimate_s, i.time_spent_s, i.wbs_start_date, i.wbs_end_date,
+                i.original_estimate_s, i.time_spent_s, i.remaining_estimate_s,
+                i.wbs_start_date, i.wbs_end_date,
                 i.function_name, i.task_type, a.actual_start, a.actual_end
            FROM jira_issue i
            LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
@@ -72,6 +74,7 @@ export function createPhaseSubtaskReadPort(prisma: PrismaClient): PhaseSubtaskRe
         actualEnd: d(r.actual_end),
         originalEstimateSeconds: n(r.original_estimate_s),
         timeSpentSeconds: n(r.time_spent_s),
+        remainingEstimateSeconds: n(r.remaining_estimate_s),
         functionName: r.function_name,
         taskType: r.task_type,
       }));

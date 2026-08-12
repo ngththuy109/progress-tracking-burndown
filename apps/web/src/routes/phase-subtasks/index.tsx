@@ -130,6 +130,16 @@ const COLUMNS: readonly Column<PhaseSubtaskTicket>[] = [
     render: (t) => formatHours(t.timeSpentHours),
     sortKey: (t) => t.timeSpentHours,
   },
+  {
+    // Khối lượng còn lại THỰC TẾ Jira giữ trên ticket (`remaining_estimate_s`,
+    // đọc từ `timeestimate`). Đọc cùng "Estimate" và "Logged" thành bộ ba giờ:
+    // đã ước lượng bao nhiêu, đã làm bao nhiêu, còn lại bao nhiêu.
+    key: 'remaining',
+    header: 'Remaining (h)',
+    align: 'right',
+    render: (t) => formatHours(t.remainingEstimateHours),
+    sortKey: (t) => t.remainingEstimateHours,
+  },
 ];
 
 export function PhaseSubtasksScreen() {

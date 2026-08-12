@@ -37,6 +37,12 @@ export const phaseSubtaskTicketSchema = z.object({
   originalEstimateHours: z.number(),
   /** Tổng giờ ĐÃ LOG (worklog) — `jira_issue.time_spent_s` đổi sang giờ. */
   timeSpentHours: z.number(),
+  /**
+   * Khối lượng CÒN LẠI thực tế — `jira_issue.remaining_estimate_s` (đọc từ
+   * `timeestimate` của Jira) đổi sang giờ. Đây là con số Jira giữ trực tiếp
+   * trên ticket, KHÁC với đường "actual remaining" mà engine suy cho biểu đồ.
+   */
+  remainingEstimateHours: z.number(),
   /** Bóc từ tiêu đề Sub-task (PRD §2.9) — chỉ để nhìn, không phân loại. */
   functionName: z.string().nullable(),
   taskType: z.string().nullable(),
@@ -75,6 +81,7 @@ export interface PhaseSubtaskTicket {
   readonly actualEnd: string | null;
   readonly originalEstimateHours: number;
   readonly timeSpentHours: number;
+  readonly remainingEstimateHours: number;
   readonly functionName: string | null;
   readonly taskType: string | null;
 }

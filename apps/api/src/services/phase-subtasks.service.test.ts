@@ -20,6 +20,7 @@ function sub(over: Partial<LoadedSubtask> & { issueKey: string; phaseCode: strin
     actualEnd: null,
     originalEstimateSeconds: 3600,
     timeSpentSeconds: 0,
+    remainingEstimateSeconds: 3600,
     functionName: 'Login',
     taskType: 'Create',
     ...over,
@@ -145,6 +146,16 @@ describe('dựng danh sách Sub-task theo Phase', () => {
     expect(ticket?.actualStart).toBe('2026-03-03');
     expect(ticket?.actualEnd).toBe('2026-03-05');
     expect(ticket?.timeSpentHours).toBe(2.5);
+  });
+
+  it('đổi giây còn lại (remaining estimate) sang giờ', () => {
+    const res = buildPhaseSubtaskList({
+      epicKey: EPIC,
+      definitions: [def('DESIGN', 1)],
+      subtasks: [sub({ issueKey: 'S-1', phaseCode: 'DESIGN', remainingEstimateSeconds: 12600 })],
+    });
+
+    expect(res.groups[0]?.tickets[0]?.remainingEstimateHours).toBe(3.5);
   });
 
   it('tổng Sub-task đếm hết mọi nhóm', () => {

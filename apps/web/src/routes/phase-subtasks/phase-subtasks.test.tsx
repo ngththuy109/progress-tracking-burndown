@@ -48,6 +48,7 @@ const RESPONSE: PhaseSubtaskResponse = {
           actualEnd: '2026-03-05',
           originalEstimateHours: 8,
           timeSpentHours: 6.5,
+          remainingEstimateHours: 3.5,
           functionName: 'Login',
           taskType: 'Create',
         },
@@ -62,6 +63,7 @@ const RESPONSE: PhaseSubtaskResponse = {
           actualEnd: null,
           originalEstimateHours: 1.5,
           timeSpentHours: 0,
+          remainingEstimateHours: 0,
           functionName: null,
           taskType: null,
         },
@@ -93,6 +95,7 @@ const RESPONSE: PhaseSubtaskResponse = {
           actualEnd: null,
           originalEstimateHours: 0,
           timeSpentHours: 0,
+          remainingEstimateHours: 0,
           functionName: null,
           taskType: null,
         },
@@ -167,6 +170,9 @@ describe('PhaseSubtasksScreen', () => {
     expect(screen.getByText(/2026-03-05/)).toBeTruthy();
     expect(screen.getByText('6.5')).toBeTruthy();
     expect(screen.getAllByText('Logged (h)').length).toBeGreaterThan(0);
+    // Cột Remaining (h): PAY-11 còn 3.5 giờ (remaining estimate).
+    expect(screen.getByText('3.5')).toBeTruthy();
+    expect(screen.getAllByText('Remaining (h)').length).toBeGreaterThan(0);
   });
 
   it('Phase định nghĩa mà chưa có ticket vẫn hiện, kèm dòng giải thích trống', async () => {

@@ -17,6 +17,7 @@ function sub(over: Partial<LoadedSubtask> & { issueKey: string; phaseCode: strin
     actualEnd: null,
     originalEstimateSeconds: 3600,
     timeSpentSeconds: 0,
+    remainingEstimateSeconds: 3600,
     functionName: 'Login',
     taskType: 'Create',
     ...over,
@@ -110,6 +111,13 @@ describe('dựng danh sách', () => {
     const { body } = await get<PhaseSubtaskResponse>(URL);
 
     expect(body.groups[0]?.tickets[0]?.originalEstimateHours).toBe(2);
+  });
+
+  it('đổi giây còn lại (remaining estimate) sang giờ trong ticket trả về', async () => {
+    reads.subtaskList = [sub({ issueKey: 'S-1', phaseCode: 'DESIGN', remainingEstimateSeconds: 3600 })];
+    const { body } = await get<PhaseSubtaskResponse>(URL);
+
+    expect(body.groups[0]?.tickets[0]?.remainingEstimateHours).toBe(1);
   });
 
   it('ticket trả về kèm ngày thực tế và tổng giờ đã log (đổi sang giờ)', async () => {

@@ -40,6 +40,8 @@ export interface LoadedSubtask {
   readonly originalEstimateSeconds: number;
   /** Tổng giờ đã log (worklog) tính bằng GIÂY — `jira_issue.time_spent_s`. */
   readonly timeSpentSeconds: number;
+  /** Khối lượng còn lại tính bằng GIÂY — `jira_issue.remaining_estimate_s`. */
+  readonly remainingEstimateSeconds: number;
   readonly functionName: string | null;
   readonly taskType: string | null;
 }
@@ -110,6 +112,7 @@ function toTicket(sub: LoadedSubtask): PhaseSubtaskTicket {
     actualEnd: sub.actualEnd,
     originalEstimateHours: sub.originalEstimateSeconds / SECONDS_PER_HOUR,
     timeSpentHours: sub.timeSpentSeconds / SECONDS_PER_HOUR,
+    remainingEstimateHours: sub.remainingEstimateSeconds / SECONDS_PER_HOUR,
     functionName: sub.functionName,
     taskType: sub.taskType,
   };
