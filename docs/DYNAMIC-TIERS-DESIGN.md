@@ -14,7 +14,7 @@
 | # | Câu hỏi | Lựa chọn |
 |---|---|---|
 | 1 | Số tầng linh động lấy từ đâu? | **Nhóm logic theo cấu hình** — bóc từ title/label/custom field, KHÔNG phụ thuộc độ sâu cây Jira |
-| 2 | Gốc & lá có linh động không? | **Giữ cố định** — tầng trên cùng = đơn vị theo dõi (Epic, vẽ burndown); tầng đáy = đơn vị mang số liệu (leaf) |
+| 2 | Gốc & lá có linh động không? | **Giữ cố định VAI TRÒ** — tầng trên cùng = đơn vị theo dõi (vẽ burndown); tầng đáy = đơn vị mang số liệu (leaf). *Loại issue của gốc thì linh động — xem §2.1.* |
 | 3 | "Phase" ứng xử ra sao? | **Một tầng được đánh dấu là Phase** — giữ Signboard / per_phase / plan-shift gắn vào đúng tầng đó |
 | 4 | Phạm vi | **Tái kiến trúc N-tầng đầy đủ** — làm mô hình tổng quát tử tế, không chắp vá |
 
@@ -22,9 +22,11 @@
 KHÔNG có nghĩa là làm cho gốc/lá/Phase cũng linh động. Cách hiểu của tôi:
 
 > Xây một **mô hình N-tầng tổng quát, tử tế** (schema + engine + ingest + UI làm
-> lại đàng hoàng, không hack), NHƯNG trong đó vẫn giữ 3 bất biến: **gốc = Epic**,
-> **lá = đơn vị số liệu**, và **đúng một tầng giữa là Phase**. Phần "linh động" là
-> **số tầng nhóm ở giữa (1..N)** và **cách mỗi tầng lấy khoá nhóm**.
+> lại đàng hoàng, không hack), NHƯNG trong đó vẫn giữ 3 bất biến **về VAI TRÒ**:
+> **gốc = đơn vị theo dõi** (issue được đăng ký, BẤT KỲ loại — Epic/Task/Story…),
+> **lá = đơn vị số liệu**, và **đúng một tầng là Phase**. Phần "linh động" là
+> **số tầng nhóm (1..N)**, **cách mỗi tầng lấy khoá nhóm**, và **loại + độ sâu
+> vật lý của cây Jira** (2 tầng, 3 tầng…).
 
 Nếu bạn thực sự muốn gốc/lá/Phase cũng cấu hình được thì phạm vi lớn hơn nhiều —
 xem [§10 Câu hỏi mở](#10-câu-hỏi-mở).
@@ -64,12 +66,18 @@ khoá theo thứ tự `groupKeys: string[]`**, và đánh dấu một phần t�
 
 ## 2. Mô hình đích
 
-### 2.1. Bất biến (từ quyết định #2)
+### 2.1. Bất biến (từ quyết định #2) — cố định VAI TRÒ, không cố định loại issue
 
-- **Gốc** = Epic (đơn vị theo dõi). Luôn trên cùng.
-- **Lá** = đơn vị mang số liệu. Luôn dưới cùng. Cộng dồn chảy **từ lá lên**.
-- Giữa gốc và lá: một **danh sách có thứ tự các tầng nhóm** `T1 … Tn` (n ≥ 1),
-  **đúng một tầng** đánh dấu `role = PHASE`.
+- **Gốc** = **đơn vị theo dõi được đăng ký** (issue Jira BẤT KỲ loại — Epic, hay
+  Task đóng vai "Project", hay Story…). Luôn trên cùng. Có `tracked_epic`, có
+  `daily_snapshot`, vẽ burndown. *Loại issue và **độ sâu vật lý** của cây Jira bên
+  dưới nó là linh động* — xem [§2.4](#24-ví-dụ-project-2-tầng-task--sub-task).
+- **Lá** = đơn vị mang số liệu (estimate/worklog/`wbs_*`/status). Luôn dưới cùng.
+  Cộng dồn chảy **từ lá lên**. "Lá" = issue mang số liệu, xác định theo cấu hình
+  (loại issue lá, hoặc "issue không có con") — KHÔNG cứng là "Sub-task".
+- Giữa gốc và lá: một **danh sách có thứ tự các tầng nhóm LOGIC** `T1 … Tn` (n ≥ 1),
+  **đúng một tầng** đánh dấu `role = PHASE`. Các tầng này là **logic** (bóc từ thuộc
+  tính), **không** nhất thiết trùng tầng issue vật lý nào.
 
 ### 2.2. Mỗi lá mang một VECTƠ khoá (thay cho một `phaseCode`)
 
@@ -111,13 +119,48 @@ Mỗi tầng trong config của project khai:
 
 | `source` | Bóc khoá từ | Tái dùng code hiện có |
 |---|---|---|
-| `PARENT_TASK_TITLE` | title của Task cha → mẫu tiêu đề + luật từ khoá | `TaskTitleParser` (nguyên xi Phase hôm nay) |
+| `PARENT_TASK_TITLE` | title của Task **cha** → mẫu tiêu đề + luật từ khoá | `TaskTitleParser` (nguyên xi Phase hôm nay) |
+| `SELF_TITLE` | title của **chính lá** → mẫu tiêu đề + luật từ khoá | `TaskTitleParser` chạy trên title lá (case 2 tầng — §2.4) |
 | `SUBTASK_TITLE_TOKEN` | một token trong mẫu tiêu đề Sub-task (`{team}`, `{function}`…) | `SubtaskTitleParser` |
 | `LABEL` | Jira label (lọc theo tiền tố, VD `team:`) | mới, nhỏ |
 | `CUSTOM_FIELD` | một custom field Jira (map như `wbs_*`) | mới, nhỏ (để v2 nếu cần) |
 
 > Nhờ giữ `PARENT_TASK_TITLE`, **mô hình 3 tầng hôm nay = cấu hình mặc định có
 > đúng 1 tầng nhóm** (role=PHASE, source=PARENT_TASK_TITLE). Không có gì mất đi.
+
+### 2.4. Ví dụ: project 2 tầng (Task → Sub-task)
+
+Kịch bản: **Jira chỉ có 2 tầng vật lý. Task đóng vai Project (đơn vị theo dõi),
+Sub-task là lá. Phase gom từ title của CHÍNH sub-task**, sub-task cùng phase cộng
+dồn khi vẽ Burndown.
+
+```
+Task PAY (đăng ký làm "tracked root")          ← GỐC = đơn vị theo dõi (vẽ burndown)
+├─ Sub-task "[Design] Vẽ màn hình"   Est 16h    ─┐
+├─ Sub-task "[Design] Thiết kế DB"   Est 24h    ─┼─ gom logic theo Phase (bóc từ
+├─ Sub-task "[Dev] API giao dịch"    Est 40h    ─┘   title của chính sub-task)
+└─ Sub-task "[Test] Viết test case"  Est 40h
+```
+
+Cấu hình cho project này:
+
+```
+tracked root = PAY   (issueType = Task, KHÔNG phải Epic)
+tiers = [
+  { tierOrder: 1, code: "PHASE", role: PHASE, source: SELF_TITLE,
+    titlePatterns: ["[{name}] {rest}"], rules: [Design→DESIGN, Dev→DEV, Test→TEST] }
+]
+leaf = Sub-task
+```
+
+**Kết quả:** mỗi Sub-task `groupKeys = ["DESIGN"|"DEV"|"TEST"]` (n=1 tầng, nguồn =
+title của lá). Engine `groupBy` khoá đó → cộng dồn per-phase → Burndown Task PAY,
+và burndown-by-phase như thường. **Không cần Epic, không cần tầng Task-cha vật lý.**
+
+Điểm khác duy nhất so với mô hình mặc định: **gốc là Task (2 tầng vật lý)** và
+**source = `SELF_TITLE`** thay vì `PARENT_TASK_TITLE`. Cả hai đều nằm trong khả năng
+của thiết kế — chỉ cần ingest linh động độ sâu và cho đăng ký gốc là issue bất kỳ
+(xem [§6](#6-thay-đổi-ingestpipeline-appsworker)).
 
 ---
 
@@ -197,12 +240,21 @@ thêm golden cho n=1 (phẳng) và n=3.
 
 ## 6. Thay đổi ingest/pipeline (`apps/worker`)
 
-- **Giữ ingest vật lý Epic → Task → Sub-task** (`fetch-epic-tree.ts` gần như nguyên
-  xi). Tầng Task vật lý vẫn còn, nhưng giờ chỉ là **một nguồn** khoá tầng
-  (`PARENT_TASK_TITLE`). Vì tầng là **logic**, ta KHÔNG phụ thuộc độ sâu cây Jira
-  (khớp quyết định #1). *(Đọc độ sâu Jira tuỳ ý = ngoài phạm vi lần này.)*
+- **Đăng ký gốc là issue BẤT KỲ loại.** `tracked_epic` hiện đăng ký một Epic; cần
+  cho đăng ký một issue bất kỳ (Epic, hay Task đóng vai Project — §2.4). Giữ tên
+  cột/bảng `tracked_epic`/`epic_key` cho tương thích, nhưng ngữ nghĩa là "tracked
+  root". `POST /api/epics/validate|browse` cũng phải chấp nhận loại issue theo cấu
+  hình project, không chỉ Epic.
+- **Ingest linh động độ sâu vật lý.** `fetch-epic-tree.ts` đang cứng 2 query giả
+  định đúng Epic→Task→Sub-task. Phải tổng quát: gom **gốc + toàn bộ hậu duệ**, rồi
+  **xác định LÁ** = issue mang số liệu theo cấu hình (loại issue lá đã khai, hoặc
+  "issue không có con"). Case 2 tầng: gốc Task → con trực tiếp chính là lá (bỏ query
+  tầng ba). Case 3 tầng: như hiện tại. Tầng issue vật lý ở giữa (nếu có) chỉ là
+  **một nguồn** khoá tầng (`PARENT_TASK_TITLE`), không bắt buộc.
 - `persist-issues.buildRecords`: thay việc gán một `phaseCode` bằng
-  `resolveGroupKeys(...)` → ghi `group_path`; `phase_code` = phần tử tầng Phase.
+  `resolveGroupKeys(leaf, ancestors, config)` → ghi `group_path`; `phase_code` =
+  phần tử tầng Phase. `resolveGroupKeys` điều phối các `source` (title cha / title
+  lá / token / label), nên cùng một hàm phục vụ cả case 2 tầng lẫn 3 tầng.
 - `dirty:epics` sweep + resync "Toàn bộ" (PHASE-MAPPING §5, §7) vẫn là đường lan
   truyền khi đổi cấu hình tầng — không đổi cơ chế.
 
@@ -253,10 +305,13 @@ Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh trước khi sang v
    không? Nếu có thì Phase phải thành tuỳ chọn — mở rộng #3.
 2. **Lồng nhau vs facet độc lập.** Xác nhận mô hình **lồng nhau có thứ tự** (§2.2),
    không phải các chiều nhóm rời rạc.
-3. **Ingest vật lý.** Xác nhận **giữ** Epic→Task→Sub-task và bóc tầng từ thuộc tính
-   (title cha/label/field/token) — KHÔNG đọc độ sâu cây Jira tuỳ ý.
-4. **`source` cho v1.** Đề xuất: `PARENT_TASK_TITLE` + `SUBTASK_TITLE_TOKEN` +
-   `LABEL`. `CUSTOM_FIELD` để v2. Đồng ý?
+3. **Xác định "lá".** Cách nào chốt đâu là lá mang số liệu: (a) khai **loại issue lá**
+   trong config (VD "Sub-task", hoặc "Task" ở case 2 tầng), hay (b) suy ra "**issue
+   không có con**", hay (c) "**issue có estimate/worklog**"? Đề xuất (a) làm chính,
+   (b) làm lưới an toàn.
+4. **`source` cho v1.** Đề xuất: `PARENT_TASK_TITLE` + `SELF_TITLE` +
+   `SUBTASK_TITLE_TOKEN` + `LABEL`. `CUSTOM_FIELD` để v2. Đồng ý?
+   (`SELF_TITLE` là thứ case 2 tầng của bạn cần.)
 5. **Signboard.** Xác nhận Signboard **vẫn là tính năng tầng Phase**, không tổng
    quát hoá cho mọi tầng (khớp #3).
 6. **Đường Kế hoạch drill-down.** Cần đường Kế hoạch cho tầng ≠ Phase khi drill-down
@@ -277,3 +332,8 @@ Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh trước khi sang v
   y hệt) + thêm bộ mới cho N-tầng.
 - **R-D. Hiệu năng cộng dồn.** N-tầng nhân số nút; vẫn trong RAM nên chấp nhận được,
   nhưng cần đo với Epic ~500 lá.
+- **R-E. Ingest linh động độ sâu + gốc bất kỳ loại (case 2 tầng).** Đây là phần
+  mới thêm sau khi rà case Task→Sub-task. `fetch-epic-tree.ts` (đang cứng 3 tầng) và
+  sổ đăng ký `tracked_epic` (đang cứng Epic) phải tổng quát hoá. Rủi ro chính: query
+  Jira đọc **thiếu lá** một cách im lặng nếu suy sai đâu là lá (E-nhóm liveKeys/xoá
+  mềm). → có test riêng cho cây 2 tầng, và đối chiếu số lá đọc được với `/search`.
