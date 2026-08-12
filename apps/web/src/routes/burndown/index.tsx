@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { ChartSeries, ExplainRow } from '@app/shared';
+import type { ChartSeries, ExplainRow, TierSeries } from '@app/shared';
 import { useBurndown, useExplainDay } from '../../api/use-burndown.js';
 import { BurndownChart } from '../../components/chart/burndown-chart.js';
 import { EpicPicker } from '../../components/epic-picker/index.js';
@@ -12,6 +12,7 @@ import {
   LoadingState,
   type Column,
 } from '../../components/ui/index.js';
+import { childrenOf, hasChildren } from './tier-drill.js';
 
 /**
  * Màn hình biểu đồ Burndown — PRD §5.1.
@@ -26,11 +27,12 @@ import {
  * nhiều Phase đã gỡ khỏi giao diện; `ChartMode` trong hợp đồng API vẫn còn
  * `COMPARE` nên phần backend không đổi.
  */
-type ScreenMode = 'EPIC' | 'PHASE';
+type ScreenMode = 'EPIC' | 'PHASE' | 'TIER';
 
 const MODE_LABEL: Record<ScreenMode, string> = {
   EPIC: 'Whole Epic',
   PHASE: 'Single Phase',
+  TIER: 'Theo tầng',
 };
 
 export function BurndownScreen() {
@@ -39,6 +41,7 @@ export function BurndownScreen() {
 
   const [mode, setMode] = useState<ScreenMode>('EPIC');
   const [selected, setSelected] = useState<string[]>([]);
+  const [tierPath, setTierPath] = useState<string[]>([]);
   const [explainDate, setExplainDate] = useState<string | null>(null);
 
   const query = useBurndown(epicKey);
@@ -63,6 +66,10 @@ export function BurndownScreen() {
 
   const data = query.data;
   const phaseKeys = [...new Set(data.series.flatMap((s) => (s.key === 'EPIC' ? [] : [s.key])))];
+  // Tab "Theo tầng" chỉ hiện khi Epic đa tầng (có per_tier). Epic 1 tầng giữ nguyên UI cũ.
+  const hasTiers = data.tierSeries.length > 0;
+  const availableModes: ScreenMode[] = hasTiers ? ['EPIC', 'PHASE', 'TIER'] : ['EPIC', 'PHASE'];
+  const effectiveMode: ScreenMode = mode === 'TIER' && !hasTiers ? 'EPIC' : mode;
 
   return (
     <div className="stack">
@@ -75,13 +82,13 @@ export function BurndownScreen() {
       </div>
 
       <div className="tabs" role="tablist" aria-label="Chart view mode">
-        {(Object.keys(MODE_LABEL) as ScreenMode[]).map((m) => (
+        {availableModes.map((m) => (
           <button
             key={m}
             type="button"
             role="tab"
-            aria-selected={mode === m}
-            className={`tab${mode === m ? ' tab--active' : ''}`}
+            aria-selected={effectiveMode === m}
+            className={`tab${effectiveMode === m ? ' tab--active' : ''}`}
             onClick={() => setMode(m)}
           >
             {MODE_LABEL[m]}
@@ -89,18 +96,28 @@ export function BurndownScreen() {
         ))}
       </div>
 
-      {mode !== 'EPIC' && (
+      {effectiveMode === 'PHASE' && (
         <PhasePicker phases={phaseKeys} selected={selected} onChange={setSelected} />
       )}
 
       <section className="panel">
-        <ChartArea
-          mode={mode}
-          selected={selected}
-          series={data.series}
-          markers={data.markers}
-          onPointClick={setExplainDate}
-        />
+        {effectiveMode === 'TIER' ? (
+          <TierDrillView
+            tierSeries={data.tierSeries}
+            path={tierPath}
+            onPath={setTierPath}
+            markers={data.markers}
+            onPointClick={setExplainDate}
+          />
+        ) : (
+          <ChartArea
+            mode={effectiveMode}
+            selected={selected}
+            series={data.series}
+            markers={data.markers}
+            onPointClick={setExplainDate}
+          />
+        )}
 
         {/*
           Nói thẳng ra rằng đường Kế hoạch được vẽ lại liên tục. Không nói thì PM
@@ -179,6 +196,76 @@ function ChartArea({
 }
 
 type BurndownScreenMarkers = Parameters<typeof BurndownChart>[0]['markers'];
+
+/**
+ * Chế độ "Theo tầng": vẽ CON TRỰC TIẾP của nút đang mở, bấm để drill sâu hơn.
+ *
+ * Dùng lại BurndownChart (đã tổng quát theo `ChartSeries[]`) — chỉ đổi tập chuỗi
+ * truyền vào. `path` là đường drill hiện tại; breadcrumb đi ngược lên.
+ */
+function TierDrillView({
+  tierSeries,
+  path,
+  onPath,
+  markers,
+  onPointClick,
+}: {
+  readonly tierSeries: readonly TierSeries[];
+  readonly path: readonly string[];
+  readonly onPath: (next: string[]) => void;
+  readonly markers: BurndownScreenMarkers;
+  readonly onPointClick: (date: string) => void;
+}) {
+  const children = childrenOf(tierSeries, path);
+
+  return (
+    <div className="stack">
+      <div className="scope" role="group" aria-label="Đường drill theo tầng">
+        <button
+          type="button"
+          className={`button${path.length === 0 ? ' button--primary' : ''}`}
+          onClick={() => onPath([])}
+        >
+          Toàn Epic
+        </button>
+        {path.map((code, i) => (
+          <span key={i}>
+            <span className="muted"> / </span>
+            <button type="button" className="button" onClick={() => onPath(path.slice(0, i + 1))}>
+              {code}
+            </button>
+          </span>
+        ))}
+      </div>
+
+      {children.length === 0 ? (
+        <EmptyState title="Nút lá" description="Nút này không còn tầng con để tách nhỏ hơn." />
+      ) : (
+        <>
+          <BurndownChart series={children} markers={markers} showPlanned onPointClick={onPointClick} />
+          <div className="scope" role="group" aria-label="Chọn nút con để drill xuống">
+            {children.map((c) => {
+              const drillable = hasChildren(tierSeries, c.groupPath);
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  className="button"
+                  disabled={!drillable}
+                  title={drillable ? 'Bấm để mở tầng con' : 'Nút lá — không có tầng con'}
+                  onClick={() => onPath([...c.groupPath])}
+                >
+                  {c.label}
+                  {drillable ? ' ▸' : ''}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function PhasePicker({
   phases,

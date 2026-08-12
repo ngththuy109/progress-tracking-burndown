@@ -55,6 +55,18 @@ export const chartSeriesSchema = z.object({
 });
 export type ChartSeries = z.infer<typeof chartSeriesSchema>;
 
+/**
+ * Chuỗi cho MỘT nút prefix của cây tầng (drill-down N tầng, DYNAMIC-TIERS-DESIGN §8).
+ *
+ * `key` = JSON.stringify(groupPath) để duy nhất; `groupPath` giữ để màn hình dựng cây
+ * drill (con của nút = groupPath dài hơn đúng 1 phần tử). CHỈ có khi Epic đa tầng.
+ */
+export const tierSeriesSchema = chartSeriesSchema.extend({
+  groupPath: z.array(z.string()),
+  tierOrder: z.number().int(),
+});
+export type TierSeries = z.infer<typeof tierSeriesSchema>;
+
 // ---------------------------------------------------------------------------
 // Dấu mốc
 // ---------------------------------------------------------------------------
@@ -124,6 +136,11 @@ export const burndownResponseSchema = z.object({
   from: z.string(),
   to: z.string(),
   series: z.array(chartSeriesSchema),
+  /**
+   * Chuỗi drill-down theo tầng — mọi nút prefix của cây group_path. Trống với Epic 1
+   * tầng (`per_phase`/`series` đã đủ). `default([])` để phản hồi cũ trong cache vẫn parse.
+   */
+  tierSeries: z.array(tierSeriesSchema).default([]),
   markers: z.array(chartMarkerSchema),
   planShiftSummary: planShiftSummarySchema,
   dataHealth: dataHealthSchema,
@@ -161,6 +178,13 @@ export interface SnapshotRow {
     readonly countTodo: number;
     readonly countInProgress: number;
     readonly countDone: number;
+    readonly plannedRemainingS: number | null;
+  }[];
+  /** Cây tổng hợp theo tầng của ngày này (DYNAMIC-TIERS §4.3). Vắng với Epic 1 tầng. */
+  readonly perTier?: readonly {
+    readonly tierOrder: number;
+    readonly groupPath: readonly string[];
+    readonly remainingS: number;
     readonly plannedRemainingS: number | null;
   }[];
 }

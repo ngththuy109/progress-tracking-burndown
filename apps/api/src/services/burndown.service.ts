@@ -12,6 +12,7 @@ import {
   type PlanShiftRecord,
   type PlanShiftSummary,
   type SnapshotRow,
+  type TierSeries,
   type WorkCalendar,
 } from '@app/shared';
 import { computePlannedRemaining } from '@app/engine';
@@ -117,6 +118,9 @@ export function buildChart(args: BuildChartArgs): BurndownResponse {
     from: args.days[0] ?? '',
     to: args.days[args.days.length - 1] ?? '',
     series,
+    // Drill-down theo tầng (DYNAMIC-TIERS §8): mọi nút prefix của cây group_path, gom
+    // từ `per_tier`. Trống với Epic 1 tầng (per_tier vắng) — không đổi hành vi cũ.
+    tierSeries: buildTierSeries(args.days, workdaySet, byDate),
     markers: buildMarkers(args.snapshots, args.planShifts),
     planShiftSummary: summarizeShifts(args.planShifts, args.rollups),
     dataHealth: {
@@ -267,6 +271,52 @@ function phaseSeries(
         : point(date, planned.seconds, null, isOffDay);
     }),
   };
+}
+
+/**
+ * Dựng chuỗi drill-down cho MỌI nút prefix của cây tầng — từ `per_tier` các ngày.
+ *
+ * Đơn giản hơn `phaseSeries`: KHÔNG chiếu tiếp đường Kế hoạch sau snapshot cuối (drill
+ * là góc nhìn phụ; số ngày kế hoạch của từng nút nằm trong group_rollup, không nạp ở
+ * đây). Ngày có snapshot → đọc nút trong `per_tier`; không có → lỗ thủng (null).
+ */
+function buildTierSeries(
+  days: readonly DateOnly[],
+  workdaySet: ReadonlySet<DateOnly>,
+  byDate: ReadonlyMap<string, SnapshotRow>,
+): TierSeries[] {
+  // Thu thập mọi nút prefix xuất hiện ở bất kỳ ngày nào.
+  const nodes = new Map<string, { groupPath: string[]; tierOrder: number }>();
+  for (const snap of byDate.values()) {
+    for (const t of snap.perTier ?? []) {
+      const key = JSON.stringify(t.groupPath);
+      if (!nodes.has(key)) nodes.set(key, { groupPath: [...t.groupPath], tierOrder: t.tierOrder });
+    }
+  }
+
+  return [...nodes.values()]
+    .sort(
+      (a, b) =>
+        a.tierOrder - b.tierOrder ||
+        JSON.stringify(a.groupPath).localeCompare(JSON.stringify(b.groupPath)),
+    )
+    .map((node) => {
+      const key = JSON.stringify(node.groupPath);
+      return {
+        key,
+        label: node.groupPath[node.groupPath.length - 1] ?? key,
+        colorHex: null,
+        groupPath: node.groupPath,
+        tierOrder: node.tierOrder,
+        points: days.map((date) => {
+          const isOffDay = !workdaySet.has(date);
+          const n = byDate.get(date)?.perTier?.find((x) => JSON.stringify(x.groupPath) === key);
+          return n === undefined
+            ? point(date, null, null, isOffDay)
+            : point(date, n.plannedRemainingS, n.remainingS, isOffDay);
+        }),
+      };
+    });
 }
 
 // ---------------------------------------------------------------------------

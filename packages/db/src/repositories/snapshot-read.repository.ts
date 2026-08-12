@@ -21,6 +21,7 @@ interface RawSnapshot {
   count_in_progress: number;
   count_done: number;
   per_phase: unknown;
+  per_tier: unknown;
 }
 
 /** `BigInt` không so sánh được bằng `toEqual` và không lọt qua `JSON.stringify`. */
@@ -41,7 +42,7 @@ export async function loadSnapshotsForChart(
   const rows = await prisma.$queryRawUnsafe<RawSnapshot[]>(
     `SELECT snapshot_date, planned_remaining_s, actual_remaining_s, total_scope_s,
             total_spent_s, scope_added_s, scope_removed_s,
-            count_todo, count_in_progress, count_done, per_phase
+            count_todo, count_in_progress, count_done, per_phase, per_tier
        FROM daily_snapshot
       WHERE epic_key = $1
         AND snapshot_date BETWEEN $2::date AND $3::date
@@ -63,6 +64,7 @@ export async function loadSnapshotsForChart(
     countInProgress: r.count_in_progress,
     countDone: r.count_done,
     perPhase: readPerPhase(r.per_phase),
+    perTier: readPerTier(r.per_tier),
   }));
 }
 
@@ -112,6 +114,29 @@ function readPerPhase(raw: unknown): SnapshotRow['perPhase'] {
       countDone: num(o['countDone']),
       // `null` có nghĩa THẬT ở đây: Phase thiếu ngày kế hoạch thì không vẽ
       // đường Kế hoạch. Đổi thành 0 sẽ vẽ ra một đường chạm đáy giả.
+      plannedRemainingS: typeof o['plannedRemainingS'] === 'number' ? o['plannedRemainingS'] : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Đọc cột JSON `per_tier` (cây tổng hợp N tầng). Vắng/rỗng ⇒ mảng rỗng — Epic 1 tầng.
+ */
+function readPerTier(raw: unknown): NonNullable<SnapshotRow['perTier']> {
+  if (!Array.isArray(raw)) return [];
+
+  const out: NonNullable<SnapshotRow['perTier']>[number][] = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    if (!Array.isArray(o['groupPath'])) continue;
+
+    out.push({
+      tierOrder: num(o['tierOrder']),
+      groupPath: (o['groupPath'] as unknown[]).filter((x): x is string => typeof x === 'string'),
+      remainingS: num(o['remainingS']),
+      // `null` THẬT: nút thiếu ngày kế hoạch thì không vẽ đường Kế hoạch.
       plannedRemainingS: typeof o['plannedRemainingS'] === 'number' ? o['plannedRemainingS'] : null,
     });
   }
