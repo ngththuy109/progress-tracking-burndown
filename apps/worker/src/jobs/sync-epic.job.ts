@@ -1,4 +1,4 @@
-import type { EffectiveConfig, SyncStep, TrackedEpicStatus } from '@app/shared';
+import type { EffectiveConfig, SyncStep, TrackedEpicStatus, TrackedScope } from '@app/shared';
 import type { JiraClient, ResolvedFieldMapping } from '@app/jira';
 import { fetchEpicTree, fetchHistory, skewedWatermark } from '../pipeline/fetch-epic-tree.js';
 import {
@@ -81,6 +81,8 @@ export interface SyncEpicDeps {
   readonly syncRuns: SyncRunPort;
   readonly epics: EpicStatePort;
   readonly dirty: DirtyEpicQueuePort;
+  /** Bộ chọn phạm vi lá (CONTAINER/QUERY). Vắng ⇒ CONTAINER (DYNAMIC-TIERS §6). */
+  readonly scope?: TrackedScope;
   /**
    * Đồng hồ, truyền vào chứ không đọc thẳng.
    *
@@ -149,7 +151,13 @@ export async function syncEpic(
     const since = rereadAll ? null : skewedWatermark(state.lastSyncedAt);
 
     // --- GIAI ĐOẠN 1: cây issue, đúng 2 lần gọi search ---
-    const tree = await fetchEpicTree(deps.jira, { epicKey, fields: deps.fields, since });
+    const tree = await fetchEpicTree(deps.jira, {
+      epicKey,
+      fields: deps.fields,
+      since,
+      // Vắng ⇒ fetchEpicTree tự coi là CONTAINER (nhánh cũ, không đổi hành vi).
+      ...(deps.scope ? { scope: deps.scope } : {}),
+    });
 
     // --- GIAI ĐOẠN 2: worklog + changelog song song ---
     step = 'FETCH_HISTORY';

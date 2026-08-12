@@ -28,11 +28,13 @@ import {
 import { listWorkdays, localDateOf, mergeInheritance } from '@app/engine';
 import {
   parseSyncJobPayload,
+  scopeOf,
   type ConfigPayload,
   type DateOnly,
   type EffectiveConfig,
   type IssueTotals,
   type StatusIdMap,
+  type TrackedScope,
 } from '@app/shared';
 import { addReplacingFinished, createQueues, jobIdFor, type QueueSet } from './queue/queues.js';
 import { QUEUE_NAME } from './queue/queues.js';
@@ -179,13 +181,14 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
 /** `sync-epic` và `backfill-epic`: đọc Jira (giai đoạn 1–3) rồi dựng lại (4–5). */
 async function runSyncJob(ctx: JobContext, rawPayload: unknown): Promise<void> {
   const epicKey = parseSyncJobPayload(rawPayload).epicKey;
-  const { config, calendar } = await loadEpicContext(ctx, epicKey);
+  const { config, calendar, scope } = await loadEpicContext(ctx, epicKey);
   const sourceReadAtMs = ctx.now().getTime();
 
   const syncDeps: SyncEpicDeps = {
     jira: ctx.jira,
     fields: ctx.fields,
     config,
+    scope,
     issues: createIssueWritePort(ctx.prisma),
     worklogs: createWorklogWritePort(ctx.prisma),
     changelog: createChangelogWritePort(ctx.prisma),
@@ -373,11 +376,15 @@ async function enqueueBackfill(queues: QueueSet, epicKey: string): Promise<void>
   );
 }
 
-/** Nạp cấu hình hiệu lực + lịch làm việc của một Epic. */
+/** Nạp cấu hình hiệu lực + lịch làm việc + bộ chọn phạm vi của một Epic. */
 async function loadEpicContext(
   ctx: JobContext,
   epicKey: string,
-): Promise<{ config: EffectiveConfig; calendar: Awaited<ReturnType<typeof getCalendar>> }> {
+): Promise<{
+  config: EffectiveConfig;
+  calendar: Awaited<ReturnType<typeof getCalendar>>;
+  scope: TrackedScope;
+}> {
   const epic = await findByKey(ctx.prisma, epicKey);
   if (!epic) {
     throw new Error(`Epic ${epicKey} không có trong sổ theo dõi — không xử lý được.`);
@@ -390,7 +397,7 @@ async function loadEpicContext(
   // job dùng chung; query lịch rất nhẹ nên đọc lại mỗi job không đáng kể.
   ctx.calendarCache.invalidate(epic.calendarId);
   const calendar = await getCalendar(ctx.prisma, epic.calendarId, ctx.calendarCache);
-  return { config, calendar };
+  return { config, calendar, scope: scopeOf(epic) };
 }
 
 function buildReconstructDeps(
@@ -488,7 +495,15 @@ async function earliestMissingSnapshotDate(
 }
 
 async function jiraTotals(ctx: JobContext, epicKey: string): Promise<readonly IssueTotals[]> {
-  const tree = await fetchEpicTree(ctx.jira, { epicKey, fields: ctx.fields, since: null });
+  // Đối soát cũng phải theo đúng scope: QUERY đọc lá bằng JQL, không phải cây CONTAINER.
+  const epic = await findByKey(ctx.prisma, epicKey);
+  const scope = epic ? scopeOf(epic) : undefined;
+  const tree = await fetchEpicTree(ctx.jira, {
+    epicKey,
+    fields: ctx.fields,
+    since: null,
+    ...(scope ? { scope } : {}),
+  });
   return [...tree.tasks, ...tree.subtasks].map((i) => ({
     issueKey: i.key,
     timeSpentS: numberOf(i.fields['timespent']),

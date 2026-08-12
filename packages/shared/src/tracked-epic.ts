@@ -5,7 +5,39 @@
  * nào". Hệ thống không tự động theo dõi mọi Epic; PM phải chủ động thêm.
  */
 import { z } from 'zod';
-import { TRACKED_EPIC_STATUS } from './enums.js';
+import { TRACKED_EPIC_STATUS, type ScopeType } from './enums.js';
+
+/**
+ * Bộ chọn phạm vi lá của một scope theo dõi (DYNAMIC-TIERS-DESIGN §6):
+ *   CONTAINER — lá là hậu duệ của issue `epicKey` (Epic/Task, mọi độ sâu);
+ *   QUERY     — lá là ticket khớp `scopeJql` (project phẳng, không container).
+ * `leafIssueTypes` = loại issue được coi là lá; rỗng = suy theo cây.
+ */
+export interface TrackedScope {
+  readonly scopeType: ScopeType;
+  readonly scopeJql: string | null;
+  readonly leafIssueTypes: readonly string[];
+}
+
+/** Đọc scope từ một hàng tracked_epic (giá trị thô từ DB), có mặc định an toàn. */
+export function scopeOf(row: {
+  scopeType?: string | null;
+  scopeJql?: string | null;
+  leafIssueTypes?: readonly string[] | null;
+}): TrackedScope {
+  const scopeType: ScopeType = row.scopeType === 'QUERY' ? 'QUERY' : 'CONTAINER';
+  return {
+    scopeType,
+    scopeJql: row.scopeJql ?? null,
+    leafIssueTypes: row.leafIssueTypes ?? [],
+  };
+}
+
+/** Nhãn hiển thị cho hai kiểu scope. */
+export const SCOPE_TYPE_LABEL: Record<ScopeType, string> = {
+  CONTAINER: 'Container (Epic/Task và hậu duệ)',
+  QUERY: 'JQL (project phẳng)',
+};
 
 /** Lý do một key không thêm được. Dùng đúng các mã này, đừng tự chế thêm. */
 export const EPIC_REJECT_REASON = [

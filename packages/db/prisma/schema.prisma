@@ -175,9 +175,11 @@ model WorklogEntry {
 // Nguồn DUY NHẤT trả lời "job đêm phải chạy cho Epic nào".
 // ============================================================================
 model TrackedEpic {
-  epicKey     String @id @map("epic_key") @db.VarChar(32)
-  epicId      BigInt @unique @map("epic_id")
-  projectKey  String @map("project_key") @db.VarChar(32)
+  epicKey String @id @map("epic_key") @db.VarChar(32)
+  // NULL cho scope QUERY (project phẳng, không có issue container). CONTAINER vẫn NOT NULL
+  // trên thực tế. @unique trên cột nullable: nhiều NULL vẫn khác nhau (Postgres).
+  epicId      BigInt? @unique @map("epic_id")
+  projectKey  String  @map("project_key") @db.VarChar(32)
   displayName String @map("display_name")
 
   // PENDING | BACKFILLING | ACTIVE | PAUSED | ERROR

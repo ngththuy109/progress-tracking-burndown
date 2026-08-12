@@ -12,13 +12,18 @@ const SECONDS_PER_HOUR = 3600;
 
 export interface UpsertTrackedEpicArgs {
   epicKey: string;
-  epicId: bigint;
+  /** NULL cho scope QUERY (không có issue container). */
+  epicId: bigint | null;
   projectKey: string;
   displayName: string;
   timezone: string;
   calendarId: string;
   addedBy: string;
   note: string | null;
+  // Tracked scope selector (DYNAMIC-TIERS §6). Vắng ⇒ mặc định CONTAINER (như hàng cũ).
+  scopeType?: string;
+  scopeJql?: string | null;
+  leafIssueTypes?: string[];
 }
 
 /**

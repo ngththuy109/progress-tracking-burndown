@@ -12,6 +12,7 @@ import {
   type JiraWorklog,
   type ResolvedFieldMapping,
 } from '@app/jira';
+import type { TrackedScope } from '@app/shared';
 
 /**
  * GIAI ĐOẠN 1–2 của luồng đồng bộ — PRD §4.2, §4.5.
@@ -80,6 +81,8 @@ export async function fetchEpicTree(
     fields: ResolvedFieldMapping;
     /** Đã trừ lùi sẵn. `null` = backfill. */
     since: Date | null;
+    /** Bộ chọn phạm vi. Vắng ⇒ CONTAINER (mọi hàng cũ) → nhánh dưới KHÔNG đổi. */
+    scope?: TrackedScope;
   },
 ): Promise<EpicTree> {
   const issueFields = [
@@ -96,6 +99,13 @@ export async function fetchEpicTree(
     'labels',
     ...fieldIdsForSearch(args.fields),
   ];
+
+  // Scope QUERY (project phẳng, §2.5): lá = ticket khớp JQL, KHÔNG có container. Nhánh
+  // riêng, tách hẳn khỏi đường CONTAINER bên dưới — hàng cũ (scope vắng/CONTAINER) đi
+  // đúng code cũ nên hành vi không đổi một byte.
+  if (args.scope?.scopeType === 'QUERY') {
+    return fetchQueryScope(client, args.scope.scopeJql ?? '', issueFields, args.since);
+  }
 
   // (1) Bản thân Epic + các Task con. KHÔNG lọc theo `updated` — xem chú thích.
   const top = await searchIssues(client, {
@@ -145,6 +155,42 @@ export async function fetchEpicTree(
     subtasks,
     liveKeys: new Set([...top.map((i) => i.key), ...liveSubtaskKeys]),
   };
+}
+
+/**
+ * Lấy lá của scope QUERY — DYNAMIC-TIERS-DESIGN §2.5, §6.
+ *
+ * Lá = ticket khớp JQL (cây phẳng, không container). Trả về ở `subtasks` với
+ * `epic=null`/`tasks=[]`; nhờ vậy `persist-issues`/`fetchHistory`/`markRemoved` xử lý
+ * y như lá CONTAINER — không phải sửa gì thêm. Khoá nhóm của lá phẳng lấy từ CHÍNH
+ * tiêu đề nó (cấu hình tầng dùng `SELF_TITLE`), nên không cần Task cha.
+ *
+ * `updated >=` chỉ áp cho lần đọc dữ liệu; danh sách `liveKeys` quét KHÔNG lọc để xoá
+ * mềm chạy đúng ở mọi lần (cùng lý do với nhánh CONTAINER). JQL rỗng ⇒ scope trống
+ * (không đọc gì) thay vì quét cả Jira.
+ */
+async function fetchQueryScope(
+  client: JiraClient,
+  jql: string,
+  issueFields: readonly string[],
+  since: Date | null,
+): Promise<EpicTree> {
+  const trimmed = jql.trim();
+  if (trimmed === '') {
+    return { epic: null, tasks: [], subtasks: [], liveKeys: new Set() };
+  }
+
+  const leaves = await searchIssues(client, {
+    jql: `(${trimmed})` + (since ? ` AND updated >= ${quote(toJqlTimestamp(since))}` : ''),
+    fields: [...issueFields],
+  });
+
+  const liveKeys =
+    since === null
+      ? leaves.map((i) => i.key)
+      : (await searchIssues(client, { jql: `(${trimmed})`, fields: ['summary'] })).map((i) => i.key);
+
+  return { epic: null, tasks: [], subtasks: leaves, liveKeys: new Set(liveKeys) };
 }
 
 export interface FetchedHistory {
