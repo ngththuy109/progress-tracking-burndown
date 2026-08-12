@@ -1,6 +1,8 @@
 # Thiết kế: Phân tầng linh động theo dự án (Dynamic Tiers)
 
-> **Trạng thái:** BẢN THẢO để thảo luận — chưa chốt, chưa code.
+> **Trạng thái:** ĐÃ TRIỂN KHAI — Vòng 1–4 xong (xem lộ trình §9). Engine, config, ingest
+> (CONTAINER + QUERY), persist N tầng và drill-down UI đều đã có; 20 golden dataset giữ
+> byte-identical suốt các vòng (không đổi hành vi Epic 3 tầng đang chạy).
 > **Nguồn gốc:** yêu cầu "hệ thống vẫn single-tenant nhưng cho phép mỗi dự án cấu
 > hình từ **1 đến N tầng** thay vì cứng **3 tầng** (Epic → Phase → Sub-task) như
 > hiện tại".
@@ -340,15 +342,20 @@ thêm golden cho n=1 (phẳng) và n=3.
 
 ## 9. Lộ trình theo vòng (đúng tinh thần "cần nhiều vòng")
 
-| Vòng | Nội dung | Kết quả có thể ship | Rủi ro |
-|---|---|---|---|
-| **0** | Tài liệu này + chốt câu hỏi mở | *(đang ở đây)* | — |
-| **1** | Schema tầng + migration (3-tầng→config mặc định) + shared types + Config API/validate. **Engine vẫn đọc tier1=Phase, hành vi KHÔNG đổi** | Nền tảng, xanh toàn bộ test cũ | Thấp — không đổi hành vi |
-| **2** | Engine tổng quát N-tầng (rollup/snapshot) + `resolveGroupKeys` + ghi `group_path`. Golden n=1/n=3 | Cộng dồn N-tầng chạy được | Trung bình — lõi tính toán |
-| **3** | API drill-down + màn hình "Cấu trúc phân tầng" | PM tự cấu hình tầng | Trung bình |
-| **4** | Burndown/Signboard drill-down UI + docs + UAT | Trọn tính năng | Trung bình |
+| Vòng | Nội dung | Trạng thái |
+|---|---|---|
+| **0** | Tài liệu này + chốt câu hỏi mở | ✅ Xong |
+| **1** | Schema tầng + migration + shared types (`group_tier*`, `group_path`). Engine vẫn đọc phase_*, hành vi KHÔNG đổi | ✅ Xong |
+| **2** | Engine tổng quát N tầng (`computeGroupRollups`/`buildTierSnapshotForDay`) + `GroupKeyResolver` ghi `group_path`. Test n=1/n=3 | ✅ Xong |
+| **3** | Config API mở tiers (3.1) + màn "Cấu trúc tầng" (3.2) + nguồn TOKEN/LABEL (3.3) + ingest CONTAINER/QUERY (3.4) + đăng ký scope QUERY (3.5) | ✅ Xong |
+| **4** | Persist N tầng `group_rollup`/`per_tier` (4.1) + Burndown drill-down API + UI (4.2) | ✅ Xong |
 
-Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh trước khi sang vòng sau.
+Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh; 20 golden dataset byte-identical
+suốt các vòng làm bằng chứng "không đổi hành vi".
+
+> **Còn để sau (không chặn):** đường Kế hoạch drill-down cho tầng ≠ Phase khi cần
+> (câu hỏi mở #6); `CUSTOM_FIELD` làm nguồn khoá (v2); tổng quát hoá ingest CONTAINER cho
+> cây sâu > 3 tầng vật lý (hiện QUERY đã phủ project phẳng, CONTAINER phủ Epic→Task→Sub-task).
 
 ---
 
