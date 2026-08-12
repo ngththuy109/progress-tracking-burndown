@@ -432,6 +432,66 @@ describe('đường Kế hoạch kéo dài tới hết ngày kế hoạch', () =
   });
 });
 
+describe('đường Kế hoạch chiếu NGƯỢC trước snapshot đầu tiên', () => {
+  beforeEach(() => {
+    // Kịch bản của PM: một Phase plan_start 02/03 nhưng snapshot đầu tiên mãi
+    // 03/03 mới có (Epic được thêm vào theo dõi muộn hơn plan_start). Rollup mang
+    // ước lượng thật để công thức T-16 có gì mà đốt.
+    reads.rollups = [
+      rollup('DESIGN', '2026-03-02', '2026-03-06', 5, 144_000),
+      rollup('DEV', '2026-03-09', '2026-03-13', 5, 144_000),
+    ];
+    reads.snapshots = reads.snapshots.filter((s) => s.snapshotDate !== '2026-03-02');
+  });
+
+  it('ngày TRƯỚC snapshot đầu tiên có đường Kế hoạch (Thực tế vẫn null)', async () => {
+    // Trục lấy MIN(plan_start) = 02/03 làm cận dưới, nhưng snapshot đầu là 03/03.
+    // Trước khi sửa, 02/03 rơi vào nhánh "trước snapshot cuối" → null → đường Kế
+    // hoạch bắt đầu muộn một ngày so với trục. Giờ nó được chiếu ngược.
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    const points = body.series[0]?.points ?? [];
+    const first = points.find((p) => p.date === '2026-03-02');
+
+    // 02/03: DESIGN cháy 1/5 của 40h = 8h → 80h − 8h = 72h. DEV chưa tới ngày bắt đầu.
+    expect(first?.plannedRemainingHours).toBe(72);
+    // Không có số đo thật trước khi theo dõi — đường Thực tế để null, không bịa.
+    expect(first?.actualRemainingHours).toBeNull();
+    expect(first?.varianceHours).toBeNull();
+    // Nối liền mạch: điểm biên 03/03 (snapshot thật) cũng có đường Kế hoạch.
+    expect(points.find((p) => p.date === '2026-03-03')?.plannedRemainingHours).not.toBeNull();
+  });
+
+  it('ngày trước snapshot đầu KHÔNG bị đếm là thiếu snapshot — đó là báo động giả', async () => {
+    // 02/03 là quá khứ TRƯỚC KHI Epic bắt đầu chốt sổ, không phải job đêm bỏ lỡ.
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    expect(body.dataHealth.missingSnapshotDays).toEqual([]);
+    // Trục vẫn giữ đủ 12 ngày lịch (10 ngày làm việc + 2 cuối tuần).
+    expect(body.series[0]?.points).toHaveLength(12);
+  });
+
+  it('lỗ thủng GIỮA hai đầu snapshot vẫn là null — chỉ hai ĐUÔI mới được chiếu', async () => {
+    // Bỏ thêm 04/03 (nằm GIỮA 03/03 và snapshot cuối) — đây mới là lỗ thủng thật.
+    reads.snapshots = reads.snapshots.filter((s) => s.snapshotDate !== '2026-03-04');
+    const { body } = await get('/api/burndown/epic/PAY-1');
+    const points = body.series[0]?.points ?? [];
+
+    // 02/03 (đuôi trước) được chiếu…
+    expect(points.find((p) => p.date === '2026-03-02')?.plannedRemainingHours).not.toBeNull();
+    // …nhưng 04/03 (giữa) vẫn là lỗ thủng nhìn thấy được, và bị đếm là thiếu.
+    expect(points.find((p) => p.date === '2026-03-04')?.plannedRemainingHours).toBeNull();
+    expect(body.dataHealth.missingSnapshotDays).toEqual(['2026-03-04']);
+  });
+
+  it('chế độ một Phase cũng chiếu ngược trên phạm vi của chính Phase đó', async () => {
+    const { body } = await get('/api/burndown/epic/PAY-1/phase/DESIGN');
+    const first = body.series[0]?.points.find((p) => p.date === '2026-03-02');
+
+    // Phạm vi Phase = 144_000s (40h). Cháy 1/5 ngày đầu = 8h → còn 32h.
+    expect(first?.plannedRemainingHours).toBe(32);
+    expect(first?.actualRemainingHours).toBeNull();
+  });
+});
+
 describe('cache', () => {
   it('lần gọi thứ hai lấy từ cache, không chạm database', async () => {
     await get('/api/burndown/epic/PAY-1');
