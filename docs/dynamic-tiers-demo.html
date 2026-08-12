@@ -56,6 +56,20 @@
   .seg button .n { font-family: var(--mono); font-size: 11px; opacity: .8; }
   .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
   .seg button:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .seg.big button { font-size: 13.5px; padding: 8px 16px; font-weight: 600; }
+
+  /* Top-bar read-only config badge */
+  .cfgbadge { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 7px 13px; }
+  .cfgbadge .cb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .cfgbadge .cb-lbl { color: var(--faint); }
+  .cfgbadge b { color: var(--ink); font-weight: 640; }
+
+  /* In-config picker for the global tier structure */
+  .cfgpick { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); margin-bottom: 18px; }
+  .cfgpick-hd { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 15px 18px; }
+  .cfgpick-txt { flex: 1 1 260px; min-width: 220px; }
+  .cfgpick-t { font-size: 15px; font-weight: 660; letter-spacing: -.01em; margin-top: 2px; }
+  .cfgpick-d { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 
   .ribbon { max-width: 1120px; margin: 0 auto; padding: 9px 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
   .ribbon .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--st-dstart); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-dstart) 22%, transparent); }
@@ -270,13 +284,11 @@
       <span class="mark">1..N</span>
       <div>
         <h1>Phân tầng linh động</h1>
-        <div class="sub">Theo dõi tiến độ · Cấu hình dự án — mô hình phân tầng 1..N</div>
+        <div class="sub">Single-tenant · một cấu hình toàn hệ thống · linh động 1..N tầng</div>
       </div>
     </div>
-    <div class="seg" id="scenarioSeg" role="group" aria-label="Chọn dạng dự án">
-      <button data-sc="A" aria-pressed="true"><span class="n">3</span> tầng</button>
-      <button data-sc="B" aria-pressed="false"><span class="n">2</span> tầng</button>
-      <button data-sc="C" aria-pressed="false"><span class="n">1</span> phẳng</button>
+    <div class="cfgbadge" id="configBadge" title="Cấu hình global đang áp dụng — đổi ở màn Cấu trúc tầng">
+      <span class="cb-dot"></span><span class="cb-lbl">Cấu hình global:</span> <b id="configBadgeName">3 tầng</b>
     </div>
   </div>
   <div class="ribbon">
@@ -307,6 +319,20 @@
 
   <!-- ============ CONFIG (tiers) ============ -->
   <section class="view" id="view-config" role="tabpanel">
+    <div class="cfgpick">
+      <div class="cfgpick-hd">
+        <div class="cfgpick-txt">
+          <div class="eyebrow">Cấu hình global · single-tenant</div>
+          <div class="cfgpick-t">Chọn kiểu cấu trúc phân tầng</div>
+          <div class="cfgpick-d">Áp cho <b>toàn hệ thống</b> — mọi tracked scope dùng chung cấu trúc này.</div>
+        </div>
+        <div class="seg big" id="cfgSeg" role="group" aria-label="Chọn kiểu cấu hình global">
+          <button data-sc="A" aria-pressed="true">3 tầng</button>
+          <button data-sc="B" aria-pressed="false">2 tầng</button>
+          <button data-sc="C" aria-pressed="false">Phẳng</button>
+        </div>
+      </div>
+    </div>
     <div class="glbar">
       <span class="gi">📖</span>
       <span><b>Chưa biết bắt đầu từ đâu?</b> Xem hướng dẫn từng bước thiết lập cấu hình phân tầng cho một dự án.</span>
@@ -1037,6 +1063,7 @@
     renderDrill(); var t = renderStats(); renderBurnChart(t.scope, t.rem); renderBars();
     renderSignboard();
     renderEpics(); renderMonitoring(); renderUsers(); renderHolidays();
+    syncConfigControls();
   }
   var VIEWS = ["epics", "burndown", "signboard", "monitoring", "config", "phase", "sbcol", "holidays", "users"];
   function switchView(id) {
@@ -1045,10 +1072,14 @@
     VIEWS.forEach(function (v) { $("view-" + v).classList.toggle("on", v === id); });
   }
 
-  $("scenarioSeg").addEventListener("click", function (e) {
+  var CONFIG_LABEL = { A: "3 tầng", B: "2 tầng", C: "Phẳng" };
+  function syncConfigControls() {
+    Array.prototype.forEach.call($("cfgSeg").querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x.dataset.sc === state.sc ? "true" : "false"); });
+    $("configBadgeName").textContent = CONFIG_LABEL[state.sc] || state.sc;
+  }
+  $("cfgSeg").addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
     state.sc = b.dataset.sc; state.drill = SC[state.sc].phaseTier; state.editTier = SC[state.sc].phaseTier;
-    Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
     renderAll();
   });
   $("side").addEventListener("click", function (e) { var b = e.target.closest(".navitem"); if (b) switchView(b.dataset.nav); });
