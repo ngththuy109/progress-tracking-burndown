@@ -399,3 +399,63 @@ export const upsertMemberRequestSchema = z.object({
 });
 export type UpsertMemberRequest = z.infer<typeof upsertMemberRequestSchema>;
 
+// ---------------------------------------------------------------------------
+// SSO (OIDC in-app) — /api/auth/mode (public) + /api/admin/auth/sso (ADMIN)
+// ---------------------------------------------------------------------------
+
+/**
+ * Chế độ xác thực đang hiệu lực — web hỏi TRƯỚC KHI đăng nhập nên endpoint
+ * này công khai (không lộ gì ngoài "có SSO hay không").
+ *   HEADER — mô hình cổng/proxy cũ (hoặc dev header); web không hiện nút login.
+ *   OIDC   — app tự đăng nhập; web đưa người dùng tới `loginUrl`.
+ */
+export const authModeResponseSchema = z.object({
+  mode: z.enum(['HEADER', 'OIDC']),
+  /** '/auth/login' khi mode = OIDC; null khi HEADER. */
+  loginUrl: z.string().nullable(),
+});
+export type AuthModeResponse = z.infer<typeof authModeResponseSchema>;
+
+/** Cấu hình SSO cho màn hình quản trị. Client secret KHÔNG BAO GIỜ xuất hiện. */
+export const ssoConfigSchema = z.object({
+  enabled: z.boolean(),
+  issuerUrl: z.string().nullable(),
+  clientId: z.string().nullable(),
+  hasClientSecret: z.boolean(),
+  scopes: z.string(),
+  emailClaim: z.string(),
+  sessionTtlHours: z.number().int(),
+  updatedBy: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+export type SsoConfigView = z.infer<typeof ssoConfigSchema>;
+
+/**
+ * Cập nhật cấu hình SSO. `clientSecret`: chuỗi = mã hóa rồi lưu; `null` = xóa;
+ * không gửi trường = GIỮ secret cũ (cùng quy ước với token Jira).
+ * Server TỪ CHỐI `enabled: true` khi bài test discovery/JWKS chưa pass —
+ * bật SSO hỏng là tự khóa mình ra ngoài.
+ */
+export const updateSsoConfigRequestSchema = z.object({
+  enabled: z.boolean().default(false),
+  issuerUrl: z.string().trim().url().nullable().default(null),
+  clientId: z.string().trim().min(1).nullable().default(null),
+  clientSecret: z.string().trim().min(1).nullable().optional(),
+  scopes: z.string().trim().min(1).default('openid profile email'),
+  emailClaim: z.string().trim().min(1).default('email'),
+  sessionTtlHours: z.number().int().min(1).max(168).default(12),
+});
+export type UpdateSsoConfigRequest = z.infer<typeof updateSsoConfigRequestSchema>;
+
+/** Kết quả từng bước "Test SSO" — cùng khuôn với test kết nối Jira. */
+export const ssoTestStepSchema = z.object({
+  step: z.enum(['DISCOVERY', 'JWKS', 'CLIENT']),
+  ok: z.boolean(),
+  detail: z.string(),
+});
+export const ssoTestResponseSchema = z.object({
+  ok: z.boolean(),
+  steps: z.array(ssoTestStepSchema),
+});
+export type SsoTestResponse = z.infer<typeof ssoTestResponseSchema>;
+

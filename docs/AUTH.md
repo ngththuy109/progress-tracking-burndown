@@ -7,27 +7,48 @@ oauth2-proxy cho Microsoft Entra ID) nằm ở [`config/auth-proxy/`](../config/
 
 ---
 
-## 1. Mô hình tổng quan (SSO "B1")
+## 1. Mô hình tổng quan — HAI CHẾ ĐỘ đăng nhập
 
-`apps/api` **không tự đăng nhập người dùng**. Một **auth proxy** đứng trước, đăng
-nhập bằng SSO (OpenID Connect) rồi bơm header danh tính cho API. Điểm mấu chốt:
+Hệ thống có hai chế độ xác thực; **quyền luôn tra DB** ở cả hai (không bao giờ
+tin role từ bên ngoài):
+
+### Chế độ OIDC in-app (khuyến nghị — cấu hình qua UI)
+
+App **tự đăng nhập OIDC** (authorization code + PKCE): ADMIN vào **Admin →
+SSO** nhập issuer URL / client ID / client secret (secret mã hóa AES-256-GCM
+bằng `APP_ENCRYPTION_KEY`, write-only như token Jira), bấm **Test** rồi bật.
+Không cần dựng oauth2-proxy nữa.
+
+```
+Trình duyệt ──▶ /auth/login ──302──▶ IdP (OIDC + PKCE) ──▶ /auth/callback
+                                                             │ verify id_token (chữ ký JWKS,
+                                                             │ iss/aud/exp/nonce)
+                                                             ▼
+                                              session Redis + cookie ptb_sess (HttpOnly)
+                                              → API tra app_user + project_member
+```
+
+- Server **từ chối bật SSO** khi bài test discovery/JWKS chưa pass — không thể
+  tự khóa mình bằng một cấu hình hỏng.
+- Đã bật SSO thì header `x-user-id` bị **bỏ qua hoàn toàn** (chống giả mạo khi
+  app lộ ra ngoài không qua cổng). Thoát hiểm khi kẹt: env `AUTH_FORCE_HEADER=1`
+  (xem RUNBOOK).
+- Redirect URI khai với IdP: `<PUBLIC_BASE_URL>/auth/callback`.
+
+### Chế độ header qua cổng (legacy — vẫn hỗ trợ khi SSO tắt)
+
+Khi SSO chưa bật (mặc định sau nâng cấp), giữ nguyên mô hình cũ: một **auth
+proxy** đứng trước, đăng nhập rồi bơm header danh tính:
 
 - Cổng chỉ khẳng định **DANH TÍNH** — header `x-user-id` = email đã xác thực.
 - API **không tin `role` từ header** — quyền tra bảng `app_user` + `project_member` trong DB.
 - Cổng **xoá mọi header `x-user-*` do client gửi** trước khi đặt của mình.
 
-```
-Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)   [IdP: Microsoft Entra ID]
-                         │  1. Chưa đăng nhập → chuyển tới IdP (OIDC)
-                         │  2. Đã đăng nhập  → đặt x-user-id = email; xoá x-user-* của client
-                         ├──▶ SPA tĩnh (apps/web build)
-                         └──▶ API → tra app_user + project_member → isAdmin + memberships
-```
+> Chế độ này cũng là đường chạy **local dev** (`VITE_DEV_USER` — Vite dev proxy
+> đóng vai cổng) và Basic Auth tạm — xem [`config/auth-proxy/`](../config/auth-proxy/).
 
-Vì sao thiết kế thế này: dù cổng có lỡ để lọt một header `x-user-role: ADMIN`
-giả thì cũng vô hại — quyền luôn đến từ database của hệ thống, không từ header.
-
-> **Cổng nào cũng được — miễn đặt đúng `x-user-id`.** IdP/proxy là phần thay-thế-được; app chỉ cần một header danh tính tin cậy. Chưa có SSO Entra thì dùng **Basic Auth tạm** để test với vài người (cùng mô hình header, không sửa code) — xem [`config/auth-proxy/`](../config/auth-proxy/) (`nginx-basic-auth.conf.example`).
+Vì sao quyền luôn ở DB: dù cổng/IdP có lỡ để lọt một claim/header `ADMIN` giả
+thì cũng vô hại — quyền chỉ đến từ database của hệ thống.
 
 ## 2. Quyền HAI TẦNG (multi-tenant — tenant = Jira project key)
 

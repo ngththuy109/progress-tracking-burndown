@@ -417,6 +417,22 @@ Token Jira của từng dự án lưu trong DB, mã hóa AES-256-GCM bằng
 3. `APP_ENCRYPTION_KEY` chỉ bắt buộc trước khi nhập token riêng đầu tiên.
 4. URL web đổi sang `/p/<PROJECT>/...` — cập nhật bookmark/monitor nếu có.
 
+### 2d. Bật SSO xong bị khóa ngoài (cấu hình OIDC sai)
+
+Server đã chặn trước phần lớn ca này (từ chối bật khi Test chưa pass), nhưng
+IdP vẫn có thể hỏng SAU khi bật (đổi client secret phía IdP, xóa app
+registration...). Khi không ai đăng nhập được nữa:
+
+```bash
+# 1. Tạm quay về chế độ header (cổng/dev):
+AUTH_FORCE_HEADER=1   # đặt vào env của API rồi khởi động lại
+# 2. Vào Admin → SSO bằng đường header như trước, sửa cấu hình, Test pass, Lưu.
+# 3. BỎ AUTH_FORCE_HEADER đi và khởi động lại lần nữa.
+```
+
+`AUTH_FORCE_HEADER=1` chỉ dành cho khôi phục — để quên nó là mở lại đường
+header vĩnh viễn ngay cả khi SSO đang bật.
+
 ### 3. Tắt khẩn cấp việc gọi Jira
 
 ```bash

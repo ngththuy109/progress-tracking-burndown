@@ -117,6 +117,13 @@ export {
 } from './repositories/project-member.repository.js';
 
 export {
+  findSsoConfig,
+  upsertSsoConfig,
+  type SsoConfigRow,
+  type UpsertSsoConfigArgs,
+} from './repositories/auth-sso.repository.js';
+
+export {
   upsertIssues,
   markRemovedIssues,
   knownIdToKey,

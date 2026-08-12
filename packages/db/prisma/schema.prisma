@@ -653,6 +653,41 @@ model ProjectMember {
 }
 
 // ============================================================================
+// Bảng 15: Cấu hình SSO (OIDC in-app) — MỘT DÒNG duy nhất (id = 1, CHECK ở SQL).
+//
+// Từ bản này app TỰ đăng nhập OIDC (authorization code + PKCE) thay vì bắt
+// buộc dựng oauth2-proxy: ADMIN cấu hình IdP ngay trên UI. `client_secret_enc`
+// mã hóa AES-256-GCM bằng APP_ENCRYPTION_KEY (cùng secret-box với Jira token),
+// KHÔNG BAO GIỜ trả ra API — chỉ trả cờ hasClientSecret.
+//
+// `enabled = false` (mặc định) → giữ nguyên chế độ header cũ (cổng/proxy hoặc
+// dev header) nên hệ thống hiện có không đổi hành vi; bật lên thì header danh
+// tính bị BỎ QUA (chống giả mạo khi app lộ ra ngoài không qua cổng) — thoát
+// hiểm khi cấu hình sai: env AUTH_FORCE_HEADER=1 (xem RUNBOOK).
+// ============================================================================
+model AuthSsoConfig {
+  id Int @id @default(1)
+
+  enabled Boolean @default(false)
+
+  issuerUrl       String? @map("issuer_url")
+  clientId        String? @map("client_id")
+  clientSecretEnc String? @map("client_secret_enc")
+
+  // Scope OIDC, cách nhau bằng dấu cách. Claim email: IdP nào cũng có nhưng
+  // tên có thể khác (Entra: preferred_username) — cho cấu hình để khỏi sửa code.
+  scopes     String @default("openid profile email")
+  emailClaim String @default("email") @map("email_claim") @db.VarChar(64)
+
+  sessionTtlHours Int @default(12) @map("session_ttl_hours") @db.SmallInt
+
+  updatedBy String?  @map("updated_by") @db.VarChar(254)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("auth_sso_config")
+}
+
+// ============================================================================
 // Bảng 13: Project — GỐC TENANT của multi-tenant (từ 20260812000000).
 //
 // Tenant định danh bằng chính Jira project key (chữ HOA, ví dụ PAY, CRM) —
