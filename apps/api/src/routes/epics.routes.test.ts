@@ -326,3 +326,47 @@ describe('danh sách, duyệt và phân quyền', () => {
     expect((await app.inject({ method: 'GET', url: '/api/epics' })).statusCode).toBe(200);
   });
 });
+
+describe('đăng ký scope QUERY (project phẳng §2.5)', () => {
+  const queryBody = (keys: string[], scopeJql = 'project = PAY AND type = Task') => ({
+    method: 'POST' as const,
+    url: '/api/epics',
+    payload: {
+      keys,
+      timezone: 'Asia/Ho_Chi_Minh',
+      calendarId: 'VN_MON_FRI',
+      scope: { scopeJql, leafIssueTypes: ['Task'], projectKey: 'PAY' },
+    },
+  });
+
+  it('thêm scope QUERY: KHÔNG tra Jira Epic, ghi scope + đẩy backfill', async () => {
+    const res = await app.inject(queryBody(['FLAT-PAY']));
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.added).toEqual(['FLAT-PAY']);
+    expect(store.rows.has('FLAT-PAY')).toBe(true);
+    expect(backfill.enqueued).toContain('FLAT-PAY');
+  });
+
+  it('scope QUERY đã theo dõi ⇒ ALREADY_TRACKED, không thêm lại', async () => {
+    await app.inject(queryBody(['FLAT-X']));
+    const res = await app.inject(queryBody(['FLAT-X']));
+    expect(res.json().added).toEqual([]);
+    expect(res.json().skipped).toContain('FLAT-X');
+  });
+
+  it('scope QUERY thiếu JQL bị từ chối HTTP 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/epics',
+      payload: {
+        keys: ['FLAT-Y'],
+        timezone: 'Asia/Ho_Chi_Minh',
+        calendarId: 'VN_MON_FRI',
+        scope: { scopeJql: '', leafIssueTypes: [], projectKey: 'PAY' },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(store.rows.has('FLAT-Y')).toBe(false);
+  });
+});

@@ -83,12 +83,27 @@ export interface ValidateEpicsResponse {
   readonly summary: { readonly valid: number; readonly invalid: number; readonly canAdd: number };
 }
 
+/**
+ * Đăng ký scope QUERY (project phẳng §2.5): `keys` là ID scope do người dùng đặt (không
+ * phải Epic key), `scope.scopeJql` là JQL tìm lá. Vắng `scope` ⇒ luồng CONTAINER cũ
+ * (validate + lookup Epic trên Jira) — không đổi.
+ */
+export const addScopeSchema = z.object({
+  scopeJql: z.string().min(1, 'JQL is required for a QUERY scope.'),
+  leafIssueTypes: z.array(z.string()).default([]),
+  /** Project key để kế thừa cấu hình + hiển thị. */
+  projectKey: z.string().min(1),
+});
+export type AddScope = z.infer<typeof addScopeSchema>;
+
 export const addEpicsRequestSchema = z.object({
   keys: z.array(z.string().min(1)).min(1).max(100),
   /** Múi giờ IANA. Quyết định "một ngày" bắt đầu lúc nào (C-1). */
   timezone: z.string().min(1),
   calendarId: z.string().min(1),
   note: z.string().max(500).nullable().default(null),
+  /** Có ⇒ đăng ký scope QUERY; vắng ⇒ CONTAINER (đăng ký Epic như cũ). */
+  scope: addScopeSchema.optional(),
 });
 export type AddEpicsRequest = z.infer<typeof addEpicsRequestSchema>;
 

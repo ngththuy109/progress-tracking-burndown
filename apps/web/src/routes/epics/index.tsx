@@ -13,7 +13,7 @@ import {
   type BadgeTone,
   type Column,
 } from '../../components/ui/index.js';
-import { AddEpicsPanel } from './add-epics-panel.js';
+import { AddEpicsPanel, AddQueryScopePanel } from './add-epics-panel.js';
 import {
   buildMissingDatesCsv,
   buildMissingDatesJql,
@@ -288,6 +288,7 @@ export function EpicListScreen() {
       </section>
 
       <AddEpicsPanel />
+      <AddQueryScopePanel />
 
       {openMissing !== null && (
         <MissingDatesPanel epicKey={openMissing} onClose={() => setOpenMissing(null)} />

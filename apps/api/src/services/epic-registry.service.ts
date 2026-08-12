@@ -3,6 +3,7 @@ import {
   TRACKED_EPIC_TRANSITIONS,
   type AddEpicsRequest,
   type AddEpicsResponse,
+  type AddScope,
   type BrowsableEpic,
   type EpicAddWarning,
   type EpicValidationResult,
@@ -106,13 +107,18 @@ export interface EpicPatchData {
 
 export interface InsertEpicRow {
   readonly epicKey: string;
-  readonly epicId: bigint;
+  /** NULL cho scope QUERY (không có issue container). */
+  readonly epicId: bigint | null;
   readonly projectKey: string;
   readonly displayName: string;
   readonly timezone: string;
   readonly calendarId: string;
   readonly addedBy: string;
   readonly note: string | null;
+  // Tracked scope (DYNAMIC-TIERS §6). Vắng ⇒ CONTAINER (đăng ký Epic như cũ).
+  readonly scopeType?: string;
+  readonly scopeJql?: string | null;
+  readonly leafIssueTypes?: string[];
 }
 
 export interface BackfillQueue {
@@ -218,6 +224,10 @@ export async function addEpics(
 ): Promise<ValidateEpicsResponse & AddEpicsResponse> {
   assertValidTimezone(req.timezone);
 
+  // Scope QUERY: `keys` là ID scope do người dùng đặt, KHÔNG tra Jira Epic. Nhánh riêng,
+  // tách hẳn luồng CONTAINER bên dưới (DYNAMIC-TIERS §6).
+  if (req.scope) return addQueryScopes(deps, req, req.scope, addedBy);
+
   const check = await validateKeys(deps, req.keys);
 
   // `skipped` = key đã theo dõi rồi — cả loại bị bắt lúc kiểm tra lẫn loại thua
@@ -256,6 +266,71 @@ export async function addEpics(
 
   return {
     ...check,
+    added: [...added],
+    skipped,
+    estimatedSeconds: added.length * RECOMPUTE_SECONDS_PER_EPIC,
+  };
+}
+
+/**
+ * Đăng ký scope QUERY — không tra Jira Epic (không có Epic để tra). `keys` là ID scope
+ * do người dùng đặt; chỉ chặn trùng với scope/Epic đã theo dõi. Lá đọc bằng JQL ở worker.
+ */
+async function addQueryScopes(
+  deps: EpicRegistryDeps,
+  req: AddEpicsRequest,
+  scope: AddScope,
+  addedBy: string,
+): Promise<ValidateEpicsResponse & AddEpicsResponse> {
+  const unique = [...new Set(req.keys.map((k) => k.trim()).filter((k) => k !== ''))];
+  const tracked = await deps.store.existingKeys(unique);
+
+  const results: EpicValidationResult[] = unique.map((key) =>
+    tracked.has(key)
+      ? { key, valid: false, reason: 'ALREADY_TRACKED', message: 'Already tracked' }
+      : {
+          key,
+          valid: true,
+          displayName: key,
+          projectKey: scope.projectKey,
+          phaseCount: 0,
+          subtaskCount: 0,
+          totalEstimateHours: 0,
+          missingWbsDateCount: 0,
+          warnings: [],
+        },
+  );
+
+  const ok = results.filter((r) => r.valid);
+  const skipped = results
+    .filter((r) => !r.valid && r.reason === 'ALREADY_TRACKED')
+    .map((r) => r.key);
+  const summary = { valid: ok.length, invalid: results.length - ok.length, canAdd: ok.length };
+  if (ok.length === 0) return { results, summary, added: [], skipped, estimatedSeconds: 0 };
+
+  const rows: InsertEpicRow[] = ok.map((r) => ({
+    epicKey: r.key,
+    epicId: null,
+    projectKey: scope.projectKey,
+    displayName: r.key,
+    timezone: req.timezone,
+    calendarId: req.calendarId,
+    addedBy,
+    note: req.note,
+    scopeType: 'QUERY',
+    scopeJql: scope.scopeJql,
+    leafIssueTypes: scope.leafIssueTypes,
+  }));
+
+  const added = await deps.store.insertIfAbsent(rows);
+  if (added.length > 0) await deps.backfill.enqueue(added);
+
+  const insertedSet = new Set(added);
+  skipped.push(...rows.map((r) => r.epicKey).filter((k) => !insertedSet.has(k)));
+
+  return {
+    results,
+    summary,
     added: [...added],
     skipped,
     estimatedSeconds: added.length * RECOMPUTE_SECONDS_PER_EPIC,

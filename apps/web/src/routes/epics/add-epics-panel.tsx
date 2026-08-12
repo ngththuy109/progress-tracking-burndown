@@ -195,3 +195,99 @@ export function AddEpicsPanel() {
     </section>
   );
 }
+
+/**
+ * Theo dõi một "project phẳng" bằng JQL (DYNAMIC-TIERS-DESIGN §2.5, §6).
+ *
+ * Khác luồng Epic ở trên: KHÔNG có Epic/Task cha để kiểm tra trên Jira. Người dùng đặt
+ * một ID scope tuỳ ý, khai JQL tìm lá; worker đọc lá bằng JQL. Khoá nhóm của lá phẳng lấy
+ * từ CHÍNH tiêu đề ticket — cần cấu hình tầng dùng `SELF_TITLE` (màn Cấu trúc tầng).
+ * Panel riêng để luồng Epic ở trên không đổi một dòng.
+ */
+export function AddQueryScopePanel() {
+  const me = useMe();
+  const [scopeId, setScopeId] = useState('');
+  const [jql, setJql] = useState('');
+  const [projectKey, setProjectKey] = useState('');
+  const [calendarId, setCalendarId] = useState(DEFAULT_CALENDAR_ID);
+  const calendars = useCalendars();
+  const add = useAddEpics();
+
+  if (me.data?.role === 'VIEWER') return null;
+
+  const ready = scopeId.trim() !== '' && jql.trim() !== '' && projectKey.trim() !== '';
+  const submit = (): void => {
+    const body: AddEpicsRequest = {
+      keys: [scopeId.trim()],
+      timezone:
+        calendars.data?.calendars.find((c) => c.calendarId === calendarId)?.timezone ??
+        DEFAULT_TIMEZONE,
+      calendarId,
+      note: null,
+      scope: { scopeJql: jql.trim(), leafIssueTypes: [], projectKey: projectKey.trim() },
+    };
+    add.mutate(body);
+  };
+
+  return (
+    <section className="panel" aria-labelledby="add-query-title">
+      <h2 className="panel__title" id="add-query-title">
+        Theo dõi project phẳng (JQL)
+      </h2>
+      <p className="panel__hint">
+        Dự án không có Epic/Task cha — lá là ticket khớp JQL. Đặt một ID scope tuỳ ý; khoá
+        nhóm lấy từ tiêu đề ticket, nên hãy cấu hình tầng dùng <code>SELF_TITLE</code> ở màn
+        <strong> Cấu trúc tầng</strong>.
+      </p>
+
+      <label className="field">
+        <span>ID scope (tự đặt, ví dụ FLAT-PAY)</span>
+        <input className="input input--code" value={scopeId} aria-label="Scope id" onChange={(e) => setScopeId(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>JQL tìm lá</span>
+        <input
+          className="input input--wide"
+          value={jql}
+          placeholder="project = PAY AND type = Task"
+          aria-label="Scope JQL"
+          onChange={(e) => setJql(e.target.value)}
+        />
+      </label>
+      <label className="field">
+        <span>Project key (để kế thừa cấu hình)</span>
+        <input className="input input--code" value={projectKey} aria-label="Project key" onChange={(e) => setProjectKey(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>Work calendar</span>
+        <select className="input" value={calendarId} aria-label="Work calendar (query scope)" onChange={(e) => setCalendarId(e.target.value)}>
+          {(calendars.data?.calendars ?? []).map((c) => (
+            <option key={c.calendarId} value={c.calendarId}>
+              {c.calendarId} · {c.timezone}
+            </option>
+          ))}
+          {calendars.data === undefined && <option value={DEFAULT_CALENDAR_ID}>{DEFAULT_CALENDAR_ID}</option>}
+        </select>
+      </label>
+
+      <div className="actions">
+        <button
+          type="button"
+          className="button button--primary"
+          disabled={!ready || add.isPending}
+          onClick={submit}
+        >
+          {add.isPending ? 'Đang thêm…' : 'Thêm scope JQL'}
+        </button>
+      </div>
+
+      {add.isError && <ErrorState error={add.error} title="Không thêm được scope" />}
+      {add.isSuccess && (
+        <p className="notice notice--ok" role="status">
+          Đã thêm {add.data.added.length} scope
+          {add.data.skipped.length > 0 && `, bỏ qua ${add.data.skipped.length} đã theo dõi`}.
+        </p>
+      )}
+    </section>
+  );
+}
