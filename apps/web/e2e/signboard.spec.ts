@@ -443,3 +443,37 @@ test('bấm Change Epic thì quay lại bộ chọn Epic', async ({ page }) => {
   await page.getByRole('button', { name: 'Change Epic' }).click();
   await expect(page.getByRole('heading', { name: 'Pick an Epic for the Signboard' })).toBeVisible();
 });
+
+const TWO_PHASES = {
+  phases: {
+    phases: [
+      { phaseCode: 'DESIGN', label: 'Design', subtaskCount: 5 },
+      { phaseCode: 'CODING', label: 'Coding', subtaskCount: 8 },
+    ],
+  },
+};
+
+test('chọn nhiều Phase thì mỗi Phase một bảng, có tiêu đề riêng', async ({ page }) => {
+  await installApi(page, TWO_PHASES);
+  await page.goto('/signboard?epic=PAY-1&phases=DESIGN,CODING');
+
+  // Hai tiêu đề Phase (nhãn + mã) cho hai bảng xếp chồng nhau.
+  await expect(page.getByRole('heading', { name: /Design/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Coding/ })).toBeVisible();
+  // Nút “Whole epic” có mặt để mở toàn bộ Epic một cú bấm.
+  await expect(page.getByRole('button', { name: 'Whole epic' })).toBeVisible();
+  // Mỗi bảng vẫn có ma trận của nó → rowheader Login xuất hiện ở CẢ HAI bảng.
+  await expect(page.getByRole('rowheader', { name: 'Login' })).toHaveCount(2);
+});
+
+test('“Whole epic” mở mọi Phase của Epic', async ({ page }) => {
+  await installApi(page, TWO_PHASES);
+  await page.goto('/signboard?epic=PAY-1');
+
+  await page.getByRole('button', { name: 'Whole epic' }).click();
+
+  // URL rút gọn về token __all__ để lựa chọn bám theo danh sách Phase hiện tại.
+  await expect(page).toHaveURL(/phases=__all__/);
+  await expect(page.getByRole('heading', { name: /Design/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Coding/ })).toBeVisible();
+});
