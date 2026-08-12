@@ -479,6 +479,95 @@ lịch nào.
 
 ---
 
+## Nâng cấp schema: áp migration phân tầng linh động (cho DB đang chạy)
+
+**Khi nào:** một lần duy nhất, lúc triển khai bản "phân tầng linh động" lên một
+database **đã có dữ liệu** (Epic đang theo dõi, đã chạy). Ba migration dưới đưa
+schema cũ lên schema mới mà **không đụng** hành vi của Epic đang chạy. Cài mới
+(DB rỗng) không phải đọc mục này — `pnpm db:migrate` chạy hết một lượt là xong.
+
+**Ba migration được thêm (áp đúng thứ tự thời gian tên thư mục):**
+
+1. **`20260812000000_dynamic_tiers`** — tạo bốn bảng `group_tier*` (con của
+   `phase_config_set`, đi theo đúng bộ version/kế thừa như `sub_phase_order`);
+   thêm cột `tracked_epic.scope_type` (mặc định `CONTAINER`), `scope_jql`,
+   `leaf_issue_types`; thêm cột `jira_issue.group_path` (JSONB). **Backfill
+   idempotent** (`NOT EXISTS` / `WHERE group_path IS NULL`): sinh "một tầng Phase
+   mirror" từ `phase_*` đang có và đặt `group_path = [phase_code]` cho mọi lá đã
+   có `phase_code`. Chạy lại nhiều lần không nhân đôi, không ghi đè.
+2. **`20260812100000_group_rollup`** — tạo bảng `group_rollup` (khoá
+   `(epic_key, group_key)`, FK `tracked_epic` cascade) và thêm cột
+   `daily_snapshot.per_tier` (JSONB). Chỉ được **ghi** khi cấu hình **đa tầng**;
+   Epic một tầng để trống hai chỗ này ⇒ không đụng dữ liệu cũ.
+3. **`20260812110000_query_scope`** — nới `tracked_epic.epic_id` cho phép `NULL`
+   (scope QUERY — "project phẳng" — không có issue container nền). Hàng
+   `CONTAINER` cũ vẫn `epic_id NOT NULL` như thường.
+
+**Vì sao an toàn cho dự án đang chạy (không bắt buộc downtime):**
+
+- Toàn bộ là **thêm/nới** (`CREATE TABLE`, `ADD COLUMN`, `DROP NOT NULL`) — quy
+  ước chỉ-thêm (C-13): không drop, không đổi tên, không đổi kiểu cột đang dùng.
+  Code **cũ** không đọc bảng/cột mới nên vẫn chạy bình thường trên schema **mới**.
+- Epic 3 tầng đang chạy giữ **y hệt** hành vi: engine vẫn tính theo `phase_code`;
+  đường đa tầng / QUERY chỉ **bật** khi có cấu hình tầng mới (màn **Cấu trúc
+  tầng**) hoặc khi đăng ký một scope QUERY. Không khai gì thì không có gì đổi.
+- Backfill **idempotent** — lỡ chạy lại `pnpm db:migrate` cũng vô hại (migration
+  đã áp bị bỏ qua theo `_prisma_migrations`; kể cả câu backfill cũng tự chặn trùng).
+
+**Cách áp — các bước:**
+
+1. **Sao lưu trước** (thói quen tốt, để có đường lùi cả schema):
+
+   ```bash
+   pg_dump "$DATABASE_URL" > backup-truoc-tiers.sql
+   ```
+
+2. *(tuỳ chọn)* `pnpm db:validate` — Prisma kiểm schema hợp lệ trước khi áp.
+3. `pnpm db:migrate` — áp các migration **còn thiếu**. Chạy được nhiều lần: cái
+   đã áp in `•  bỏ qua (đã áp)`, chỉ ba cái mới được chạy, **mỗi cái trong một
+   transaction** (lỗi giữa chừng tự cuộn lại sạch, DB không mắc kẹt nửa vời). Ghi
+   nhận vào `_prisma_migrations` với checksum SHA-256 giống hệt Prisma CLI.
+4. `pnpm db:generate` — sinh lại Prisma Client có `groupPath` / `perTier` / scope.
+5. Triển khai code mới.
+
+> **Thứ tự khuyến nghị: áp migration TRƯỚC, rồi mới deploy code mới.** Vì migration
+> chỉ-thêm nên code **cũ** vẫn chạy tốt trên schema **mới** trong lúc chuyển tiếp,
+> còn code **mới** thì không bao giờ gặp schema cũ. Trong CI/CD, đặt bước
+> `pnpm db:migrate` đứng **trước** bước deploy.
+
+**Với database lớn:** thao tác nặng nhất là dòng cuối của `dynamic_tiers` —
+`UPDATE jira_issue SET group_path = to_jsonb(ARRAY[phase_code]) …` — chạm **mọi lá
+đã phân loại**. Trên bảng `jira_issue` hàng trăm nghìn dòng, nó chạy trong một
+transaction nên giữ khoá ghi các dòng đó tới khi xong; nên áp lúc **ít tải**. Các
+backfill `group_tier*` còn lại tỉ lệ với **cỡ cấu hình** (đơn tenant = một config
+GLOBAL) nên rất nhẹ.
+
+**Kiểm tra sau khi áp (bằng chứng "dự án đang dùng vẫn chạy"):**
+
+```sql
+-- 1) Đủ ba migration mới trong sổ version:
+SELECT migration_name FROM "_prisma_migrations"
+WHERE migration_name LIKE '202608120%' ORDER BY migration_name;
+-- 2) Đã sinh tầng Phase mirror (≥ 1 dòng cho mỗi config):
+SELECT count(*) FROM group_tier;
+-- 3) Lá đã có vectơ khoá (≈ số lá có phase_code):
+SELECT count(*) FROM jira_issue WHERE group_path IS NOT NULL;
+-- 4) Scope cũ nguyên vẹn (chỉ thấy CONTAINER):
+SELECT DISTINCT scope_type FROM tracked_epic;
+```
+
+Rồi **mở biểu đồ Burndown của một Epic cũ** — phải trông **giống hệt** trước khi
+nâng cấp (không ô đa tầng nào bật). Đó là bằng chứng trực quan lõi tính toán không đổi.
+
+**Lùi lại (rollback):**
+
+- Vì chỉ-thêm nên **lùi code là đủ**: deploy lại bản cũ — bảng/cột mới bị code cũ
+  bỏ qua, **không cần đụng schema**. (Dự án không giữ down-migration, theo quy ước
+  chỉ-thêm C-13.)
+- Muốn lùi **cả schema** thì phục hồi từ bản backup ở bước 1.
+
+---
+
 ## Bảng tra mã cảnh báo
 
 | Mã | Mức | Gửi tới | Mục |
