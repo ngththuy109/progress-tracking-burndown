@@ -162,11 +162,105 @@ Lý do cụ thể: trạng thái Signboard phụ thuộc *hôm nay là ngày nà
 }]
 ```
 
-### Ranh giới xác thực (bổ sung khi lắp SSO, 2026-08-09)
+### Đăng nhập LDAP in-app — ranh giới & cấu trúc module (bổ sung 2026-08-13)
 
-`apps/api` **không tự đăng nhập người dùng**. Một auth proxy (SSO/OIDC) đứng trước, đặt header danh tính `x-user-id` = email đã xác thực và **xoá mọi `x-user-*`** client tự gửi. API chỉ tin danh tính đó rồi **tra vai trò ở bảng `app_user`** — KHÔNG tin `role` từ header. Vai trò/`projects` là dữ liệu của hệ thống (bảng `app_user`, `project`), không suy từ Jira.
+`apps/api` **tự đăng nhập người dùng bằng LDAP**: form username/password của app →
+API bind vào LDAP server của công ty → cấp phiên (cookie `ptb_sess` lưu trên Redis).
+API chỉ xác thực **DANH TÍNH**; **vai trò LUÔN tra bảng `app_user`** — nguồn danh
+tính (phiên LDAP hay header) không bao giờ quyết định vai trò, nên dù một
+`x-user-role: ADMIN` giả có lọt vào cũng vô hại. Hành vi & vận hành: [AUTH.md](./AUTH.md);
+khôi phục khi tự khóa: [RUNBOOK.md](./RUNBOOK.md) §2b.
 
-Danh tính được phân giải một lần mỗi request trong một hook `onRequest` (`apps/api/src/adapters/principal.ts`), nên tầng route vẫn đọc `resolvePrincipal(req)` đồng bộ như cũ. Chi tiết: [AUTH.md](./AUTH.md); cấu hình cổng: [`config/auth-proxy/`](../config/auth-proxy/).
+> Chế độ header/proxy cũ vẫn là **đường lui** khi LDAP tắt (hoặc `AUTH_FORCE_HEADER=1`),
+> đồng thời là đường chạy dev (`VITE_DEV_USER`) — chi tiết ở [AUTH.md](./AUTH.md). Tài
+> liệu này chỉ chốt **chỗ để code** của phần LDAP, không mô tả lại mô hình cổng đó.
+
+**Bản đồ module** — mỗi khối một trách nhiệm, một chỗ để code:
+
+| Tầng | File | Trách nhiệm |
+|---|---|---|
+| Type chung | `packages/shared/src/api-config.ts` | zod schema dùng chung FE–BE: `loginRequest`, `updateLdapConfigRequest`, `ldapConfig` (view), `authModeResponse`, `ldapTestResponse` |
+| Route | `apps/api/src/routes/auth.routes.ts` | 6 endpoint (mode/login/logout + admin xem/lưu/test); throttle đăng nhập theo IP; bind password write-only; **chống tự khóa** |
+| Service — THUẦN | `apps/api/src/services/ldap.service.ts` | `authenticate` + `testConnection` + escape chống injection. KHÔNG chạm mạng trực tiếp — mọi kết nối qua cổng `LdapClientFactory` |
+| Adapter — config | `apps/api/src/adapters/ldap-config.adapters.ts` | store (đọc/ghi tươi cho màn admin) + loader **cache TTL 10s** cho đường nóng (mỗi request phải biết "LDAP bật chưa?") |
+| Adapter — session | `apps/api/src/adapters/session.adapters.ts` | phiên Redis + cookie `ptb_sess` (HttpOnly, SameSite=Lax, Secure theo HTTPS); id 256-bit, nội dung phiên nằm hẳn phía server |
+| Adapter — principal | `apps/api/src/adapters/principal.ts` | `createAuthResolver`: phân giải danh tính theo thứ tự phiên → header |
+| Repository | `packages/db/src/repositories/auth-ldap.repository.ts` | bảng MỘT DÒNG `auth_ldap_config` (id = 1) |
+| Schema/migration | `packages/db/prisma/schema.prisma` + `…/migrations/20260813110000_auth_ldap_config` | cột + CHECK `id = 1` (singleton) + CHECK ttl 1–168h |
+| Frontend | `apps/web/src/api/{use-auth-mode,use-ldap}.ts`, `auth/{auth-gate,login-screen}.tsx`, `routes/admin-ldap/` | hỏi `/api/auth/mode` → hiện form login (khi LDAP + chưa đăng nhập) hoặc màn admin cấu hình |
+| Lắp ráp | `apps/api/src/{main,server}.ts` | `main.ts` tiêm `ldapts.Client` thật + `TokenBox`; `server.ts` gắn resolver vào hook `onRequest` |
+
+**Sơ đồ ghép nối:**
+
+```mermaid
+flowchart LR
+    subgraph WEB["apps/web"]
+      GATE["auth-gate + login-screen"]
+      ADM["routes/admin-ldap"]
+    end
+    subgraph API["apps/api"]
+      HOOK["server.ts · onRequest"]
+      RES["adapters/principal<br/>createAuthResolver"]
+      RT["routes/auth.routes"]
+      SVC["services/ldap.service<br/>THUẦN"]
+      CFG["adapters/ldap-config<br/>cache 10s"]
+      SES["adapters/session"]
+    end
+    REPO["packages/db<br/>auth-ldap.repository"]
+    LDAP[("LDAP server")]
+    REDIS[("Redis · phiên")]
+    PG[("Postgres<br/>auth_ldap_config")]
+
+    GATE -->|"mode / login"| RT
+    ADM -->|"admin xem/lưu/test"| RT
+    HOOK --> RES
+    RES --> SES
+    RES --> CFG
+    RT --> SVC
+    RT --> CFG
+    RT --> SES
+    SVC -.->|"LdapClientFactory"| LDAP
+    CFG --> REPO
+    SES --> REDIS
+    REPO --> PG
+```
+
+**Bốn ràng buộc kĩ thuật giữ cấu trúc này đứng vững:**
+
+1. **Service thuần qua cổng `LdapClientFactory`.** Mọi kết nối LDAP đi qua một
+   factory tiêm từ `main.ts` (dựng `ldapts.Client` thật) hoặc client giả trong
+   test. Nhờ vậy MỌI nhánh lỗi (sai mật khẩu, server chết, filter hỏng…) kiểm
+   được bằng vitest **không cần một LDAP server nào** — cùng khuôn port/adapter
+   với `JiraEpicPort` ở §2.
+2. **Danh tính phân giải MỘT lần mỗi request.** `server.ts` gọi resolver trong
+   hook `onRequest` rồi gắn `req.principal`; tầng route vẫn đọc
+   `resolvePrincipal(req)` đồng bộ như cũ. Thứ tự trong `createAuthResolver`:
+   (1) cookie `ptb_sess` hợp lệ → danh tính phiên, **thắng vô điều kiện**;
+   (2) không phiên và LDAP tắt / `AUTH_FORCE_HEADER=1` → đường header cũ;
+   (3) LDAP bật mà không phiên → **null** (KHÔNG tin `x-user-id` — chống giả
+   danh tính khi API lỡ lộ trực tiếp ra ngoài). Loader cache config 10s để bước
+   "LDAP bật chưa?" không tra DB mỗi request; route admin gọi `invalidate()`
+   ngay sau khi lưu để tiến trình đó thấy hiệu lực tức thì.
+3. **Chống tự khóa — ở tầng route.** `PUT /api/admin/auth/ldap` với
+   `enabled = true` PHẢI qua `testConnection` (CONNECT → BIND → SEARCH) bằng
+   đúng cấu hình sắp lưu (bind password giữ lại được giải mã để test thật); rớt
+   bất kỳ bước nào → từ chối lưu. Bật LDAP hỏng nghĩa là header bị bỏ qua ngay
+   và **mọi người, kể cả admin, mất đường vào**.
+4. **Bí mật không rò — ở tầng route.** Bind password của tài khoản dịch vụ là
+   **write-only**: nhận vào thì `TokenBox.seal` (AES-256-GCM bằng
+   `APP_ENCRYPTION_KEY`) rồi lưu cột `bind_password_enc`; view API chỉ trả
+   `hasBindPassword`. Tri-state như token Jira: chuỗi = đổi, `null` = xóa, vắng
+   trường = giữ nguyên. Thiếu `APP_ENCRYPTION_KEY` thì route **từ chối lưu** thay
+   vì ghi thô.
+
+**Hai cách xác định DN** (khai đúng MỘT — cả service lẫn zod schema đều ép):
+*direct bind* qua `userDnTemplate` chứa `{username}` (hợp OpenLDAP), hoặc
+*search-then-bind* qua tài khoản dịch vụ + `searchBase`/`userFilter` (chuẩn
+Active Directory). Trước khi ghép, service **escape chống LDAP injection**: RFC
+4514 cho giá trị nhét vào DN, RFC 4515 cho giá trị nhét vào filter. **Mật khẩu
+rỗng bị chặn TRƯỚC mọi bind** (LDAP coi bind mật khẩu rỗng là anonymous-bind
+"thành công" — lỗ hổng kinh điển của form LDAP). Lỗi đăng nhập luôn chung chung
+(không phân biệt sai-user với sai-password), throttle 10 lần sai / 5 phút / IP.
 
 ---
 
