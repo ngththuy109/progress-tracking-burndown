@@ -1,41 +1,45 @@
 <title>Phân tầng linh động</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
+  /* Palette bám app thật (apps/web/src/styles.css): accent xanh #2563eb + 6 tone trạng thái. */
   :root {
-    --ground: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5;
-    --ink: #151a21; --muted: #5c6675; --faint: #8a94a2;
-    --border: #e2e6eb; --border-strong: #ccd2da;
-    --accent: #0d7a83; --accent-ink: #ffffff; --accent-soft: #dceff0; --accent-line: #0d7a83;
-    --t-project: #4b63d8; --t-phase: #0d7a83; --t-sub: #b06a12;
-    --p-design: #4b63d8; --p-dev: #0d7a83; --p-test: #b06a12;
-    --st-done: #3f9c5a; --st-onsch: #2f6fb0; --st-nys: #7c8797;
-    --st-dstart: #d98324; --st-dend: #ce4a54; --st-noplan: #8a5fc7;
-    --shadow: 0 1px 2px rgba(20,26,33,.05), 0 8px 24px -12px rgba(20,26,33,.12);
+    --ground: #f6f7f9; --surface: #ffffff; --surface-2: #eef0f3;
+    --ink: #1c2024; --muted: #6b7280; --faint: #9aa1ab;
+    --border: #e2e5ea; --border-strong: #d3d7de;
+    --accent: #2563eb; --accent-ink: #ffffff; --accent-soft: #e8effd; --accent-line: #2563eb;
+    --t-project: #7c3aed; --t-phase: #2563eb; --t-sub: #b45309;
+    --p-design: #2563eb; --p-dev: #16a34a; --p-test: #b45309;
+    --st-done: #16a34a; --st-onsch: #2563eb; --st-nys: #4b5563;
+    --st-dstart: #b45309; --st-dend: #dc2626; --st-noplan: #7c3aed;
+    --ok-bg: #eaf7ee; --info-bg: #e8effd; --warn-bg: #fdf1e0; --danger-bg: #fdeaea; --neutral-bg: #eef0f3; --purple-bg: #f1ebfd;
+    --shadow: 0 1px 2px rgba(20,26,33,.05), 0 8px 24px -12px rgba(20,26,33,.10);
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --ground: #0e1218; --surface: #161c25; --surface-2: #1d2530;
+      --ground: #0f1319; --surface: #171c24; --surface-2: #1e242e;
       --ink: #e7ecf2; --muted: #9aa5b3; --faint: #6b7684;
-      --border: #262f3b; --border-strong: #333e4d;
-      --accent: #24a3ac; --accent-ink: #04181a; --accent-soft: #103237; --accent-line: #2bb6c0;
-      --t-project: #8093f2; --t-phase: #2bb6c0; --t-sub: #d8994a;
-      --p-design: #8093f2; --p-dev: #2bb6c0; --p-test: #d8994a;
-      --st-done: #55b571; --st-onsch: #4f8fd0; --st-nys: #8b97a7;
-      --st-dstart: #e39a44; --st-dend: #e0656f; --st-noplan: #a37ddc;
+      --border: #283039; --border-strong: #37414d;
+      --accent: #4f8cf5; --accent-ink: #0a0f16; --accent-soft: #16233a; --accent-line: #5b95f6;
+      --t-project: #a98bf5; --t-phase: #5b95f6; --t-sub: #d9932f;
+      --p-design: #5b95f6; --p-dev: #46b46a; --p-test: #d9932f;
+      --st-done: #46b46a; --st-onsch: #5b95f6; --st-nys: #9aa5b3;
+      --st-dstart: #d9932f; --st-dend: #e06b6b; --st-noplan: #9d7de0;
+      --ok-bg: #12271a; --info-bg: #15233a; --warn-bg: #2c2413; --danger-bg: #2f1719; --neutral-bg: #222933; --purple-bg: #221a36;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.5);
     }
   }
   :root[data-theme="dark"] {
-    --ground: #0e1218; --surface: #161c25; --surface-2: #1d2530;
+    --ground: #0f1319; --surface: #171c24; --surface-2: #1e242e;
     --ink: #e7ecf2; --muted: #9aa5b3; --faint: #6b7684;
-    --border: #262f3b; --border-strong: #333e4d;
-    --accent: #24a3ac; --accent-ink: #04181a; --accent-soft: #103237; --accent-line: #2bb6c0;
-    --t-project: #8093f2; --t-phase: #2bb6c0; --t-sub: #d8994a;
-    --p-design: #8093f2; --p-dev: #2bb6c0; --p-test: #d8994a;
-    --st-done: #55b571; --st-onsch: #4f8fd0; --st-nys: #8b97a7;
-    --st-dstart: #e39a44; --st-dend: #e0656f; --st-noplan: #a37ddc;
+    --border: #283039; --border-strong: #37414d;
+    --accent: #4f8cf5; --accent-ink: #0a0f16; --accent-soft: #16233a; --accent-line: #5b95f6;
+    --t-project: #a98bf5; --t-phase: #5b95f6; --t-sub: #d9932f;
+    --p-design: #5b95f6; --p-dev: #46b46a; --p-test: #d9932f;
+    --st-done: #46b46a; --st-onsch: #5b95f6; --st-nys: #9aa5b3;
+    --st-dstart: #d9932f; --st-dend: #e06b6b; --st-noplan: #9d7de0;
+    --ok-bg: #12271a; --info-bg: #15233a; --warn-bg: #2c2413; --danger-bg: #2f1719; --neutral-bg: #222933; --purple-bg: #221a36;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.5);
   }
 
@@ -276,6 +280,70 @@
   .note b { font-weight: 640; }
   .foot { margin-top: 26px; color: var(--faint); font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
   .foot code { color: var(--muted); }
+
+  /* ===== Nhóm Theo dõi — thành phần bám app thật ===== */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 16px 18px; }
+  .panel__title { font-size: 14px; font-weight: 660; margin: 0 0 10px; }
+  .panel__caption { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+  .panel__hint { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+  .scopebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .scopebar code, .scope code { font-family: var(--mono); font-size: 12.5px; }
+  .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
+  .row { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .rows > .row { display: flex; }
+  .rows code { font-family: var(--mono); font-size: 12px; }
+  .check { display: inline-flex; align-items: center; gap: 7px; }
+  .err { font-size: 12px; margin-top: 3px; }
+  .badge { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; display: inline-block; white-space: nowrap; }
+  .button { font: inherit; font-size: 12.5px; font-weight: 540; color: var(--ink); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; padding: 5px 11px; cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-block; }
+  .button:hover { border-color: var(--accent); color: var(--accent); }
+  .button--sm { font-size: 11.5px; padding: 3px 8px; }
+  .button--primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .button--primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .button--danger { color: var(--st-dend); border-color: color-mix(in srgb, var(--st-dend) 45%, transparent); }
+  .button--danger:hover { color: var(--st-dend); border-color: var(--st-dend); }
+  .button[disabled] { opacity: .5; cursor: not-allowed; }
+  .input { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; padding: 5px 9px; width: 100%; }
+  .input--sm { width: auto; font-size: 12px; padding: 3px 7px; }
+  .inp-wide { max-width: 320px; }
+  textarea.input { resize: vertical; font-family: var(--mono); }
+  .actions { gap: 6px; }
+  .t th.r, .t td.r { text-align: right; }
+  .t code { font-family: var(--mono); font-size: 12px; }
+  .notice { border-radius: 8px; padding: 10px 13px; font-size: 12.5px; }
+  .notice--error { background: var(--danger-bg); border: 1px solid color-mix(in srgb, var(--st-dend) 35%, transparent); color: var(--ink); }
+  .scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+  .cnt { font-size: 10.5px; opacity: .85; background: color-mix(in srgb, var(--muted) 20%, transparent); padding: 0 6px; border-radius: 999px; }
+  .chips { display: flex; gap: 12px; flex-wrap: wrap; }
+  .chip-metric { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 118px; background: var(--surface-2); }
+  .cm-v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cm-l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+  .burn .offband { fill: #9ca3af; fill-opacity: .18; }
+  .burn .axis-title { fill: var(--muted); font-size: 11px; }
+  .burn .planned { fill: none; stroke-width: 2; stroke-dasharray: 8 4; }
+  .burn .actual { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+  .burn .dot { fill: var(--surface); stroke-width: 2; }
+  .burn .marker-line { stroke: var(--st-dstart); stroke-width: 1; stroke-dasharray: 2 2; }
+  .burn .marker-txt { fill: var(--st-dstart); font-size: 11px; }
+  .bd-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .bd-legend .lg { display: inline-flex; align-items: center; gap: 7px; }
+  .lg-sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+  .lg-sw.dash { height: 0; border-top: 2px dashed; background: none !important; }
+  .planNote { font-size: 12px; margin-top: 10px; }
+  .sb-legend { display: flex; gap: 12px 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+  .sb-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .lg-pill { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  table.signboard { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 640px; }
+  table.signboard th, table.signboard td { border: 1px solid var(--border); padding: 6px 8px; text-align: center; vertical-align: middle; }
+  table.signboard th.sticky { position: sticky; left: 0; background: var(--surface); text-align: left; font-weight: 600; z-index: 1; }
+  table.signboard th.grp { background: var(--surface-2); font-weight: 640; }
+  table.signboard th.tt { font-weight: 540; color: var(--muted); font-size: 11px; }
+  table.signboard th.sigma { background: var(--purple-bg); }
+  .cell-badge { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; display: inline-block; white-space: nowrap; }
+  .cell-tint { color: #fff; font-size: 11px; font-weight: 600; }
+  .cell-empty { color: var(--faint); }
+  .td-noplan { background: repeating-linear-gradient(45deg, transparent, transparent 5px, var(--purple-bg) 5px, var(--purple-bg) 10px); }
 </style>
 
 <header class="top">
@@ -417,83 +485,69 @@
     </div>
   </section>
 
-  <!-- ============ BURNDOWN ============ -->
+  <!-- ============ BURNDOWN (bám apps/web/src/routes/burndown) ============ -->
   <section class="view" id="view-burndown" role="tabpanel">
-    <div class="card">
-      <div class="card-hd">
-        <div class="eyebrow">Chức năng chính · Biểu đồ</div>
-        <h2 class="sec">Burndown của scope</h2>
-        <p class="lead">Cộng dồn từ lá lên. Gom nhóm theo tầng <span class="hi">Phase</span>; <b>drill-down</b> sang tầng khác để soi khối lượng còn lại.</p>
+    <div class="stack">
+      <div class="scopebar"><span class="muted">Epic:</span> <code>PAY-100</code> <button class="button" type="button">Change Epic</button></div>
+      <div class="tabs2" id="bdTabs" role="tablist" aria-label="Chart view mode">
+        <button data-bd="EPIC" aria-selected="true" role="tab">Whole Epic</button>
+        <button data-bd="PHASE" aria-selected="false" role="tab">Single Phase</button>
       </div>
-      <div class="card-bd">
-        <div class="toolbar">
-          <label class="field">Nhóm theo tầng <select id="drillSel"></select></label>
-          <span class="hint" id="drillNote" style="margin:0"></span>
-        </div>
-        <div class="stat-row" style="margin-bottom:14px">
-          <div class="stat"><div class="lbl">Tổng scope</div><div class="val" id="stScope"></div></div>
-          <div class="stat"><div class="lbl">Còn lại</div><div class="val" id="stRem"></div></div>
-          <div class="stat"><div class="lbl">Đã log</div><div class="val" id="stSpent"></div></div>
-          <div class="stat"><div class="lbl">Số lá</div><div class="val" id="stLeaves"></div></div>
-        </div>
-        <div class="chart-wrap"><svg class="burn" id="burnSvg" viewBox="0 0 720 240" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Biểu đồ burndown"></svg></div>
-        <div style="margin-top:20px">
-          <div class="eyebrow plain" style="margin-bottom:12px">Khối lượng còn lại theo tầng <span id="drillLbl" class="mono" style="color:var(--t-phase)"></span></div>
-          <div class="bars" id="barsBox"></div>
-        </div>
-      </div>
+      <div id="bdPhasePick"></div>
+      <section class="panel">
+        <div class="chart-wrap"><svg class="burn" id="burnSvg" viewBox="0 0 860 380" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Burndown chart"></svg></div>
+        <div id="bdLegend" class="bd-legend"></div>
+        <p class="muted planNote">The Planned line is recomputed after every sync — it is not a frozen baseline. It drifts as the Jira data changes, so treat it as the current plan, not a commitment.</p>
+      </section>
+      <div class="notice notice--error" id="bdNotice"></div>
+      <section class="panel" id="bdMarkers"></section>
     </div>
   </section>
 
-  <!-- ============ SIGNBOARD ============ -->
+  <!-- ============ SIGNBOARD (bám apps/web/src/routes/signboard) ============ -->
   <section class="view" id="view-signboard" role="tabpanel">
-    <div class="card">
-      <div class="card-hd">
-        <div class="eyebrow">Chức năng chính · Bảng trạng thái</div>
-        <h2 class="sec">Signboard — Phase × loại task</h2>
-        <p class="lead">Lưới hàng = tầng <span class="hi">Phase</span>, cột = loại task (khai ở <b>Signboard columns</b>). Ô tô màu theo trạng thái kế hoạch↔thực tế (gộp thì lấy trạng thái xấu hơn).</p>
-      </div>
-      <div class="card-bd">
-        <div class="legend" id="sbLegend"></div>
-        <div class="sb-scroll"><table class="sbgrid" id="sbGrid"></table></div>
-      </div>
+    <div class="stack">
+      <div class="scopebar"><span class="muted">Epic:</span> <code>PAY-100</code> <button class="button" type="button">Change Epic</button></div>
+      <div id="sbPhaseNav" class="scope"></div>
+      <div class="scopebar"><span class="muted">Status as of 2026-08-12</span> <button class="button" type="button">Reload</button></div>
+      <div class="sb-legend" id="sbLegend"></div>
+      <input class="input inp-wide" type="text" placeholder="Search Functions…" aria-label="Search Functions" />
+      <section class="panel">
+        <div class="table-wrap"><table class="signboard" id="sbGrid"></table></div>
+      </section>
+      <section class="panel" id="sbUnparsed"></section>
     </div>
   </section>
 
-  <!-- ============ EPICS / SCOPES ============ -->
+  <!-- ============ EPICS (bám apps/web/src/routes/epics) ============ -->
   <section class="view on" id="view-epics" role="tabpanel">
-    <div class="card">
-      <div class="card-hd">
-        <div class="eyebrow">Vận hành · sổ theo dõi</div>
-        <h2 class="sec">Epics → Tracked scopes</h2>
-        <p class="lead">Sổ theo dõi Epic hôm nay trở thành <b>tracked scope</b>: đăng ký một <b>issue container</b> (Epic/Task) hoặc một <b>JQL</b>. Đây là nơi khai <code>scope_type</code>, <code>scope_jql</code>, <code>leaf_issue_types</code> mình đã thêm vào schema.</p>
-      </div>
-      <div class="card-bd">
-        <div id="epicsAdd"></div>
-        <div class="tbl-scroll" style="margin-top:16px"><table class="t" id="epicsTable"></table></div>
-      </div>
+    <div class="stack">
+      <section class="panel">
+        <div class="panel__caption">Tracked Epics</div>
+        <div class="table-wrap"><table class="t epics" id="epicsTable"></table></div>
+      </section>
+      <section class="panel" id="addEpics">
+        <div class="panel__title">Add Epics</div>
+        <p class="panel__hint">Paste Epic keys (one per line or comma-separated), then Check before adding.</p>
+        <textarea class="input" rows="2" placeholder="PAY-100, CRM-200 …" aria-label="Epic keys"></textarea>
+        <div class="row" style="margin-top:10px"><button class="button button--primary" type="button">Check</button><span class="muted">Validates against Jira before tracking.</span></div>
+      </section>
     </div>
   </section>
 
-  <!-- ============ MONITORING ============ -->
+  <!-- ============ MONITORING (bám apps/web/src/routes/ops) ============ -->
   <section class="view" id="view-monitoring" role="tabpanel">
     <div class="stack">
-      <div class="card">
-        <div class="card-hd">
-          <div class="eyebrow">Vận hành · sức khoẻ job</div>
-          <h2 class="sec">Monitoring — lần chạy đồng bộ</h2>
-          <p class="lead">Nhật ký job (bảng <code>sync_run</code>). Cấu trúc không đổi; chỉ khác là chạy cho <b>tracked scope</b> (CONTAINER/QUERY), không chỉ Epic.</p>
-        </div>
-        <div class="card-bd tbl-scroll"><table class="t" id="syncTable"></table></div>
+      <div class="statusbar">
+        <span class="muted">Data collected at 2026-08-12 08:00</span>
+        <span class="row"><label class="check"><input type="checkbox" checked disabled /> Auto-refresh every 60 seconds</label><button class="button" type="button">Refresh now</button></span>
       </div>
-      <div class="card">
-        <div class="card-hd">
-          <div class="eyebrow plain">Data quality · theo TỪNG tầng</div>
-          <h2 class="sec">Chất lượng phân loại</h2>
-          <p class="lead">Điểm mới: tỉ lệ <code>UNCLASSIFIED</code> và panel <i>Unmatched</i> đo ở <b>mỗi tầng</b>, không chỉ tầng Phase.</p>
-        </div>
-        <div class="card-bd" id="dqBox"></div>
-      </div>
+      <section class="panel"><div class="panel__title">Nightly jobs</div><div class="chips" id="opsJobs"></div></section>
+      <section class="panel"><div class="panel__title">Jira calls</div><div class="chips" id="opsJira"></div></section>
+      <section class="panel"><div class="panel__title">Data quality</div><div class="chips" id="opsDq"></div></section>
+      <section class="panel"><div class="panel__title" id="opsErrTitle">Epics in error</div><div id="opsErr"></div></section>
+      <section class="panel"><div class="panel__caption">Most recent job runs</div><div class="table-wrap"><table class="t" id="opsRuns"></table></div></section>
+      <section class="panel"><div class="panel__title" id="opsDriftTitle">Plan drift</div><div id="opsDrift"></div></section>
     </div>
   </section>
 
@@ -898,131 +952,201 @@
     return out;
   }
 
-  // ---------- Burndown ----------
-  function fmtH(n) { return n + "<small>h</small>"; }
-  function renderDrill() {
-    var s = SC[state.sc], sel = $("drillSel"); sel.innerHTML = "";
-    s.tiers.forEach(function (t, i) { var o = el("option"); o.value = i; o.textContent = t.name + (t.role === "PHASE" ? " (Phase)" : ""); sel.appendChild(o); });
-    if (state.drill >= s.tiers.length) state.drill = s.phaseTier;
-    sel.value = state.drill;
-    $("drillNote").innerHTML = s.tiers.length === 1 ? "Dạng này chỉ 1 tầng nhóm nên không có tầng khác để drill-down." : "Đổi tầng để xem cộng dồn theo Project / Phase / Sub-phase.";
-  }
-  function renderStats() {
-    var s = SC[state.sc], scope = 0, rem = 0;
-    s.leaves.forEach(function (l) { scope += l.est; rem += l.rem; });
-    $("stScope").innerHTML = fmtH(scope); $("stRem").innerHTML = fmtH(rem); $("stSpent").innerHTML = fmtH(scope - rem); $("stLeaves").textContent = s.leaves.length;
-    return { scope: scope, rem: rem };
-  }
-  function renderBurnChart(scope, rem) {
-    var W = 720, H = 240, ml = 44, mr = 16, mt = 16, mb = 30, x0 = ml, x1 = W - mr, y0 = mt, y1 = H - mb, days = 10, todayD = 6;
-    if (scope <= 0) scope = 1;
-    function X(d) { return (x0 + (x1 - x0) * d / days).toFixed(1); }
-    function Y(v) { return (y1 - (y1 - y0) * v / scope).toFixed(1); }
-    var planned = "M" + X(0) + "," + Y(scope) + " L" + X(days) + "," + Y(0);
-    var pts = [scope, scope * 0.88, scope * 0.74, scope * 0.66, scope * 0.6, (scope + rem) / 2 * 0.98, rem];
-    var actual = pts.map(function (v, i) { return (i === 0 ? "M" : "L") + X(i) + "," + Y(v); }).join(" ");
-    var area = actual + " L" + X(todayD) + "," + Y(0) + " L" + X(0) + "," + Y(0) + " Z";
-    var s = "";
-    for (var g = 0; g <= 4; g++) { var yy = (y0 + (y1 - y0) * g / 4).toFixed(1); s += '<line class="grid-line" x1="' + x0 + '" y1="' + yy + '" x2="' + x1 + '" y2="' + yy + '"/>'; s += '<text class="axis-txt" x="' + (x0 - 8) + '" y="' + (parseFloat(yy) + 4) + '" text-anchor="end">' + Math.round(scope * (1 - g / 4)) + "</text>"; }
-    for (var d = 0; d <= days; d += 2) s += '<text class="axis-txt" x="' + X(d) + '" y="' + (y1 + 18) + '" text-anchor="middle">N' + d + "</text>";
-    var tx = X(todayD);
-    s += '<path class="area" d="' + area + '"/>';
-    s += '<line class="today-line" x1="' + tx + '" y1="' + y0 + '" x2="' + tx + '" y2="' + y1 + '"/>';
-    s += '<text class="note-txt" x="' + (parseFloat(tx) + 5) + '" y="' + (y0 + 11) + '">hôm nay</text>';
-    s += '<path class="planned" d="' + planned + '"/>';
-    s += '<text class="plan-txt" x="' + x1 + '" y="' + (parseFloat(Y(0)) - 6) + '" text-anchor="end">Kế hoạch</text>';
-    s += '<path class="actual" d="' + actual + '"/>';
-    s += '<circle class="dot" cx="' + X(todayD) + '" cy="' + Y(rem) + '" r="4"/>';
-    $("burnSvg").innerHTML = s;
-  }
-  function renderBars() {
-    var s = SC[state.sc], tier = s.tiers[state.drill], isPhase = tier.role === "PHASE";
-    $("drillLbl").textContent = tier.name;
-    var groups = {}, order = [];
-    s.leaves.forEach(function (l) { var k = l.path[state.drill]; if (!(k in groups)) { groups[k] = { rem: 0, est: 0 }; order.push(k); } groups[k].rem += l.rem; groups[k].est += l.est; });
-    var max = 0; order.forEach(function (k) { if (groups[k].est > max) max = groups[k].est; });
-    var box = $("barsBox"); box.innerHTML = "";
-    order.forEach(function (k) {
-      var col = defColor(k, isPhase), row = el("div", "bar-row");
-      var remPct = max ? (groups[k].rem / max * 100) : 0, estPct = max ? (groups[k].est / max * 100) : 0;
-      row.innerHTML = '<div class="bar-lbl"><span class="sw" style="background:' + col + '"></span>' + esc(k) + "</div>" +
-        '<div class="bar-track" title="còn ' + groups[k].rem + "h / " + groups[k].est + 'h"><div style="position:absolute;inset:0;width:' + estPct + '%;background:color-mix(in srgb,' + col + ' 16%,transparent);border-radius:6px"></div><div class="bar-fill" style="width:' + remPct + '%;background:' + col + '"></div></div>' +
-        '<div class="bar-val"><b style="color:var(--ink);font-weight:600">' + groups[k].rem + "h</b> / " + groups[k].est + "h</div>";
-      box.appendChild(row);
-    });
-  }
+  // ===== NHÓM THEO DÕI — dữ liệu CỐ ĐỊNH, bám app thật (3 tầng). KHÔNG theo bộ chọn cấu hình. =====
+  var TONE = {
+    success: { c: "var(--st-done)", bg: "var(--ok-bg)" }, info: { c: "var(--st-onsch)", bg: "var(--info-bg)" },
+    warning: { c: "var(--st-dstart)", bg: "var(--warn-bg)" }, danger: { c: "var(--st-dend)", bg: "var(--danger-bg)" },
+    neutral: { c: "var(--st-nys)", bg: "var(--neutral-bg)" }, muted: { c: "var(--st-noplan)", bg: "var(--purple-bg)" }
+  };
+  function badge(text, tone) { var t = TONE[tone] || TONE.neutral; return '<span class="badge" style="color:' + t.c + ';background:' + t.bg + '">' + esc(text) + '</span>'; }
+  var EPIC_ST = { ACTIVE: { l: "tracking", t: "success" }, BACKFILLING: { l: "building history", t: "info" }, PENDING: { l: "waiting to build history", t: "info" }, PAUSED: { l: "paused", t: "neutral" }, ERROR: { l: "error", t: "danger" } };
+  var LEVEL_TONE = { OK: "success", WARN: "warning", CRITICAL: "danger" };
+  var SBST = {
+    COMPLETED: { l: "Done", tone: "success", tint: "var(--ink)", rank: 0 },
+    NYS: { l: "Not started yet", tone: "neutral", tint: "", rank: 1 },
+    ON_SCHEDULE: { l: "On schedule", tone: "info", tint: "var(--st-onsch)", rank: 2 },
+    NO_PLAN: { l: "No planned dates", tone: "muted", tint: "stripe", rank: 3 },
+    DELAY_START: { l: "Late start", tone: "warning", tint: "var(--st-dend)", rank: 4 },
+    DELAY_END: { l: "Late finish", tone: "danger", tint: "var(--st-dend)", rank: 5 }
+  };
+  var FIX = {
+    epics: [
+      { key: "PAY-100", name: "Cổng thanh toán", project: "PAY", cal: "VN_STANDARD", status: "ACTIVE", synced: "2026-08-12 00:04", subtasks: 42, missing: 3, conflicts: 1 },
+      { key: "CRM-200", name: "Chăm sóc khách hàng", project: "CRM", cal: "VN_STANDARD", status: "ACTIVE", synced: "2026-08-12 00:05", subtasks: 31, missing: 0, conflicts: 0 },
+      { key: "OPS-40", name: "Vận hành nội bộ", project: "OPS", cal: "JP_STANDARD", status: "BACKFILLING", synced: null, subtasks: 0, missing: 0, conflicts: 0 },
+      { key: "SHOP-7", name: "Gian hàng trực tuyến", project: "SHOP", cal: "VN_STANDARD", status: "PAUSED", synced: "2026-08-09 00:03", subtasks: 18, missing: 1, conflicts: 0 },
+      { key: "BILL-12", name: "Hoá đơn điện tử", project: "BILL", cal: "VN_STANDARD", status: "ERROR", synced: "2026-08-11 00:03", subtasks: 9, missing: 0, conflicts: 0, err: "FETCH_HISTORY: 401 Unauthorized from Jira" }
+    ],
+    cals: ["VN_STANDARD", "JP_STANDARD"],
+    bd: {
+      days: 22, today: 14, offDays: [3, 4, 10, 11, 17, 18], markerDay: 8,
+      epic: { key: "EPIC", label: "Whole Epic", scope: 500, color: "#2563eb" },
+      phases: [
+        { key: "DESIGN", label: "Thiết kế", scope: 120, color: "#2563eb" },
+        { key: "DEV", label: "Phát triển", scope: 280, color: "#16a34a" },
+        { key: "TEST", label: "Kiểm thử", scope: 100, color: "#b45309" }
+      ]
+    },
+    sb: {
+      phases: [{ code: "DESIGN", label: "Thiết kế", count: 14 }, { code: "DEV", label: "Phát triển", count: 20 }, { code: "TEST", label: "Kiểm thử", count: 8 }],
+      boards: {
+        DESIGN: {
+          groups: [{ sub: "Screen", cols: ["Create", "BALReview", "FixBAL"] }, { sub: "DB", cols: ["Create", "BALReview"] }],
+          funcs: [
+            { name: "Đăng nhập", cells: { "Screen|Create": "COMPLETED", "Screen|BALReview": "COMPLETED", "Screen|FixBAL": "ON_SCHEDULE", "DB|Create": "COMPLETED", "DB|BALReview": "ON_SCHEDULE" } },
+            { name: "Thanh toán", cells: { "Screen|Create": "ON_SCHEDULE", "Screen|BALReview": "DELAY_START", "DB|Create": "ON_SCHEDULE", "DB|BALReview": "NO_PLAN" } },
+            { name: "Lịch sử GD", cells: { "Screen|Create": "NYS", "DB|Create": "NYS" } }
+          ]
+        },
+        DEV: {
+          groups: [{ sub: "API", cols: ["Create", "Review"] }, { sub: "UI", cols: ["Create", "Review"] }],
+          funcs: [
+            { name: "Tạo giao dịch", cells: { "API|Create": "ON_SCHEDULE", "API|Review": "NYS", "UI|Create": "ON_SCHEDULE", "UI|Review": "NYS" } },
+            { name: "Hoàn tiền", cells: { "API|Create": "DELAY_END", "UI|Create": "NYS" } }
+          ]
+        },
+        TEST: {
+          groups: [{ sub: "Unit", cols: ["Write"] }, { sub: "E2E", cols: ["Write"] }],
+          funcs: [{ name: "Bộ test thanh toán", cells: { "Unit|Write": "NYS", "E2E|Write": "NYS" } }]
+        }
+      }
+    },
+    ops: {
+      jobs: [{ l: "Success rate 24h", v: "98%", lv: "OK" }, { l: "Avg duration", v: "6.2s", lv: "OK" }, { l: "Failed 24h", v: "1", lv: "WARN" }, { l: "Overdue Epics", v: "0", lv: "OK" }],
+      jira: [{ l: "Calls 24h", v: "1,204", lv: "OK" }, { l: "Rate-limit hits", v: "3", lv: "WARN" }, { l: "Max backoff", v: "12s", lv: "OK" }],
+      dq: [{ l: "UNCLASSIFIED", v: "2.1%", lv: "OK" }, { l: "Missing wbs dates", v: "14", lv: "WARN" }, { l: "Retro worklogs 24h", v: "5", lv: "OK" }],
+      errored: [{ key: "BILL-12", hours: 9, err: "FETCH_HISTORY: 401 Unauthorized from Jira" }],
+      runs: [
+        { started: "2026-08-12 00:04", epic: "PAY-100", type: "DAILY", dur: 6, status: "SUCCESS" },
+        { started: "2026-08-12 00:05", epic: "CRM-200", type: "DAILY", dur: 5, status: "SUCCESS" },
+        { started: "2026-08-11 14:22", epic: "OPS-40", type: "BACKFILL", dur: 41, status: "SUCCESS" },
+        { started: "2026-08-11 00:03", epic: "BILL-12", type: "DAILY", dur: null, status: "FAILED", err: "FETCH_HISTORY: 401 Unauthorized" }
+      ],
+      drift: [{ epic: "PAY-100", phase: "DEV", shifted: 4, plan: 20, ratio: 0.2, level: "WARN" }, { epic: "SHOP-7", phase: "TEST", shifted: 9, plan: 15, ratio: 0.6, level: "CRITICAL" }]
+    }
+  };
+  FIX.bd.dates = (function () { var a = []; for (var i = 1; i <= FIX.bd.days + 1; i++) a.push("08-" + (i < 10 ? "0" + i : i)); return a; })();
+  var bd = { mode: "EPIC", phase: "DESIGN" };
+  var sbState = { phase: "DESIGN" };
 
-  // ---------- Signboard grid ----------
-  function renderSignboard() {
-    var s = SC[state.sc];
-    var leg = $("sbLegend"); leg.innerHTML = "";
-    Object.keys(ST).forEach(function (k) { leg.appendChild(el("span", null, '<span class="sw" style="background:' + ST[k].c + '"></span>' + ST[k].label)); });
-    var phases = s.tiers[s.phaseTier].defs, pIdx = s.phaseTier;
-    // cell map: phase|col -> worst status
-    var cellMap = {};
-    s.leaves.forEach(function (l) {
-      var key = l.path[pIdx] + "|" + l.col, cur = cellMap[key];
-      if (!cur || ST[l.status].rank > ST[cur.status].rank) cellMap[key] = { status: l.status, key: l.key };
-    });
-    var g = $("sbGrid");
-    var head = "<tr><th></th>" + SBCOLS.map(function (c) { return "<th>" + esc(c.label) + '<span class="side">' + c.side + "</span></th>"; }).join("") + "</tr>";
-    var rows = phases.map(function (p) {
-      var tds = SBCOLS.map(function (c) {
-        var cell = cellMap[p + "|" + c.code];
-        if (!cell) return '<td><div class="sbcell empty">—</div></td>';
-        return '<td><div class="sbcell" style="background:' + ST[cell.status].c + '"><span class="k">' + esc(cell.key) + "</span>" + ST[cell.status].label + "</div></td>";
-      }).join("");
-      return '<tr><td class="ph"><span class="sw" style="background:' + defColor(p, true) + '"></span>' + esc(p) + "</td>" + tds + "</tr>";
-    }).join("");
-    g.innerHTML = head + rows;
-  }
-
-  // ---------- Epics / scopes ----------
+  // ---------- Epics (bám routes/epics/index.tsx) ----------
+  function lastSyncedText(e) { if (e.synced) return e.synced; return (e.status === "BACKFILLING" || e.status === "PENDING") ? "building history for the first time" : "never synced"; }
   function renderEpics() {
-    var s = SC[state.sc], sc = s.scope;
-    var add = '<div class="ed-sec"><div class="ed-hd"><span class="num">+</span><span class="t">Đăng ký scope mới</span><span class="d">CONTAINER (issue) hoặc QUERY (JQL)</span></div><div class="ed-bd">';
-    add += '<div class="scope-row" style="margin-bottom:13px"><span class="pill' + (sc.type === "CONTAINER" ? " on" : "") + '">CONTAINER</span><span class="pill' + (sc.type === "QUERY" ? " on" : "") + '">QUERY</span></div>';
-    add += '<div class="formrow">';
-    if (sc.type === "CONTAINER") add += '<span class="lb">Issue key</span><span><span class="inp">' + esc(sc.container.split(" ")[0]) + '</span> <button class="linkbtn">Validate</button></span>';
-    else add += '<span class="lb">JQL</span><span class="inp" style="min-width:280px">' + esc(sc.jql) + '</span>';
-    add += '<span class="lb">Leaf issue type</span><span class="inp">' + esc(sc.leaf) + '</span>';
-    add += '<span class="lb">Lịch / múi giờ</span><span class="inp">VN_STANDARD · Asia/Ho_Chi_Minh</span>';
-    add += '</div></div></div>';
-    $("epicsAdd").innerHTML = add;
-
-    var cur = { scope: (sc.type === "CONTAINER" ? sc.container.split(" ")[0] : sc.jql), type: sc.type, leaf: sc.leaf, cal: "VN_STANDARD", status: "ACTIVE", sync: "hôm nay 00:01", cur: true };
-    var rows = [cur].concat(EPIC_EXAMPLES);
-    var h = '<thead><tr><th>Scope</th><th>Type</th><th>Lá</th><th>Lịch</th><th>Trạng thái</th><th>Sync gần nhất</th></tr></thead><tbody>';
-    rows.forEach(function (r) {
-      h += '<tr' + (r.cur ? ' style="background:color-mix(in srgb,var(--accent) 6%,transparent)"' : '') + '>' +
-        '<td><span class="mono" style="font-size:12px">' + esc(r.scope) + '</span>' + (r.cur ? ' <span class="win">● đang xem</span>' : '') + '</td>' +
-        '<td><span class="code-chip">' + r.type + '</span></td><td>' + esc(r.leaf) + '</td><td class="now">' + esc(r.cal) + '</td>' +
-        '<td>' + chip(r.status, EPIC_STATUS_COLOR[r.status] || "var(--muted)") + '</td><td class="now">' + esc(r.sync) + '</td></tr>';
+    var head = '<thead><tr><th>Epic</th><th>Project</th><th>Calendar</th><th>Status</th><th>Last synced</th><th class="r">Sub-tasks</th><th class="r">Missing dates</th><th class="r">On days off</th><th></th></tr></thead><tbody>';
+    var body = FIX.epics.map(function (e) {
+      var calOpts = FIX.cals.map(function (c) { return '<option' + (c === e.cal ? ' selected' : '') + '>' + c + '</option>'; }).join("");
+      return '<tr>' +
+        '<td><code>' + esc(e.key) + '</code> ' + esc(e.name) + '</td>' +
+        '<td>' + esc(e.project) + '</td>' +
+        '<td><select class="input input--sm" aria-label="Work calendar">' + calOpts + '</select></td>' +
+        '<td>' + badge(EPIC_ST[e.status].l, EPIC_ST[e.status].t) + (e.err ? '<div class="muted err">' + esc(e.err) + '</div>' : '') + '</td>' +
+        '<td class="' + (e.synced ? '' : 'muted') + '">' + esc(lastSyncedText(e)) + '</td>' +
+        '<td class="r">' + e.subtasks + '</td>' +
+        '<td class="r">' + (e.missing === 0 ? '<span class="muted">0</span>' : '<button class="button button--sm" type="button">' + e.missing + '</button>') + '</td>' +
+        '<td class="r">' + (e.conflicts === 0 ? '<span class="muted">0</span>' : '<a class="button button--sm" title="Planned dates on a day off">⚠ ' + e.conflicts + '</a>') + '</td>' +
+        '<td><span class="row actions">' +
+        '<button class="button button--sm" type="button">Chart</button><button class="button button--sm" type="button">Signboard</button>' +
+        '<button class="button button--sm" type="button">Sub-tasks</button>' +
+        '<button class="button button--sm" type="button"' + (e.status === "PAUSED" ? ' disabled' : '') + '>Resync</button>' +
+        '<button class="button button--sm" type="button">' + (e.status === "PAUSED" ? "Resume" : "Pause (keep data)") + '</button>' +
+        '<button class="button button--sm button--danger" type="button">Untrack (delete data)</button>' +
+        '</span></td></tr>';
+    }).join("");
+    $("epicsTable").innerHTML = head + body + '</tbody>';
+  }
+  function bdActual(scope) {
+    var days = FIX.bd.days, today = FIX.bd.today, a = [];
+    for (var i = 0; i <= days; i++) {
+      if (i > today) { a.push(null); continue; }
+      var v = scope * (1 - (i / days) * 0.82) + Math.sin(i * 1.3) * (scope * 0.02);
+      a.push(Math.max(0, v));
+    }
+    FIX.bd.offDays.forEach(function (od) { if (od > 0 && od <= today && a[od] != null) a[od] = a[od - 1]; });
+    return a;
+  }
+  function bdPlanned(scope) { var p = []; for (var i = 0; i <= FIX.bd.days; i++) p.push(scope * (1 - i / FIX.bd.days)); return p; }
+  function renderBurndown() {
+    Array.prototype.forEach.call($("bdTabs").querySelectorAll("button"), function (x) { x.setAttribute("aria-selected", x.dataset.bd === bd.mode ? "true" : "false"); });
+    if (bd.mode === "PHASE") {
+      $("bdPhasePick").innerHTML = '<div class="scope"><span class="muted">Select Phase:</span>' + FIX.bd.phases.map(function (p) { return '<button class="button' + (p.key === bd.phase ? ' button--primary' : '') + '" data-bdp="' + p.key + '" type="button">' + esc(p.label) + '</button>'; }).join("") + '</div>';
+    } else { $("bdPhasePick").innerHTML = ""; }
+    var series = bd.mode === "EPIC" ? [FIX.bd.epic] : FIX.bd.phases.filter(function (p) { return p.key === bd.phase; });
+    var W = 860, H = 380, ml = 54, mr = 20, mt = 18, mb = 42, x0 = ml, x1 = W - mr, y0 = mt, y1 = H - mb, days = FIX.bd.days;
+    var maxY = 1; series.forEach(function (s) { if (s.scope > maxY) maxY = s.scope; });
+    function X(i) { return (x0 + (x1 - x0) * i / days).toFixed(1); }
+    function Y(v) { return (y1 - (y1 - y0) * v / maxY).toFixed(1); }
+    var slot = (x1 - x0) / days, svg = "";
+    FIX.bd.offDays.forEach(function (od) { svg += '<rect class="offband" x="' + (x0 + slot * (od - 0.5)).toFixed(1) + '" y="' + y0 + '" width="' + slot.toFixed(1) + '" height="' + (y1 - y0).toFixed(1) + '"/>'; });
+    for (var g = 0; g <= 4; g++) { var yy = (y0 + (y1 - y0) * g / 4).toFixed(1); svg += '<line class="grid-line" x1="' + x0 + '" y1="' + yy + '" x2="' + x1 + '" y2="' + yy + '"/><text class="axis-txt" x="' + (x0 - 8) + '" y="' + (parseFloat(yy) + 4) + '" text-anchor="end">' + Math.round(maxY * (1 - g / 4)) + '</text>'; }
+    for (var i = 0; i <= days; i += 3) svg += '<text class="axis-txt" x="' + X(i) + '" y="' + (y1 + 20) + '" text-anchor="middle">' + FIX.bd.dates[i] + '</text>';
+    var midY = ((y0 + y1) / 2).toFixed(1);
+    svg += '<text class="axis-title" x="16" y="' + midY + '" transform="rotate(-90 16 ' + midY + ')" text-anchor="middle">Hours remaining</text>';
+    svg += '<line class="today-line" x1="' + X(FIX.bd.today) + '" y1="' + y0 + '" x2="' + X(FIX.bd.today) + '" y2="' + y1 + '"/><text class="note-txt" x="' + (parseFloat(X(FIX.bd.today)) + 5) + '" y="' + (y0 + 11) + '">today</text>';
+    svg += '<line class="marker-line" x1="' + X(FIX.bd.markerDay) + '" y1="' + y0 + '" x2="' + X(FIX.bd.markerDay) + '" y2="' + y1 + '"/><text class="marker-txt" x="' + X(FIX.bd.markerDay) + '" y="' + (y0 - 3) + '" text-anchor="middle">↑</text>';
+    series.forEach(function (s) {
+      var planned = bdPlanned(s.scope), actual = bdActual(s.scope);
+      var pd = planned.map(function (v, i) { return (i === 0 ? "M" : "L") + X(i) + "," + Y(v); }).join(" ");
+      var adata = "", started = false, dots = "";
+      actual.forEach(function (v, i) { if (v == null) { started = false; return; } adata += (started ? "L" : "M") + X(i) + "," + Y(v); started = true; if (FIX.bd.offDays.indexOf(i) < 0) dots += '<circle class="dot" cx="' + X(i) + '" cy="' + Y(v) + '" r="3" style="stroke:' + s.color + '"/>'; });
+      svg += '<path class="planned" d="' + pd + '" style="stroke:' + s.color + '"/><path class="actual" d="' + adata + '" style="stroke:' + s.color + '"/>' + dots;
     });
-    $("epicsTable").innerHTML = h + '</tbody>';
+    $("burnSvg").innerHTML = svg;
+    $("bdLegend").innerHTML = series.map(function (s) { return '<span class="lg"><span class="lg-sw" style="background:' + s.color + '"></span>' + esc(s.label) + ' · Actual</span><span class="lg"><span class="lg-sw dash" style="border-color:' + s.color + '"></span>' + esc(s.label) + ' · Planned</span>'; }).join("");
+    $("bdNotice").innerHTML = '<b>The plan has slipped by 4 working days</b> across 2 changes. ' + badge("WARN", "warning");
+    $("bdMarkers").innerHTML = '<div class="panel__title">Chart markers</div><ul class="rows"><li class="row"><code>' + FIX.bd.dates[FIX.bd.markerDay] + '</code> ' + badge("↑ scope added", "warning") + ' <span>+16h vào Phase Development (PAY-155)</span></li></ul>';
   }
 
-  // ---------- Monitoring ----------
-  function renderMonitoring() {
-    var h = '<thead><tr><th>Loại</th><th>Trạng thái</th><th>Ngày tính</th><th>API</th><th>Thời lượng</th><th>Khi nào</th></tr></thead><tbody>';
-    SYNC_RUNS.forEach(function (r) {
-      var c = r.status === "SUCCESS" ? "var(--st-done)" : r.status === "FAILED" ? "var(--st-dend)" : "var(--st-nys)";
-      h += '<tr><td><span class="code-chip">' + r.type + '</span></td><td>' + chip(r.status, c) + (r.err ? ' <span class="now">@ ' + esc(r.err) + '</span>' : '') +
-        '</td><td class="prio">' + r.days + '</td><td class="prio">' + r.api + '</td><td class="prio">' + esc(r.dur) + '</td><td class="now">' + esc(r.when) + '</td></tr>';
-    });
-    $("syncTable").innerHTML = h + '</tbody>';
+  // ---------- Signboard (bám routes/signboard + signboard-cell) ----------
+  function sbCellHtml(st) {
+    if (!st) return '<td><span class="cell-empty">—</span></td>';
+    var d = SBST[st], t = TONE[d.tone];
+    if (d.tint === "stripe") return '<td class="td-noplan"><span class="cell-badge" style="color:' + t.c + ';background:var(--surface)">⚠ ' + d.l + '</span></td>';
+    if (d.tint) return '<td style="background:' + d.tint + '"><span class="cell-tint">' + d.l + '</span></td>';
+    return '<td><span class="cell-badge" style="color:' + t.c + ';background:' + t.bg + '">' + d.l + '</span></td>';
+  }
+  function sbWorst(sts) { var best = null; sts.forEach(function (s) { if (s && (best === null || SBST[s].rank > SBST[best].rank)) best = s; }); return best; }
+  function renderSignboard() {
+    $("sbPhaseNav").innerHTML = '<span class="muted">Phase:</span>' + FIX.sb.phases.map(function (p) {
+      return '<button class="button' + (p.code === sbState.phase ? ' button--primary' : '') + '" data-sbp="' + p.code + '" type="button">' + esc(p.label) + ' <span class="cnt">' + p.count + '</span></button>';
+    }).join("");
+    $("sbLegend").innerHTML = Object.keys(SBST).map(function (k) { var t = TONE[SBST[k].tone]; return '<span class="lg"><span class="lg-pill" style="background:' + t.c + '"></span>' + SBST[k].l + '</span>'; }).join("") + '<span class="lg"><span class="lg-pill" style="background:var(--surface-2);border:1px solid var(--border-strong)"></span>No task</span>';
+    var board = FIX.sb.boards[sbState.phase], multi = board.groups.length > 1;
+    var h1 = '<tr><th class="sticky" rowspan="2">Function</th>';
+    board.groups.forEach(function (grp) { h1 += '<th class="grp" colspan="' + (grp.cols.length + (multi ? 1 : 0)) + '">' + esc(grp.sub) + '</th>'; });
+    h1 += '<th class="grp" rowspan="2">Overall</th></tr>';
+    var h2 = '<tr>';
+    board.groups.forEach(function (grp) { grp.cols.forEach(function (c) { h2 += '<th class="tt">' + esc(c) + '</th>'; }); if (multi) h2 += '<th class="tt sigma">Σ</th>'; });
+    h2 += '</tr>';
+    var rows = board.funcs.map(function (f) {
+      var tds = "", rowSts = [];
+      board.groups.forEach(function (grp) {
+        var groupSts = [];
+        grp.cols.forEach(function (c) { var st = f.cells[grp.sub + "|" + c] || null; if (st) { groupSts.push(st); rowSts.push(st); } tds += sbCellHtml(st); });
+        if (multi) tds += sbCellHtml(sbWorst(groupSts));
+      });
+      tds += sbCellHtml(sbWorst(rowSts));
+      return '<tr><th class="sticky" scope="row">' + esc(f.name) + '</th>' + tds + '</tr>';
+    }).join("");
+    $("sbGrid").innerHTML = h1 + h2 + rows;
+    $("sbUnparsed").innerHTML = '<div class="panel__title">Not on the board (2)</div><ul class="rows"><li class="row"><code>PAY-199</code> <span>Tinh chỉnh CSS</span> ' + badge("title format is wrong", "danger") + '</li><li class="row"><code>PAY-201</code> <span>[Design] Việc lặt vặt</span> ' + badge("unknown task type", "warning") + '</li></ul><p class="muted">These still count towards the Burndown chart.</p>';
+  }
 
-    var s = SC[state.sc], dh = "";
-    s.tiers.forEach(function (t, i) {
-      var groups = {}; s.leaves.forEach(function (l) { groups[l.path[i]] = 1; });
-      var n = Object.keys(groups).length, isPhase = t.role === "PHASE", col = isPhase ? "var(--t-phase)" : tierColor(t.code);
-      dh += '<div class="bar-row" style="grid-template-columns:150px 1fr 150px"><div class="bar-lbl"><span class="sw" style="background:' + col + '"></span>' + esc(t.name) +
-        (isPhase ? ' <span class="role phase" style="margin-left:2px">Phase</span>' : '') + '</div>' +
-        '<div class="mini-track"><div class="mini-fill" style="width:100%;background:' + col + '"></div></div>' +
-        '<div class="bar-val">' + s.leaves.length + '/' + s.leaves.length + ' phân loại · ' + n + ' nhóm</div></div>';
+  // ---------- Monitoring (bám routes/ops) ----------
+  function opsChips(list) { return list.map(function (m) { var t = TONE[LEVEL_TONE[m.lv] || "neutral"]; return '<div class="chip-metric"><div class="cm-v" style="color:' + t.c + '">' + esc(m.v) + '</div><div class="cm-l">' + esc(m.l) + '</div></div>'; }).join(""); }
+  function renderMonitoring() {
+    $("opsJobs").innerHTML = opsChips(FIX.ops.jobs);
+    $("opsJira").innerHTML = opsChips(FIX.ops.jira);
+    $("opsDq").innerHTML = opsChips(FIX.ops.dq);
+    $("opsErrTitle").textContent = "Epics in error (" + FIX.ops.errored.length + ")";
+    $("opsErr").innerHTML = FIX.ops.errored.length === 0 ? '<p class="muted">No Epic is in error.</p>' : '<ul class="rows">' + FIX.ops.errored.map(function (e) { return '<li class="row"><code>' + esc(e.key) + '</code> ' + badge(e.hours + "h", "danger") + ' <span>' + esc(e.err) + '</span> <button class="button button--sm" type="button">Run again</button></li>'; }).join("") + '</ul>';
+    var rh = '<thead><tr><th>Started</th><th>Epic</th><th>Type</th><th class="r">Duration (s)</th><th>Outcome</th></tr></thead><tbody>';
+    FIX.ops.runs.forEach(function (r) {
+      rh += '<tr><td>' + esc(r.started) + '</td><td><code>' + esc(r.epic) + '</code></td><td>' + esc(r.type) + '</td><td class="r">' + (r.dur === null ? '<span class="muted">running</span>' : r.dur) + '</td>' +
+        '<td>' + badge(r.status, r.status === "SUCCESS" ? "success" : "danger") + (r.err ? ' <span class="muted">' + esc(r.err) + '</span> <button class="button button--sm" type="button">Error details</button>' : '') + '</td></tr>';
     });
-    $("dqBox").innerHTML = '<div class="bars">' + dh + '</div>' +
-      '<div class="note"><b>Trước:</b> chỉ đo UNCLASSIFIED ở tầng Phase. <b>Sau:</b> mỗi tầng có ngưỡng &amp; panel Unmatched riêng — dữ liệu mẫu ở đây sạch nên đều 100%.</div>';
+    $("opsRuns").innerHTML = rh + '</tbody>';
+    $("opsDriftTitle").textContent = "Plan drift (" + FIX.ops.drift.length + ")";
+    $("opsDrift").innerHTML = FIX.ops.drift.length === 0 ? '<p class="muted">No Phase has slipped past the threshold.</p>' : '<ul class="rows">' + FIX.ops.drift.map(function (d) { return '<li class="row"><code>' + esc(d.epic) + '</code> <span>' + esc(d.phase) + '</span> ' + badge(d.level, LEVEL_TONE[d.level] || "muted") + ' <span>slipped ' + d.shifted + ' / ' + d.plan + ' days (' + Math.round(d.ratio * 100) + '%)</span></li>'; }).join("") + '</ul>';
   }
 
   // ---------- Users ----------
@@ -1060,11 +1184,10 @@
   function renderAll() {
     renderScope(); renderTiers(); renderPreview();
     renderTierEditSelect(); renderEditor(); renderSbCol();
-    renderDrill(); var t = renderStats(); renderBurnChart(t.scope, t.rem); renderBars();
-    renderSignboard();
-    renderEpics(); renderMonitoring(); renderUsers(); renderHolidays();
+    renderUsers(); renderHolidays();
     syncConfigControls();
   }
+  function renderTracking() { renderEpics(); renderBurndown(); renderSignboard(); renderMonitoring(); }
   var VIEWS = ["epics", "burndown", "signboard", "monitoring", "config", "phase", "sbcol", "holidays", "users"];
   function switchView(id) {
     state.tab = id;
@@ -1083,7 +1206,9 @@
     renderAll();
   });
   $("side").addEventListener("click", function (e) { var b = e.target.closest(".navitem"); if (b) switchView(b.dataset.nav); });
-  $("drillSel").addEventListener("change", function () { state.drill = parseInt(this.value, 10); renderBars(); });
+  $("bdTabs").addEventListener("click", function (e) { var b = e.target.closest("button"); if (!b) return; bd.mode = b.dataset.bd; renderBurndown(); });
+  $("bdPhasePick").addEventListener("click", function (e) { var b = e.target.closest("[data-bdp]"); if (!b) return; bd.phase = b.dataset.bdp; renderBurndown(); });
+  $("sbPhaseNav").addEventListener("click", function (e) { var b = e.target.closest("[data-sbp]"); if (!b) return; sbState.phase = b.dataset.sbp; renderSignboard(); });
   $("tierEditSel").addEventListener("change", function () { state.editTier = parseInt(this.value, 10); renderEditor(); });
   $("calSel").addEventListener("change", function () { state.cal = this.value; renderHolidays(); });
   function toggleGuide(open) { $("guideModal").classList.toggle("open", open); }
@@ -1099,5 +1224,6 @@
   });
 
   renderAll();
+  renderTracking();
 })();
 </script>
