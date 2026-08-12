@@ -31,6 +31,18 @@ KHÔNG có nghĩa là làm cho gốc/lá/Phase cũng linh động. Cách hiểu 
 Nếu bạn thực sự muốn gốc/lá/Phase cũng cấu hình được thì phạm vi lớn hơn nhiều —
 xem [§10 Câu hỏi mở](#10-câu-hỏi-mở).
 
+### 0.1. Chốt để vào Vòng 1
+
+| # | Chốt |
+|---|---|
+| Phạm vi | Tái kiến trúc N-tầng; **cố định VAI TRÒ** gốc/lá/Phase, nhưng loại issue gốc + độ sâu + selector `CONTAINER`/`QUERY` linh động |
+| Tối thiểu | **1 tầng nhóm** (Phase bắt buộc) |
+| Nguồn khoá v1 | `PARENT_TASK_TITLE` + `SELF_TITLE` + `SUBTASK_TITLE_TOKEN` + `LABEL` (`CUSTOM_FIELD` → v2) |
+| Xác định lá | khai **loại issue lá** trong config + lưới an toàn "không có con" |
+| Signboard | thuộc **tầng Phase** |
+| Burndown case phẳng | **(B)** — mỗi scope = một burndown |
+| `QUERY` selector | tách **vòng riêng** (nặng nhất — R-F), không nhồi Vòng 2 |
+
 ---
 
 ## 1. Hiện trạng: vì sao "3 tầng" đang bị viết cứng
@@ -190,10 +202,10 @@ Khác biệt so với 2 ví dụ trên: gốc là **`QUERY` selector**, không p
 Đây là mức tổng quát cao nhất trong ba case — và là lý do cần khái niệm **"tracked
 scope"** ở [§6](#6-thay-đổi-ingestpipeline-appsworker).
 
-> **Một quyết định phải chốt cho case phẳng** (câu hỏi mở #8): burndown vẽ theo đơn
-> vị nào? **(A)** một burndown / mỗi giá trị "Project" bóc từ title (tự tách, nếu 1
-> JQL chứa nhiều Project), hay **(B)** một burndown cho cả phạm vi, "Project" chỉ là
-> một tầng drill-down.
+> **ĐÃ CHỐT (câu hỏi mở #8): phương án (B)** — mỗi tracked scope = **một** burndown;
+> "Project" là một tầng drill-down. Muốn tách burndown theo Project thì đăng ký
+> nhiều scope JQL. → không cần "auto-split theo tầng trên cùng", key snapshot vẫn
+> theo scope id.
 
 ---
 
@@ -360,10 +372,9 @@ Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh trước khi sang v
    không, hay chỉ Epic + Phase như hôm nay? (ảnh hưởng có làm `group_rollup` hay không)
 7. **Xác nhận cách hiểu ở §0** (full re-architecture; cố định VAI TRÒ gốc/lá/Phase,
    nhưng loại issue gốc + độ sâu + selector CONTAINER/QUERY thì linh động).
-8. **Đơn vị burndown ở case phẳng (§2.5).** **(A)** một burndown / mỗi giá trị tầng
-   trên cùng ("Project" bóc từ title, tự tách), hay **(B)** một burndown cho cả phạm
-   vi QUERY, "Project" chỉ là tầng drill-down? Ảnh hưởng: (A) cần "auto-split theo
-   tầng trên cùng" khi key snapshot; (B) mỗi scope = một burndown, đơn giản hơn.
+8. ✅ **CHỐT: (B)** — mỗi tracked scope = một burndown; "Project" là tầng drill-down.
+   Không cần auto-split; key snapshot theo scope id. Muốn tách theo Project → đăng
+   ký nhiều scope JQL.
 
 ---
 
