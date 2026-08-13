@@ -67,6 +67,7 @@ const rollup = (phaseCode: string, hours: number, over: Partial<PhaseRollup> = {
   totalOriginalS: hours * H,
   subtaskCount: 1,
   missingDateCount: 0,
+  plannedItems: [{ wbsStartDate: '2026-03-02', wbsEndDate: '2026-03-06', originalS: hours * H, planWorkdays: 5 }],
   warnings: [],
   ...over,
 });

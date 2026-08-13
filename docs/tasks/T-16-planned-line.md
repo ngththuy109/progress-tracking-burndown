@@ -16,6 +16,8 @@ finished_at: 2026-08-03
 
 # T-16 · Đường Kế hoạch — tính từ dữ liệu hiện tại, không dùng baseline
 
+> **Cập nhật 2026-08-13 — đã đổi thuật toán.** Đường Kế hoạch nay tính **ramp theo TỪNG Sub-task**: mỗi Sub-task rải đều khối lượng của chính nó trên cửa sổ `wbs_start_date → wbs_end_date` của riêng nó, rồi cộng dồn — thay cho rải đều theo Phase mô tả bên dưới. Sub-task thiếu một trong hai ngày thành **mức sàn** (không bao giờ bị trừ). `PhaseRollup` mang thêm `plannedItems` (lịch ramp per-Sub-task), lưu ở cột `phase_rollup.planned_items`; `computePlannedRemaining` giữ nguyên chữ ký nên worker và API không phải đổi. Xem PRD §4.3.1 (đã cập nhật). Phần mô tả bên dưới **giữ lại làm bối cảnh lịch sử** của bản T-16 gốc.
+
 ## Mục tiêu
 Tính "nếu làm đúng kế hoạch thì cuối ngày X còn lại bao nhiêu giờ" cho mọi ngày trong dải. Đây là đường thứ hai của biểu đồ Burndown.
 

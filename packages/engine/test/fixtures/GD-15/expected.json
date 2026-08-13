@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Tổng hợp ngày Phase: planStart = MIN(02/03, thiếu, 03/03) = 02/03; planEnd = MAX(04/03, thiếu, 06/03) = 06/03. Sub-task thiếu ngày KHÔNG kéo hai mốc về null, chỉ làm missingDateCount = 1. Khoảng 02/03 → 06/03 có 5 ngày làm việc, tổng khối lượng 28800 + 14400 + 28800 = 72000 → nhịp cháy 14400s/ngày → Kế hoạch 57600, 43200, 28800. Đường Thực tế: ngày 02/03 PAY-11 đã log đủ 28800 nên còn 0, PAY-12 chưa động (14400), PAY-13 chưa động (28800) → 43200. Ngày 03/03 PAY-11 Done (0), PAY-13 log 14400 nên còn 14400 → 28800. Ngày 04/03 không có gì mới → vẫn 28800. actualEnd của Phase = MAX các ngày kết thúc: PAY-11 Done, worklog cuối 02/03; PAY-13 Done (lần cuối 09/03 sau khi mở lại) nhưng CÓ worklog nên lấy ngày worklog cuối 03/03; PAY-12 chưa Done → null → MAX = 03/03. actualEndIsProvisional = true vì PAY-12 chưa bao giờ Done.",
+  "_how": "TÍNH TAY (ramp theo TỪNG Sub-task; Sub-task thiếu ngày thành SÀN). Tổng hợp ngày Phase: planStart = MIN(02/03, thiếu, 03/03) = 02/03; planEnd = MAX(04/03, thiếu, 06/03) = 06/03; Sub-task thiếu ngày chỉ làm missingDateCount = 1, KHÔNG kéo hai mốc về null. Lịch ramp: PAY-11 = 28800s trên 02→04/03 (3 ngày) = 9600/ngày; PAY-13 = 28800s trên 03→06/03 (4 ngày) = 7200/ngày; PAY-12 = 14400s THIẾU ngày → không bao giờ cháy, là mức SÀN. Phần đã cháy: 02/03 chỉ PAY-11 trôi 1 ngày = 9600; scope 72000 → 62400. 03/03: PAY-11 trôi 2 ngày = 19200 + PAY-13 trôi 1 ngày = 7200, tổng 26400 → 45600. 04/03: PAY-11 cháy trọn 28800 + PAY-13 trôi 2 ngày = 14400, tổng 43200 → 28800 (kéo tới 06/03 khi PAY-13 cháy trọn thì Kế hoạch dừng ở SÀN 14400 = phần PAY-12 chưa lên lịch). Đường Thực tế giữ nguyên: 02/03 PAY-11 log đủ 28800 (còn 0) + PAY-12 14400 + PAY-13 28800 = 43200; 03/03 PAY-13 log 14400 → 28800; 04/03 không đổi → 28800. actualEndIsProvisional = true vì PAY-12 chưa bao giờ Done.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -42,7 +42,7 @@
     {
       "snapshotDate": "2026-03-02",
       "snapshotAtUtc": "2026-03-02T16:59:59.999Z",
-      "plannedRemainingS": 57600,
+      "plannedRemainingS": 62400,
       "actualRemainingS": 43200,
       "totalScopeS": 72000,
       "totalSpentS": 28800,
@@ -60,14 +60,14 @@
           "countTodo": 2,
           "countInProgress": 1,
           "countDone": 0,
-          "plannedRemainingS": 57600
+          "plannedRemainingS": 62400
         }
       ]
     },
     {
       "snapshotDate": "2026-03-03",
       "snapshotAtUtc": "2026-03-03T16:59:59.999Z",
-      "plannedRemainingS": 43200,
+      "plannedRemainingS": 45600,
       "actualRemainingS": 28800,
       "totalScopeS": 72000,
       "totalSpentS": 43200,
@@ -85,7 +85,7 @@
           "countTodo": 1,
           "countInProgress": 1,
           "countDone": 1,
-          "plannedRemainingS": 43200
+          "plannedRemainingS": 45600
         }
       ]
     },

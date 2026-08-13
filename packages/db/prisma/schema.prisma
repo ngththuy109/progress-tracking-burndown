@@ -498,6 +498,13 @@ model PhaseRollup {
   subtaskCount     Int    @default(0) @map("subtask_count")
   missingDateCount Int    @default(0) @map("missing_date_count") // số Sub-task thiếu wbs_*
 
+  // Lịch ramp per-Sub-task (đủ hai ngày): [{wbsStartDate,wbsEndDate,originalS,planWorkdays}].
+  // Đường Kế hoạch rải đều theo TỪNG Sub-task; API service chỉ nạp rollup, KHÔNG
+  // nạp Sub-task thô, nên phải mang lịch theo đây để chiếu đường ngoài khoảng
+  // snapshot. UPSERT trọn mỗi sync (reconstruct-epic.job) → DEFAULT '[]' chỉ đỡ
+  // tới lần sync kế, sau đó tự đầy lại.
+  plannedItems Json @default("[]") @map("planned_items")
+
   computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
 
   epic TrackedEpic @relation(fields: [epicKey], references: [epicKey], onDelete: Cascade)
