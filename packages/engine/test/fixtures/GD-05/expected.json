@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Sau khi thêm việc, Phase DESIGN có tổng 2×28800 + 5×3600 = 75600s và kế hoạch 02/03 → 10/03 = 7 ngày làm việc (02,03,04,05,06,09,10) → nhịp cháy 75600/7 = 10800s/ngày. Phần đã cháy = 10800 × số ngày trôi: 10800, 21600, 32400, 43200. Phạm vi theo ngày: 02–03/03 mới có 2 Sub-task = 57600; từ 04/03 có đủ 7 = 75600, nên scopeAdded ngày 04/03 = 75600 − 57600 = 18000. Đường Kế hoạch = phạm vi của ngày đó − phần đã cháy: 46800, 36000, 43200, 32400 — CÓ MỘT ĐOẠN ĐI LÊN ở ngày 04/03, đúng như thực tế khối lượng vừa phình ra. Không log giờ nào nên đường Thực tế bằng đúng phạm vi. Dịch chuyển kế hoạch: mốc kết thúc từ 04/03 sang 10/03, đếm ngày làm việc 04,05,06,09,10 = 5, trừ 1 đầu mút = 4 ngày.",
+  "_how": "TÍNH TAY (ramp theo TỪNG Sub-task, thay cho rải đều theo Phase). DESIGN có 7 Sub-task, mỗi cái rải đều khối lượng trên cửa sổ RIÊNG: PAY-11 và PAY-12 = 28800s trên 02→04/03 (3 ngày làm việc) = 9600/ngày; PAY-13..16 = 3600s trên 04→05/03 (2 ngày) = 1800/ngày; PAY-17 = 3600s trên 04→10/03 (5 ngày: 04,05,06,09,10) = 720/ngày. Phần đã cháy mỗi ngày = tổng theo từng Sub-task (0 trước ngày bắt đầu, trọn khối lượng từ ngày kết thúc trở đi). 02/03: PAY-11,12 mỗi cái trôi 1 ngày = 19200; scope 57600 → 38400. 03/03: mỗi cái trôi 2 ngày = 38400 → 19200. 04/03 (thêm 5 Sub-task, scope 75600): PAY-11,12 cháy trọn 2×28800=57600, PAY-13..16 mỗi cái 1800 (×4=7200), PAY-17 720 = 65520 → 10080. 05/03: PAY-11,12 trọn 57600, PAY-13..16 trọn 4×3600=14400, PAY-17 trôi 2 ngày=1440 = 73440 → 2160. Không log giờ nên đường Thực tế bằng phạm vi. Dịch chuyển kế hoạch END_MOVED 04/03→10/03 = 4 ngày làm việc.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -74,7 +74,7 @@
     {
       "snapshotDate": "2026-03-02",
       "snapshotAtUtc": "2026-03-02T16:59:59.999Z",
-      "plannedRemainingS": 46800,
+      "plannedRemainingS": 38400,
       "actualRemainingS": 57600,
       "totalScopeS": 57600,
       "totalSpentS": 0,
@@ -92,14 +92,14 @@
           "countTodo": 2,
           "countInProgress": 0,
           "countDone": 0,
-          "plannedRemainingS": 46800
+          "plannedRemainingS": 38400
         }
       ]
     },
     {
       "snapshotDate": "2026-03-03",
       "snapshotAtUtc": "2026-03-03T16:59:59.999Z",
-      "plannedRemainingS": 36000,
+      "plannedRemainingS": 19200,
       "actualRemainingS": 57600,
       "totalScopeS": 57600,
       "totalSpentS": 0,
@@ -117,14 +117,14 @@
           "countTodo": 2,
           "countInProgress": 0,
           "countDone": 0,
-          "plannedRemainingS": 36000
+          "plannedRemainingS": 19200
         }
       ]
     },
     {
       "snapshotDate": "2026-03-04",
       "snapshotAtUtc": "2026-03-04T16:59:59.999Z",
-      "plannedRemainingS": 43200,
+      "plannedRemainingS": 10080,
       "actualRemainingS": 75600,
       "totalScopeS": 75600,
       "totalSpentS": 0,
@@ -142,14 +142,14 @@
           "countTodo": 7,
           "countInProgress": 0,
           "countDone": 0,
-          "plannedRemainingS": 43200
+          "plannedRemainingS": 10080
         }
       ]
     },
     {
       "snapshotDate": "2026-03-05",
       "snapshotAtUtc": "2026-03-05T16:59:59.999Z",
-      "plannedRemainingS": 32400,
+      "plannedRemainingS": 2160,
       "actualRemainingS": 75600,
       "totalScopeS": 75600,
       "totalSpentS": 0,
@@ -167,7 +167,7 @@
           "countTodo": 7,
           "countInProgress": 0,
           "countDone": 0,
-          "plannedRemainingS": 32400
+          "plannedRemainingS": 2160
         }
       ]
     }

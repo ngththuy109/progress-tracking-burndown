@@ -1,4 +1,4 @@
-import type { PhaseRollup } from '@app/shared';
+import type { PhaseRollup, PlannedSubtaskItem } from '@app/shared';
 import type { PrismaClient } from '../client.js';
 
 /**
@@ -10,6 +10,33 @@ import type { PrismaClient } from '../client.js';
 
 const toDate = (d: string | null): Date | null => (d === null ? null : new Date(`${d}T00:00:00Z`));
 const fromDate = (d: Date | null): string | null => (d === null ? null : d.toISOString().slice(0, 10));
+
+/**
+ * Đọc cột JSON `planned_items` (lịch ramp per-Sub-task).
+ *
+ * Cột JSON là biên giữa hai hệ kiểu — dữ liệu cũ hoặc DEFAULT '[]' có thể thiếu
+ * trường mà không có gì báo. Đọc phòng thủ từng trường, bỏ qua phần tử sai kiểu.
+ */
+function readPlannedItems(raw: unknown): PlannedSubtaskItem[] {
+  if (!Array.isArray(raw)) return [];
+
+  const out: PlannedSubtaskItem[] = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    if (typeof o['wbsStartDate'] !== 'string' || typeof o['wbsEndDate'] !== 'string') continue;
+
+    out.push({
+      wbsStartDate: o['wbsStartDate'],
+      wbsEndDate: o['wbsEndDate'],
+      originalS: num(o['originalS']),
+      planWorkdays: num(o['planWorkdays']),
+    });
+  }
+  return out;
+}
+
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 export async function upsertPhaseRollups(
   prisma: PrismaClient,
@@ -28,6 +55,14 @@ export async function upsertPhaseRollups(
       totalOriginalS: BigInt(r.totalOriginalS),
       subtaskCount: r.subtaskCount,
       missingDateCount: r.missingDateCount,
+      // Map sang object thuần: Prisma `Json` nhận `InputJsonValue`, không nhận
+      // mảng readonly. Chỉ lấy đúng bốn trường cần lưu.
+      plannedItems: r.plannedItems.map((i) => ({
+        wbsStartDate: i.wbsStartDate,
+        wbsEndDate: i.wbsEndDate,
+        originalS: i.originalS,
+        planWorkdays: i.planWorkdays,
+      })),
       computedAt,
     };
 
@@ -65,6 +100,7 @@ export async function loadPhaseRollups(
         totalOriginalS: Number(r.totalOriginalS),
         subtaskCount: r.subtaskCount,
         missingDateCount: r.missingDateCount,
+        plannedItems: readPlannedItems(r.plannedItems),
         warnings: [],
       } satisfies PhaseRollup,
     ]),

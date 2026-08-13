@@ -70,8 +70,22 @@ const BOARD: SignboardResponse = {
   ],
   columns: [{ taskCode: 'CREATE', label: 'Create', subPhaseKey: '' }],
   rows: [
-    { functionKey: 'login', functionName: 'Login', cells: [lateCell], subtotals: [lateCell], total: lateCell },
-    { functionKey: 'logout', functionName: 'Logout', cells: [doneCell], subtotals: [doneCell], total: doneCell },
+    {
+      functionKey: 'login',
+      functionName: 'Login',
+      pics: [{ accountId: 'u1', displayName: 'Nguyễn An' }],
+      cells: [lateCell],
+      subtotals: [lateCell],
+      total: lateCell,
+    },
+    {
+      functionKey: 'logout',
+      functionName: 'Logout',
+      pics: [],
+      cells: [doneCell],
+      subtotals: [doneCell],
+      total: doneCell,
+    },
   ],
   summary: { byStatus: { DELAY_END: 1, COMPLETED: 1 }, emptyCells: 0, totalCells: 2 },
   parseHealthWarning: false,
@@ -193,6 +207,20 @@ describe('SignboardScreen — một Sub-phase không lặp total', () => {
   });
 });
 
+describe('SignboardScreen — cột PIC', () => {
+  it('hiện cột PIC kèm tên người phụ trách của Function', async () => {
+    stubFetchRouted();
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+
+    // Có tiêu đề cột PIC…
+    expect(screen.getByRole('columnheader', { name: 'PIC' })).toBeTruthy();
+    // …và tên PIC của hàng Login hiện ra (gom từ Request participants).
+    expect(screen.getByText('Nguyễn An')).toBeTruthy();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Chọn nhiều Phase + “Whole epic”
 // ---------------------------------------------------------------------------
@@ -212,7 +240,14 @@ const BOARD_CODING: SignboardResponse = {
     { subPhaseKey: '', subPhaseLabel: 'Coding', taskColumns: [{ taskCode: 'CREATE', label: 'Create' }] },
   ],
   rows: [
-    { functionKey: 'report', functionName: 'Report', cells: [doneCell], subtotals: [doneCell], total: doneCell },
+    {
+      functionKey: 'report',
+      functionName: 'Report',
+      pics: [],
+      cells: [doneCell],
+      subtotals: [doneCell],
+      total: doneCell,
+    },
   ],
   summary: { byStatus: { COMPLETED: 1 }, emptyCells: 0, totalCells: 1 },
 };

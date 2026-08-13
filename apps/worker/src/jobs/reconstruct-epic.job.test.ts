@@ -360,6 +360,7 @@ describe('dịch chuyển kế hoạch — E-24, R-11', () => {
           totalOriginalS: 8 * H,
           subtaskCount: 1,
           missingDateCount: 0,
+          plannedItems: [],
           warnings: [],
         },
       ],

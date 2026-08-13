@@ -66,6 +66,7 @@ Tài liệu này cố gắng dùng tiếng Việt dễ hiểu. Nhưng có một 
 | 1.2 | 2026-08-02 | **Bỏ hẳn baseline** — đường Kế hoạch tổng hợp lại liên tục. Xoá bảng `epic_baseline`, viết lại US-03, E-01, E-15, công thức 4.3.1. Thêm rủi ro **R-11** | — |
 | 1.3 | 2026-08-02 | **Sổ đăng ký Epic** (`tracked_epic`) + **burndown theo Phase** + **tổng hợp ngày Phase từ Sub-task** (`wbs_start_date`/`wbs_end_date`). Thêm E-23→E-26, US-10→US-12 | 11 tuần |
 | **1.4** | **2026-08-03** | **Bảng Signboard tiến độ theo Function** — phân tách tiêu đề Sub-task (mục 2.9), ma trận Function × loại task (mục 6), 6 trạng thái. Thêm E-27→E-31, US-13→US-15. Rà soát toàn văn: sửa mâu thuẫn NFR/Signboard và tiêu chí đo trễ tiến độ | **12 tuần** |
+| 1.5 | 2026-08-13 | **Đường Kế hoạch chuyển sang ramp theo TỪNG Sub-task** (thay cho rải đều theo Phase) — viết lại mục 4.3.1 + reference impl. Sub-task thiếu ngày thành mức sàn (C-10). Thêm cột `phase_rollup.planned_items` | — |
 
 > **Lưu ý cho người đọc bản cũ:** từ **v1.2**, hệ thống **không còn dùng baseline**. Nếu bạn đọc bản 1.0 hoặc 1.1, mọi mô tả về "kế hoạch đóng băng" đã bị gỡ bỏ — xem mục 4.3 và rủi ro R-11 để hiểu hệ quả.
 
@@ -1507,26 +1508,31 @@ Vì khoá có TTL nên nó không bao giờ là đảm bảo tuyệt đối: job
 
 #### 4.3.1. Đường Kế hoạch
 
+> **Cập nhật 2026-08-13 — ramp theo TỪNG Sub-task.** Trước đây mỗi *Phase* tiêu hao đều trên cửa sổ gộp `MIN(wbs_start_date) … MAX(wbs_end_date)`, làm mất lịch riêng của từng Sub-task. Nay mỗi *Sub-task* (đủ hai ngày) tiêu hao đều trên cửa sổ của **chính nó**; đường của Phase/Epic là TỔNG các ramp đó. Lịch nằm ở `phase_rollup.planned_items`. Công thức cũ (rải đều theo Phase) chỉ là **trường hợp riêng** khi mọi Sub-task của Phase phủ đều cùng một cửa sổ.
+
 $$
-PlannedRemaining(T_d) = TotalScope(now) - \sum_{i \in Phases} \min\left( \frac{OriginalEstimate_i(now)}{PlannedWorkdays_i(now)} \times DaysElapsed_i(T_d),\ OriginalEstimate_i(now) \right)
+PlannedRemaining(T_d) = TotalScope(now) - \sum_{s \in Subtasks(now)} \min\left( \frac{OriginalEstimate_s(now)}{PlannedWorkdays_s(now)} \times DaysElapsed_s(T_d),\ OriginalEstimate_s(now) \right)
 $$
 
-**Đọc bằng lời:** Lấy tổng khối lượng **theo kế hoạch hiện tại**, trừ đi phần "đáng lẽ đã làm xong". Mỗi Phase tiêu hao đều đặn mỗi ngày làm việc của riêng nó. Hàm `min` để đảm bảo một Phase không bao giờ "cháy" quá khối lượng của chính nó.
+**Đọc bằng lời:** Lấy tổng khối lượng **theo kế hoạch hiện tại**, trừ đi phần "đáng lẽ đã làm xong". Mỗi Sub-task tiêu hao đều đặn trên các ngày làm việc của **riêng cửa sổ nó** (`wbs_start_date → wbs_end_date`). Hàm `min` đảm bảo một Sub-task không "cháy" quá khối lượng của chính nó sau ngày kết thúc.
+
+**Sub-task thiếu ngày → là "sàn".** Sub-task thiếu `wbs_start_date` HOẶC `wbs_end_date` KHÔNG có mặt trong tổng ở trên (không đoán ngày thay người dùng — **C-10**), nên khối lượng của nó không bao giờ bị trừ. Hệ quả: đường Kế hoạch dừng ở một **mức sàn** = tổng khối lượng chưa lên lịch, và chỉ chạm 0 khi MỌI Sub-task đang hoạt động đều đủ hai ngày.
 
 **Trong đó:**
 
 | Ký hiệu | Nghĩa |
 |---|---|
-| `TotalScope(now)` | Tổng Original Estimate của các Sub-task **đang hoạt động tại thời điểm đồng bộ** |
-| `OriginalEstimate_i(now)` | Tổng ước lượng của Phase `i`, cộng dồn từ Sub-task hiện tại |
-| `PlannedWorkdays_i(now)` | Số **ngày làm việc** từ `plan_start` tới `plan_end` của Phase `i` — hai mốc này tổng hợp từ `wbs_start_date`/`wbs_end_date` của Sub-task, xem mục 2.7 |
-| `DaysElapsed_i(T_d)` | Số ngày làm việc đã trôi qua của Phase `i`, tính đến hết ngày `T_d`. Phase chưa bắt đầu thì bằng 0 |
+| `TotalScope(now)` | Tổng Original Estimate của các Sub-task **đang hoạt động tại thời điểm đồng bộ** (kể cả Sub-task thiếu ngày) |
+| `Subtasks(now)` | Các Sub-task đang hoạt động **có đủ hai ngày** `wbs_*` và cửa sổ có ít nhất một ngày làm việc |
+| `OriginalEstimate_s(now)` | Ước lượng của riêng Sub-task `s` |
+| `PlannedWorkdays_s(now)` | Số **ngày làm việc** từ `wbs_start_date` tới `wbs_end_date` của Sub-task `s` (tính sẵn lúc dựng rollup, lưu trong `planned_items`) |
+| `DaysElapsed_s(T_d)` | Số ngày làm việc đã trôi qua của Sub-task `s`, tính đến hết ngày `T_d`. Sub-task chưa bắt đầu thì bằng 0 |
 
 Ký hiệu `(now)` nhấn mạnh: các giá trị này lấy tại **thời điểm chạy job**, không phải tại `T_d`. Đó chính là lý do đường Kế hoạch được vẽ lại toàn bộ mỗi lần đồng bộ.
 
-**Ví dụ số cụ thể** — Epic `PAY-100`, tổng 200 giờ:
+**Ví dụ số cụ thể** — Epic `PAY-100`, tổng 200 giờ. Ví dụ này đọc mỗi Phase như **một Sub-task phủ trọn cửa sổ của Phase** (hoặc nhiều Sub-task phủ đều cùng cửa sổ) — khi đó ramp theo Sub-task trùng khít ramp theo Phase:
 
-| Phase | Ước lượng | Ngày bắt đầu | Ngày kết thúc | Số ngày làm việc | Tốc độ burn |
+| Phase (≡ một Sub-task) | Ước lượng | Ngày bắt đầu | Ngày kết thúc | Số ngày làm việc | Tốc độ burn |
 |---|---|---|---|---|---|
 | Design | 40h | 02/03 (T2) | 06/03 (T6) | 5 ngày | 8 h/ngày |
 | Development | 120h | 09/03 (T2) | 27/03 (T6) | 15 ngày | 8 h/ngày |
@@ -1534,7 +1540,7 @@ Ký hiệu `(now)` nhấn mạnh: các giá trị này lấy tại **thời đi�
 
 Tính tại **$T_d$ = hết ngày 10/03 (Thứ Ba)**:
 
-| Phase | Ngày làm việc đã qua | Phần đáng lẽ đã cháy |
+| Sub-task | Ngày làm việc đã qua | Phần đáng lẽ đã cháy |
 |---|---|---|
 | Design | 5 (đã kết thúc) | `min(8 × 5, 40)` = **40h** |
 | Development | 2 (09/03, 10/03) | `min(8 × 2, 120)` = **16h** |
@@ -1542,6 +1548,8 @@ Tính tại **$T_d$ = hết ngày 10/03 (Thứ Ba)**:
 | | **Tổng đã cháy** | **56h** |
 
 → `PlannedRemaining(10/03)` = 200 − 56 = **144 giờ**
+
+> **Nếu tách nhỏ thành nhiều Sub-task có ngày kết thúc so le**, tổng vẫn đúng nhưng hình dạng đường **mịn hơn**: mỗi Sub-task tụt theo nhịp riêng thay vì cả Phase theo một nhịp chung. Đó chính là mục đích của thay đổi — phản ánh đúng lịch của từng Sub-task, thay vì "chia đều" toàn Phase.
 
 #### 4.3.2. Đường Thực tế
 
@@ -1769,8 +1777,9 @@ function buildSnapshotForDay(
     (sum, s) => sum + resolveOriginalEstimateAt(s, T), 0,
   );
 
-  // Đường Kế hoạch dùng ngày Phase TỔNG HỢP TỪ SUB-TASK, lấy tại thời điểm
-  // chạy job — nên nó được vẽ lại toàn bộ sau mỗi lần đồng bộ. Xem mục 4.3.
+  // Đường Kế hoạch dùng lịch ramp per-Sub-task (plannedItems trong phase_rollup),
+  // lấy tại thời điểm chạy job — nên nó được vẽ lại toàn bộ sau mỗi lần đồng bộ.
+  // Xem mục 4.3.
   const planned = computePlannedRemaining(phaseRollups, totalScope, dateStr, epic.calendarId);
 
   // Phát sinh / cắt bớt so với SNAPSHOT NGÀY HÔM TRƯỚC (không so với baseline).
@@ -1794,7 +1803,7 @@ function buildSnapshotForDay(
 // ============================================================
 
 function computePlannedRemaining(
-  phaseRollups: PhaseRollup[],   // ngày plan tổng hợp từ Sub-task, xem mục 2.7
+  phaseRollups: PhaseRollup[],   // mỗi rollup mang plannedItems: lịch ramp per-Sub-task
   totalScopeSeconds: number,
   dateStr: string,
   calendarId: string,
@@ -1803,19 +1812,27 @@ function computePlannedRemaining(
   let burned = 0;
 
   for (const phase of phaseRollups) {
-    // Phase chưa có ngày kế hoạch (mọi Sub-task đều thiếu wbs_start_date /
-    // wbs_end_date) → KHÔNG đoán bừa, bỏ qua Phase này. Xem mục 2.7.
-    if (!phase.planStart || !phase.planEnd) continue;
+    // Mỗi Sub-task (đủ hai ngày) rải đều khối lượng của CHÍNH NÓ trên cửa sổ
+    // riêng. Sub-task thiếu ngày không có trong plannedItems (xem bên dưới).
+    for (const item of phase.plannedItems) {
+      // Cửa sổ không có ngày làm việc nào (rơi trọn vào ngày nghỉ, hoặc ngày
+      // đảo) → bỏ qua, để nguyên làm sàn; đồng thời chặn chia cho 0.
+      if (item.planWorkdays <= 0) continue;
 
-    // Số ngày làm việc đã trôi qua của riêng Phase này
-    const elapsed = countWorkdays(phase.planStart, dateStr, calendarId);
+      if (dateStr < item.wbsStartDate) continue;         // Sub-task chưa bắt đầu → cháy 0
+      if (dateStr >= item.wbsEndDate) {                   // đã qua ngày kết thúc → cháy trọn
+        burned += item.originalSeconds;
+        continue;
+      }
 
-    if (elapsed <= 0) continue;                    // Phase chưa bắt đầu
-
-    const perDay = phase.totalOriginalSeconds / phase.planWorkdays;
-    burned += Math.min(perDay * elapsed, phase.totalOriginalSeconds);
+      const elapsed = countWorkdays(item.wbsStartDate, dateStr, calendarId);
+      const perDay = item.originalSeconds / item.planWorkdays;
+      burned += Math.min(perDay * elapsed, item.originalSeconds);
+    }
   }
 
+  // Sub-task thiếu wbs_start_date/wbs_end_date KHÔNG có trong plannedItems, nên
+  // khối lượng của nó nằm trong totalScope mà không bao giờ bị trừ → là "sàn".
   return Math.max(0, totalScopeSeconds - burned);
 }
 

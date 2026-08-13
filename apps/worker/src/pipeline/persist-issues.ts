@@ -1,7 +1,14 @@
-import type { EffectiveConfig, SubtaskParseResult } from '@app/shared';
+import type { EffectiveConfig, SignboardPic, SubtaskParseResult } from '@app/shared';
 import { UNCLASSIFIED_PHASE } from '@app/shared';
 import { SubtaskTitleParser, TaskTitleParser } from '@app/engine';
-import { readWbsDates, type JiraChangelogEntry, type JiraIssue, type JiraWorklog, type ResolvedFieldMapping } from '@app/jira';
+import {
+  readRequestParticipants,
+  readWbsDates,
+  type JiraChangelogEntry,
+  type JiraIssue,
+  type JiraWorklog,
+  type ResolvedFieldMapping,
+} from '@app/jira';
 import type { EpicTree } from './fetch-epic-tree.js';
 
 /**
@@ -40,6 +47,8 @@ export interface IssueRecord {
   taskType: string | null;
   sbTaskRaw: string | null;
   sbParseStatus: string;
+  /** "Request participants" đã bỏ trùng; mảng rỗng khi không có / chưa cấu hình. */
+  sbRequestParticipants: readonly SignboardPic[];
 }
 
 export interface WorklogRecord {
@@ -176,6 +185,13 @@ export function buildRecords(args: {
   changelogByIssue: ReadonlyMap<string, readonly JiraChangelogEntry[]>;
   config: EffectiveConfig;
   fields: ResolvedFieldMapping;
+  /**
+   * `accountId` → tên hiển thị, tra sẵn từ Jira (worker gọi trước khi build vì
+   * đây là hàm THUẦN, không tự gọi mạng). Dùng để điền tên cho "Request
+   * participants" chỉ có accountId. Bỏ trống thì PIC giữ tên field trả về (hoặc
+   * `null`).
+   */
+  participantNames?: ReadonlyMap<string, string>;
 }): BuiltRecords {
   const { epicKey, tree, config, fields } = args;
   const warnings: { code: string; message: string }[] = [];
@@ -224,6 +240,8 @@ export function buildRecords(args: {
       ...fitSubtaskColumns(parsed, s.key, warnings),
       taskType: parsed.taskType,
       sbParseStatus: parsed.sbParseStatus,
+      // Người phụ trách (PIC) — nguồn cho cột PIC của Signboard.
+      sbRequestParticipants: readSubtaskPics(s, fields, args.participantNames),
     });
   }
 
@@ -268,6 +286,24 @@ export function buildRecords(args: {
   }
 
   return { issues, worklogs, changelog, warnings };
+}
+
+/**
+ * Người phụ trách (PIC) của một Sub-task: đọc "Request participants", điền tên
+ * hiển thị đã tra được, và SẮP theo `accountId` cho kết quả TẤT ĐỊNH (C-6 — ghi
+ * lại nhiều lần ra cùng JSON). `readRequestParticipants` đã bỏ trùng theo accountId.
+ */
+function readSubtaskPics(
+  issue: JiraIssue,
+  fields: ResolvedFieldMapping,
+  names: ReadonlyMap<string, string> | undefined,
+): SignboardPic[] {
+  return readRequestParticipants(issue, fields)
+    .map((r) => ({
+      accountId: r.accountId,
+      displayName: r.displayName ?? names?.get(r.accountId) ?? null,
+    }))
+    .sort((a, b) => a.accountId.localeCompare(b.accountId));
 }
 
 /** Worklog log lùi ngày — đẩy Epic vào hàng đợi tính lại (PRD E-03). */
@@ -317,6 +353,8 @@ function baseRecord(
     taskType: null,
     sbTaskRaw: null,
     sbParseStatus: 'UNPARSED',
+    // Chỉ Sub-task mới có PIC; Epic/Task luôn rỗng. Sub-task ghi đè ở buildRecords.
+    sbRequestParticipants: [],
   };
 }
 

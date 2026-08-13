@@ -68,7 +68,10 @@ export interface SnapshotResult {
 
 export interface BurndownResult {
   readonly workdays: readonly DateOnly[];
-  readonly rollups: readonly PhaseRollup[];
+  // `plannedItems` bị lược khỏi bản echo — golden fixture không liệt kê lịch ramp
+  // per-Sub-task (GD-09 sẽ phải kê 500 dòng). Toán đường plan vẫn được kiểm qua
+  // `snapshots[].plannedRemainingS`.
+  readonly rollups: readonly Omit<PhaseRollup, 'plannedItems'>[];
   readonly planShifts: readonly PlanShiftRecord[];
   readonly actualDates: readonly {
     readonly key: string;
@@ -108,7 +111,25 @@ function stubRollup(spec: { phaseCode: string; planStart: DateOnly | null; planE
     totalOriginalS: 0,
     subtaskCount: 0,
     missingDateCount: 0,
+    plannedItems: [],
     warnings: [],
+  };
+}
+
+/** Bỏ `plannedItems` khỏi bản echo rollup của golden — fixture không liệt kê nó. */
+function rollupWithoutPlannedItems(r: PhaseRollup): Omit<PhaseRollup, 'plannedItems'> {
+  return {
+    phaseCode: r.phaseCode,
+    planStart: r.planStart,
+    planEnd: r.planEnd,
+    planWorkdays: r.planWorkdays,
+    actualStart: r.actualStart,
+    actualEnd: r.actualEnd,
+    actualEndIsProvisional: r.actualEndIsProvisional,
+    totalOriginalS: r.totalOriginalS,
+    subtaskCount: r.subtaskCount,
+    missingDateCount: r.missingDateCount,
+    warnings: r.warnings,
   };
 }
 
@@ -156,7 +177,7 @@ export function runBurndown(fixture: BurndownFixture): BurndownResult {
     return { key: s.key, actualStart: d.actualStart, actualEnd: d.actualEnd };
   });
 
-  return { workdays, rollups, planShifts, actualDates, snapshots };
+  return { workdays, rollups: rollups.map(rollupWithoutPlannedItems), planShifts, actualDates, snapshots };
 }
 
 // ---------------------------------------------------------------------------

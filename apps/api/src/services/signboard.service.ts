@@ -4,6 +4,7 @@ import {
   type DateOnly,
   type SignboardCell,
   type SignboardColumnGroup,
+  type SignboardPic,
   type SignboardResponse,
   type SignboardStatus,
   type SignboardSubtask,
@@ -81,7 +82,15 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
   // Dùng nhầm thì `Login`, `login` và `Ｌｏｇｉｎ` thành ba hàng riêng và bảng trở
   // nên vô dụng (E-31). Ô gộp theo `(subPhaseKey, taskType)`.
   const subPhases = new Map<string, SubPhaseAgg>();
-  const byFunction = new Map<string, { name: string; byCell: Map<string, SignboardSubtask[]> }>();
+  const byFunction = new Map<
+    string,
+    {
+      name: string;
+      byCell: Map<string, SignboardSubtask[]>;
+      /** PIC gom cả Function, khoá `accountId` để bỏ trùng giữa các Sub-task. */
+      pics: Map<string, SignboardPic>;
+    }
+  >();
 
   for (const s of args.subtasks) {
     if (s.functionKey === null || s.taskType === null) continue;
@@ -102,8 +111,18 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     let row = byFunction.get(s.functionKey);
     if (row === undefined) {
       // Tên hiển thị lấy theo lần gặp ĐẦU TIÊN — dạng đã chuẩn hoá đọc rất khó.
-      row = { name: s.functionName ?? s.functionKey, byCell: new Map() };
+      row = { name: s.functionName ?? s.functionKey, byCell: new Map(), pics: new Map() };
       byFunction.set(s.functionKey, row);
+    }
+
+    // Gom PIC của cả Function, bỏ trùng theo accountId. Cùng người xuất hiện ở
+    // nhiều Sub-task chỉ tính MỘT lần; ưu tiên bản CÓ tên (Sub-task này tra được
+    // tên còn Sub-task kia thì không).
+    for (const p of s.pics) {
+      const existing = row.pics.get(p.accountId);
+      if (existing === undefined || (existing.displayName === null && p.displayName !== null)) {
+        row.pics.set(p.accountId, p);
+      }
     }
 
     const cellKey = spKey + CELL_KEY_SEP + s.taskType;
@@ -194,7 +213,14 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
         subtotals.push(totalCell(groupCells));
       }
 
-      return { functionKey, functionName: row.name, cells, subtotals, total: totalCell(cells) };
+      return {
+        functionKey,
+        functionName: row.name,
+        pics: sortPics(row.pics),
+        cells,
+        subtotals,
+        total: totalCell(cells),
+      };
     });
 
   const unparsed = args.subtasks.filter((s) => s.parseStatus !== 'OK').length;
@@ -215,6 +241,23 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     parseHealthWarning:
       args.subtasks.length > 0 && unparsed / args.subtasks.length > UNPARSED_BANNER_RATIO,
   };
+}
+
+/**
+ * Danh sách PIC của một Function, đã sắp để hiển thị: theo TÊN (đối chiếu tiếng
+ * Việt), người chưa tra được tên (chỉ có accountId) xếp cuối, cuối cùng phân giải
+ * hoà bằng accountId cho thứ tự TẤT ĐỊNH.
+ */
+function sortPics(pics: ReadonlyMap<string, SignboardPic>): SignboardPic[] {
+  return [...pics.values()].sort((a, b) => {
+    if (a.displayName !== null && b.displayName !== null) {
+      return a.displayName.localeCompare(b.displayName, 'vi') || a.accountId.localeCompare(b.accountId);
+    }
+    // Có tên đứng trước người chỉ có accountId.
+    if (a.displayName === null && b.displayName !== null) return 1;
+    if (a.displayName !== null && b.displayName === null) return -1;
+    return a.accountId.localeCompare(b.accountId);
+  });
 }
 
 /**

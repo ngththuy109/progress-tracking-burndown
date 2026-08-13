@@ -737,6 +737,25 @@ fieldset.field > legend {
   text-align: center;
 }
 
+/* Cột PIC — người phụ trách Function. Giới hạn bề rộng và cho XUỐNG DÒNG để một
+   Function nhiều người không kéo giãn cả bảng; danh sách đầy đủ nằm trong tooltip
+   (thuộc tính title). */
+.signboard__pic-head {
+  text-align: left;
+}
+.signboard__pic {
+  vertical-align: top;
+  max-width: 16rem;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.signboard__pic-names {
+  display: inline-block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
 .cell {
   display: inline-flex;
   flex-direction: column;
