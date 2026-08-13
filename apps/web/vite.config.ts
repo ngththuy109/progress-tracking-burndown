@@ -75,6 +75,39 @@ export function resolveAllowedHosts(
   return hosts.length > 0 ? hosts : true;
 }
 
+/**
+ * Host mà DEV SERVER (`pnpm dev`, cổng 5180) lắng nghe.
+ *
+ * TRƯỚC ĐÂY khối `server` KHÔNG đặt `host`, nên Vite lùi về mặc định CHỈ
+ * `localhost`: máy khác (điện thoại cùng LAN, VM, container, một máy khác trong
+ * mạng) mở `http://<IP-máy-này>:5180` là KHÔNG vào được — nhìn hệt như "chỉ
+ * localhost mới truy cập được" dù `pnpm dev` vẫn chạy. Đúng con bug "không vào
+ * được qua IP".
+ *
+ * GIỜ mặc định `0.0.0.0` (mọi giao diện mạng) cho ĐỒNG BỘ với API và với máy chủ
+ * web đã build (khối `preview`) — cả hai vốn đã bind `0.0.0.0`. Thu hẹp về chỉ
+ * máy này bằng `WEB_DEV_HOST=127.0.0.1`.
+ *
+ * ⚠️ BẢO MẬT: KHÁC `preview`, dev server có thể CHÈN header danh tính khi đặt
+ * `VITE_DEV_USER` (đóng vai cổng SSO ở local — xem `devIdentity`). Mở dev server
+ * ra `0.0.0.0` mà ĐANG bật `VITE_DEV_USER` nghĩa là MÁY KHÁC trong mạng gọi `/api`
+ * cũng được chèn danh tính đó → GHI được như người dùng đó. Trên mạng không tin
+ * cậy hãy đặt `WEB_DEV_HOST=127.0.0.1`; cảnh báo được in khi cả hai cùng bật.
+ */
+export function resolveDevHost(env: Record<string, string | undefined>): string {
+  return env['WEB_DEV_HOST']?.trim() || '0.0.0.0';
+}
+
+/**
+ * Host chỉ MÁY NÀY gọi được (loopback). Dùng để quyết định có cần in cảnh báo
+ * "phơi dev server + đang chèn danh tính" hay không: chỉ loopback thì an toàn,
+ * mọi host khác (`0.0.0.0`, IP LAN cụ thể…) đều với tới được từ máy khác.
+ */
+function isLoopbackHost(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1';
+}
+
 /** Header danh tính mặc định — KHỚP `AUTH_IDENTITY_HEADER` mặc định của API. */
 const DEFAULT_IDENTITY_HEADER = 'x-user-id';
 
@@ -179,6 +212,10 @@ export default defineConfig(({ command, mode }) => {
   const isDevServer = command === 'serve' && mode !== 'production';
   const identity = isDevServer ? devIdentity(env) : null;
 
+  // Host của dev server (mặc định 0.0.0.0 để vào được qua IP). Tính sẵn ở đây để
+  // vừa dùng cho khối `server` bên dưới, vừa quyết định có cần cảnh báo bảo mật.
+  const devHost = resolveDevHost(env);
+
   if (identity !== null) {
     // In MỘT dòng để lập trình viên THẤY shim đang bật — không hiểu nhầm là auth
     // thật/production.
@@ -187,6 +224,18 @@ export default defineConfig(({ command, mode }) => {
         `(CHỈ dev — xem docs/AUTH.md §9). ` +
         `Cần AUTH_BOOTSTRAP_ADMINS=${identity.user} phía API để danh tính này thành ADMIN.`,
     );
+
+    // ⚠️ Dev server nghe ngoài loopback (0.0.0.0 / IP LAN) VÀ đang chèn danh tính
+    // = lối GHI mở cho cả mạng: máy khác gọi /api cũng mang danh tính này. In cảnh
+    // báo TO để không vô tình để hở trên mạng lạ (xem `resolveDevHost`).
+    if (!isLoopbackHost(devHost)) {
+      console.warn(
+        `[vite] ⚠️  Dev server đang nghe "${devHost}" (không chỉ localhost) VÀ đang chèn ` +
+          `danh tính "${identity.user}" vào /api. MÁY KHÁC trong mạng gọi tới cũng được chèn ` +
+          `danh tính này → GHI được như "${identity.user}". Mạng không tin cậy thì đặt ` +
+          `WEB_DEV_HOST=127.0.0.1 để CHỈ máy này truy cập.`,
+      );
+    }
   }
 
   return {
@@ -204,6 +253,14 @@ export default defineConfig(({ command, mode }) => {
 
     server: {
       port: WEB_DEV_PORT,
+
+      // Nghe trên mọi giao diện mạng (mặc định `0.0.0.0`) để máy khác / điện thoại
+      // cùng LAN / VM / container mở được qua IP — ĐỒNG BỘ với API và máy chủ
+      // preview (đều bind `0.0.0.0`). Trước đây bỏ trống → Vite chỉ nghe localhost,
+      // đúng triệu chứng "không vào được qua IP". Thu hẹp về máy này bằng
+      // `WEB_DEV_HOST=127.0.0.1`. ⚠️ Khi bật `VITE_DEV_USER`, mở host = mở luôn lối
+      // ghi theo danh tính đó cho cả mạng — xem `resolveDevHost` + cảnh báo ở trên.
+      host: devHost,
 
       // CẠM BẪY: mặc định Vite thấy cổng 5173 bận thì tự nhảy sang 5174 và chỉ in
       // một dòng chữ nhỏ. Playwright vẫn mở 5173, gặp trang trắng, rồi báo lỗi ở
