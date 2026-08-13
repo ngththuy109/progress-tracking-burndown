@@ -1,5 +1,6 @@
 import { useRunDetail } from '../../api/use-ops.js';
 import { ErrorState, LoadingState } from '../../components/ui/index.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { formatLocalDateTime } from './format.js';
 
 /**
@@ -36,8 +37,8 @@ export function RunDetailDialog({ runId, onClose }: RunDetailDialogProps) {
       {query.isSuccess && (
         <div className="stack">
           <p>
-            Run <strong>#{query.data.runId}</strong> — <code>{query.data.epicKey}</code> ({query.data.runType},{' '}
-            {query.data.status})
+            Run <strong>#{query.data.runId}</strong> — <IssueLink issueKey={query.data.epicKey} /> (
+            {query.data.runType}, {query.data.status})
           </p>
           <ul className="rows">
             <li className="row">

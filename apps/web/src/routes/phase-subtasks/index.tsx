@@ -9,6 +9,7 @@ import {
 import { usePhaseSubtasks } from '../../api/use-phase-subtasks.js';
 import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { EpicPicker } from '../../components/epic-picker/index.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { conflictText } from './conflict-text.js';
 import {
   Badge,
@@ -78,7 +79,7 @@ const COLUMNS: readonly Column<PhaseSubtaskTicket>[] = [
     header: 'Sub-task',
     render: (t) => (
       <span>
-        <code>{t.issueKey}</code> {t.summary}
+        <IssueLink issueKey={t.issueKey} /> {t.summary}
       </span>
     ),
     sortKey: (t) => t.issueKey,
@@ -86,7 +87,7 @@ const COLUMNS: readonly Column<PhaseSubtaskTicket>[] = [
   {
     key: 'parent',
     header: 'Parent',
-    render: (t) => (t.parentKey === null ? <span className="muted">—</span> : <code>{t.parentKey}</code>),
+    render: (t) => (t.parentKey === null ? <span className="muted">—</span> : <IssueLink issueKey={t.parentKey} />),
     sortKey: (t) => t.parentKey,
   },
   {
@@ -174,7 +175,7 @@ export function PhaseSubtasksScreen() {
     <div className="stack">
       <div className="scope">
         <span className="scope__label">Epic:</span>
-        <code>{epicKey}</code>
+        <IssueLink issueKey={epicKey} />
         <button type="button" className="button" onClick={() => setParams({})}>
           Change Epic
         </button>

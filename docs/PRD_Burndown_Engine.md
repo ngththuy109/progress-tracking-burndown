@@ -1559,13 +1559,16 @@ $$
 
 Trong đó `ActiveSubtasks(T_d)` = tập các Sub-task **đã tồn tại và còn thuộc Epic** tại thời điểm `T_d`.
 
-**Ba quy tắc tính `HistoricalRemaining` — xét theo đúng thứ tự ưu tiên, dừng ngay khi khớp:**
+**Các quy tắc tính `HistoricalRemaining` — xét theo đúng thứ tự ưu tiên, dừng ngay khi khớp:**
 
 | Ưu tiên | Điều kiện | Kết quả | Vì sao |
 |---|---|---|---|
 | **1** | Tại `T_d`, statusCategory = `Done` | **0** | Đã xong thì không còn gì để làm. Kể cả Jira còn sót số dư. |
+| **1b** | Chưa `Done` tại `T_d`, nhưng sẽ đóng HẲN ở tương lai (lần `Done` kế tiếp không bị mở lại nữa), worklog cuối của lượt làm đó ≤ `T_d`, và không ai sửa `timeestimate`/`timeoriginalestimate` sau worklog cuối | **0** | Nút Done thường bấm TRỄ hơn ngày làm thật. Việc đã xong từ ngày worklog cuối; chờ tới ngày bấm đóng mới cho về 0 làm đường Thực tế treo phần dư và biểu đồ đọc thành "task về trễ". |
 | **2** | Có bản ghi changelog đổi trường `timeestimate` trước hoặc bằng `T_d` | Lấy **giá trị mới nhất** trong các bản ghi đó | Đây là con số con người tự đánh giá lại — đáng tin nhất. |
-| **3** | Không rơi vào 2 trường hợp trên | `max(0, OriginalEstimate − TổngGiờĐãLogTới_T_d)` | Suy ra từ khối lượng đã bỏ ra. Kẹp `max(0, ...)` để không bị âm khi làm quá giờ ước lượng. |
+| **3** | Không rơi vào các trường hợp trên | `max(0, OriginalEstimate − TổngGiờĐãLogTới_T_d)` | Suy ra từ khối lượng đã bỏ ra. Kẹp `max(0, ...)` để không bị âm khi làm quá giờ ước lượng. |
+
+> **Vì sao Quy tắc 1b chỉ áp cho lần đóng DÍNH-LUÔN và chỉ khi CÓ worklog:** đóng non rồi mở lại (QA trả về) nghĩa là việc CHƯA thật sự xong — phần dư của những ngày trước lần đóng non là có thật, không được backdate. Và task không có worklog nào thì không có bằng chứng để suy "ngày làm thật cuối" (quy ước C-10: không đoán) — nó rơi xuống Quy tắc 3 như cũ, và được cảnh báo riêng ở màn hình Data quality (`CLOSED_NO_WORKLOG`).
 
 **Ví dụ số cụ thể** — Sub-task `PAY-121`, Original Estimate = 40 giờ:
 
@@ -1580,6 +1583,8 @@ Trong đó `ActiveSubtasks(T_d)` = tập các Sub-task **đã tồn tại và c�
 | 17/03 | Chuyển sang `完了` (Done) | Quy tắc 1 | **0h** |
 
 > **Chú ý cho dev:** ngày 13/03 con số **không giảm** dù có log giờ. Đây là **hành vi đúng theo thiết kế** — quy tắc 2 có ưu tiên cao hơn quy tắc 3. Ý nghĩa: khi con người đã tự khai "còn 30 giờ", ta tin con người hơn phép trừ máy móc. Cần ghi rõ điều này trong tooltip trên UI để PM không thắc mắc.
+
+> **Bảng PAY-121 KHÔNG đổi khi thêm Quy tắc 1b.** Worklog cuối là 13/03 nhưng có sửa `timeestimate = 10h` ngày 16/03 (sau worklog cuối), nên điều kiện "không sửa estimate sau worklog cuối" của 1b **không thỏa** → không backdate, cả 7 con số giữ nguyên. 1b chỉ đổi những ca đóng-trễ-mà-không-đụng-gì-thêm-sau-khi-làm-xong.
 
 ### 4.4. Mã giả — `StateReconstructionEngine`
 

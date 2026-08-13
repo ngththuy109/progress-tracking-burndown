@@ -4,6 +4,7 @@ import type { ChartSeries, ExplainRow } from '@app/shared';
 import { useBurndown, useExplainDay } from '../../api/use-burndown.js';
 import { BurndownChart } from '../../components/chart/burndown-chart.js';
 import { EpicPicker } from '../../components/epic-picker/index.js';
+import { IssueKeyList, IssueLink } from '../../components/issue-link/index.js';
 import {
   Badge,
   DataTable,
@@ -68,7 +69,7 @@ export function BurndownScreen() {
     <div className="stack">
       <div className="scope">
         <span className="scope__label">Epic:</span>
-        <code>{epicKey}</code>
+        <IssueLink issueKey={epicKey} />
         <button type="button" className="button" onClick={() => setParams({})}>
           Change Epic
         </button>
@@ -224,7 +225,11 @@ function MarkerList({ markers }: { readonly markers: BurndownScreenMarkers }) {
               {m.type === 'PLAN_SHIFTED' ? '⚑ plan moved' : '↑ scope added'}
             </Badge>
             <span>{m.detail}</span>
-            {m.causedByKeys.length > 0 && <span className="muted">{m.causedByKeys.join(', ')}</span>}
+            {m.causedByKeys.length > 0 && (
+              <span className="muted">
+                <IssueKeyList issueKeys={m.causedByKeys} />
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -249,7 +254,7 @@ function ExplainPanel({
       header: 'Sub-task',
       render: (r) => (
         <span>
-          <code>{r.issueKey}</code> {r.summary}
+          <IssueLink issueKey={r.issueKey} /> {r.summary}
         </span>
       ),
       sortKey: (r) => r.issueKey,
