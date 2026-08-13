@@ -1,10 +1,11 @@
-import type { StatusIdMap, SubtaskActualDates, SubtaskRecord } from '@app/shared';
+import type { StatusIdMap, SubtaskActualDates, SubtaskRecord, WorkCalendar } from '@app/shared';
 import {
   currentStatusCategory,
   findFirstInProgressMs,
   findLastDoneMs,
 } from '../status/resolve-status-category.js';
 import { localDateOf } from '../calendar/end-of-day.js';
+import { countWorkdays, isWorkday } from '../calendar/count-workdays.js';
 
 /**
  * Ngày bắt đầu / kết thúc THỰC TẾ của một Sub-task — PRD §2.7.2.
@@ -88,4 +89,36 @@ function lastActiveWorklogMs(sub: SubtaskRecord): number | null {
     if (!w.isDeleted) return w.startedAtMs;
   }
   return null;
+}
+
+/**
+ * Số NGÀY LÀM VIỆC giữa worklog cuối và lúc bấm đóng ticket — B1 / CLOSE_LAG.
+ *
+ * Trả `null` (không đo được) trừ khi task HIỆN đang Done VÀ có worklog:
+ *   - Đang bị mở lại (hiện không Done) → không phải ca "đóng trễ", mà là đang làm.
+ *   - Không có worklog → không có bằng chứng ngày làm thật (C-10); tập này được
+ *     cảnh báo riêng bằng `CLOSED_NO_WORKLOG` (T-40), không thuộc close-lag.
+ *
+ * Đây là con số mà Quy tắc 1b (T-13) đã dùng để backdate đường Thực tế; ở đây
+ * lưu lại per Sub-task để màn hình Data quality chỉ ra ĐỘI đóng ticket trễ bao
+ * lâu — chart đã đúng, nhưng thói quen đóng trễ vẫn nên sửa.
+ *
+ * Ngày làm việc SAU worklog cuối tới ngày đóng: `countWorkdays` bao gồm cả hai
+ * đầu, nên trừ đi chính ngày worklog cuối nếu nó là ngày làm việc. Kẹp ≥ 0.
+ */
+export function resolveCloseLagWorkdays(
+  sub: SubtaskRecord,
+  statusIdMap: StatusIdMap,
+  calendar: WorkCalendar,
+): number | null {
+  if (currentStatusCategory(sub.changelog, statusIdMap) !== 'done') return null;
+  const lastDoneMs = findLastDoneMs(sub.changelog, statusIdMap);
+  if (lastDoneMs === null) return null; // phòng hờ: Done ⇒ luôn có lastDone
+  const lastWorklogMs = lastActiveWorklogMs(sub);
+  if (lastWorklogMs === null) return null;
+
+  const lastWorklogDate = localDateOf(lastWorklogMs, calendar.timezone);
+  const doneDate = localDateOf(lastDoneMs, calendar.timezone);
+  const inclusive = countWorkdays(lastWorklogDate, doneDate, calendar);
+  return Math.max(0, inclusive - (isWorkday(lastWorklogDate, calendar) ? 1 : 0));
 }

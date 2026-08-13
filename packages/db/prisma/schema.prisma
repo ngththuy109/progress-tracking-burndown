@@ -565,6 +565,10 @@ model SubtaskActualDates {
   // true = chưa từng Done; actual_end mới chỉ là ngày worklog cuối, tạm tính.
   actualEndIsProvisional Boolean @default(false) @map("actual_end_is_provisional")
 
+  // Số ngày LÀM VIỆC giữa worklog cuối và lúc bấm đóng (B1 / CLOSE_LAG). NULL =
+  // chưa Done, không có worklog, hoặc đang bị mở lại.
+  closeLagWorkdays Int? @map("close_lag_workdays")
+
   computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
 
   issue JiraIssue @relation(fields: [issueKey], references: [issueKey], onDelete: Cascade, onUpdate: Cascade)

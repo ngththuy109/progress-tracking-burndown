@@ -1,4 +1,5 @@
 import type { ChangelogEvent, DateOnly, StatusIdMap, SubtaskRecord, WorklogRecord } from '@app/shared';
+import { CLOSE_LAG_MIN_WORKDAYS } from '@app/shared';
 import type { PrismaClient } from '../client.js';
 
 /**
@@ -160,6 +161,7 @@ export async function loadHealthRatios(
   missingWbsDateRatio: number;
   unparsedSubtaskRatio: number;
   closedNoWorklogRatio: number;
+  closeLagRatio: number;
 }> {
   const [row] = await prisma.$queryRawUnsafe<
     {
@@ -169,6 +171,7 @@ export async function loadHealthRatios(
       no_wbs: bigint;
       unparsed: bigint;
       closed_no_worklog: bigint;
+      close_lag: bigint;
     }[]
   >(
     // `closed_no_worklog`: task đã đóng, CÓ ước lượng (>0) mà không có worklog nào
@@ -176,6 +179,9 @@ export async function loadHealthRatios(
     // `no_estimate` — task đóng mà cũng chẳng ước lượng thì đã bị bắt ở cột kia,
     // và task 0 ước lượng không tạo "vách đá" trên đường Thực tế nên không thuộc
     // diện này. `> 0` cũng loại luôn NULL (NULL > 0 là false).
+    //
+    // `close_lag`: đóng trễ ≥ CLOSE_LAG_MIN_WORKDAYS ngày làm việc so với worklog
+    // cuối — engine tính sẵn `close_lag_workdays` (cần lịch), ở đây chỉ so cột.
     `SELECT COUNT(*)::bigint AS total,
             COUNT(*) FILTER (WHERE original_estimate_s IS NULL OR original_estimate_s = 0)::bigint AS no_estimate,
             COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
@@ -187,8 +193,10 @@ export async function loadHealthRatios(
                   SELECT 1 FROM worklog_entry w
                    WHERE w.issue_key = jira_issue.issue_key AND w.is_deleted = FALSE
                 )
-            )::bigint AS closed_no_worklog
+            )::bigint AS closed_no_worklog,
+            COUNT(*) FILTER (WHERE sad.close_lag_workdays >= ${CLOSE_LAG_MIN_WORKDAYS})::bigint AS close_lag
        FROM jira_issue
+       LEFT JOIN subtask_actual_dates sad ON sad.issue_key = jira_issue.issue_key
       WHERE epic_key = $1 AND issue_type = 'SUBTASK' AND removed_at IS NULL`,
     epicKey,
   );
@@ -203,5 +211,6 @@ export async function loadHealthRatios(
     missingWbsDateRatio: ratio(row?.no_wbs),
     unparsedSubtaskRatio: ratio(row?.unparsed),
     closedNoWorklogRatio: ratio(row?.closed_no_worklog),
+    closeLagRatio: ratio(row?.close_lag),
   };
 }

@@ -36,7 +36,21 @@ export const HEALTH_THRESHOLD = {
    * Cùng thang với `missingEstimateRatio` vì cùng là "khối lượng bị khai thiếu".
    */
   closedNoWorklogRatio: { warn: 0.1, critical: 0.3 },
+  /**
+   * Sub-task đóng TRỄ so với ngày làm thật (worklog cuối) từ `CLOSE_LAG_MIN_WORKDAYS`
+   * ngày làm việc trở lên (B1). Quy tắc 1b đã tự sửa đường Thực tế cho tập này,
+   * nên đây thuần là tín hiệu THÓI QUEN: đội đóng ticket trễ bao nhiêu.
+   */
+  closeLagRatio: { warn: 0.1, critical: 0.3 },
 } as const;
+
+/**
+ * Số ngày LÀM VIỆC đóng-trễ tối thiểu để một Sub-task bị coi là CLOSE_LAG (B1).
+ *
+ * 2 = đóng cách ngày làm thật cuối từ 2 ngày làm việc trở lên. Đóng trong ngày
+ * (0) hoặc ngày làm việc kế tiếp (1) là bình thường, không tính.
+ */
+export const CLOSE_LAG_MIN_WORKDAYS = 2;
 
 export type HealthMetricName = keyof typeof HEALTH_THRESHOLD;
 

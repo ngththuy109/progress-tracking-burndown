@@ -15,6 +15,8 @@ export interface SubtaskActualDatesRow {
   actualStart: DateOnly | null;
   actualEnd: DateOnly | null;
   actualEndIsProvisional: boolean;
+  /** Số ngày làm việc đóng trễ so với worklog cuối (B1). `null` = không đo được. */
+  closeLagWorkdays: number | null;
 }
 
 /** UPSERT theo `issue_key`. Chạy hai lần cho kết quả y hệt (C-6). */
@@ -28,6 +30,7 @@ export async function upsertSubtaskActualDates(
       actualStart: fromDateString(r.actualStart),
       actualEnd: fromDateString(r.actualEnd),
       actualEndIsProvisional: r.actualEndIsProvisional,
+      closeLagWorkdays: r.closeLagWorkdays,
       computedAt,
     };
     await prisma.subtaskActualDates.upsert({

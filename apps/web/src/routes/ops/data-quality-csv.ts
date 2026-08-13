@@ -15,6 +15,7 @@ export const PROBLEM_LABEL: Record<DqProblem, string> = {
   UNCLASSIFIED_PHASE: 'Unclassified phase',
   UNPARSED_TITLE: 'Title in wrong format',
   CLOSED_NO_WORKLOG: 'Closed without logged work',
+  CLOSE_LAG: 'Closed late after last work',
 };
 
 /** Escape theo RFC 4180: bọc nháy kép khi có dấu phẩy/nháy/xuống dòng. */

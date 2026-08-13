@@ -1,10 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import type { ChangelogEvent, StatusIdMap, SubtaskRecord, WorklogRecord } from '@app/shared';
-import { resolveSubtaskActualDates } from './subtask-actual-dates.js';
+import {
+  DEFAULT_WORKDAYS_MASK,
+  type ChangelogEvent,
+  type StatusIdMap,
+  type SubtaskRecord,
+  type WorkCalendar,
+  type WorklogRecord,
+} from '@app/shared';
+import { resolveSubtaskActualDates, resolveCloseLagWorkdays } from './subtask-actual-dates.js';
 
 const VN = 'Asia/Ho_Chi_Minh';
 const JP = 'Asia/Tokyo';
 const H = 3600;
+
+const cal = (over: Partial<WorkCalendar> = {}): WorkCalendar => ({
+  calendarId: 'VN_STANDARD',
+  timezone: VN,
+  workdaysMask: DEFAULT_WORKDAYS_MASK,
+  hoursPerDay: 8,
+  holidays: new Set<string>(),
+  warnings: [],
+  ...over,
+});
 
 /** '1' = 未対応 (To Do), '3' = 対応中 (In Progress), '10001' = 完了 (Done). */
 const STATUS: StatusIdMap = new Map([
@@ -265,5 +282,74 @@ describe('worklog bị xoá', () => {
     const r = resolveSubtaskActualDates(s, STATUS, VN);
     expect(r.actualStart).toBeNull();
     expect(r.actualEnd).toBeNull();
+  });
+});
+
+describe('close-lag — số ngày làm việc đóng trễ so với worklog cuối (B1)', () => {
+  // 09/03 = Thứ 2, 13/03 = Thứ 6, 16/03 = Thứ 2 kế tiếp (Mon–Fri).
+  it('log cuối Thứ 2, đóng Thứ 4 cùng tuần → 2 ngày làm việc', () => {
+    const s = sub({
+      changelog: [status('10001', '2026-03-11T10:00:00Z')], // 17:00 VN 11/03 (Thứ 4)
+      worklogs: [wl('2026-03-09T02:00:00Z')], // 09:00 VN 09/03 (Thứ 2)
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBe(2);
+  });
+
+  it('cuối tuần KHÔNG tính: log Thứ 6, đóng Thứ 2 → chỉ 1 ngày làm việc', () => {
+    const s = sub({
+      changelog: [status('10001', '2026-03-16T10:00:00Z')], // Thứ 2 16/03
+      worklogs: [wl('2026-03-13T02:00:00Z')], // Thứ 6 13/03
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBe(1);
+  });
+
+  it('đóng trong ngày làm thật cuối → 0', () => {
+    const s = sub({
+      changelog: [status('10001', '2026-03-09T10:00:00Z')], // 17:00 VN 09/03
+      worklogs: [wl('2026-03-09T02:00:00Z')], // 09:00 VN 09/03
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBe(0);
+  });
+
+  it('ngày lễ giữa chừng KHÔNG tính: log Thứ 2, đóng Thứ 5, nghỉ Thứ 4 → 2', () => {
+    const s = sub({
+      changelog: [status('10001', '2026-03-12T10:00:00Z')], // Thứ 5 12/03
+      worklogs: [wl('2026-03-09T02:00:00Z')], // Thứ 2 09/03
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal({ holidays: new Set(['2026-03-11']) }))).toBe(2);
+  });
+
+  it('hiện KHÔNG Done (bị mở lại) → null, không phải ca đóng-trễ', () => {
+    const s = sub({
+      changelog: [status('10001', '2026-03-11T10:00:00Z'), status('3', '2026-03-13T02:00:00Z')],
+      worklogs: [wl('2026-03-09T02:00:00Z')],
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBeNull();
+  });
+
+  it('không có worklog → null (để CLOSED_NO_WORKLOG lo, không phải close-lag)', () => {
+    const s = sub({ changelog: [status('10001', '2026-03-16T10:00:00Z')] });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBeNull();
+  });
+
+  it('worklog đã bị xoá không tính là bằng chứng → null', () => {
+    const s = sub({
+      changelog: [status('10001', '2026-03-16T10:00:00Z')],
+      worklogs: [wl('2026-03-09T02:00:00Z', true)],
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBeNull();
+  });
+
+  it('mở lại rồi Done lại: lấy worklog cuối và lần Done CUỐI', () => {
+    // Done non 11/03, mở lại 13/03, log lại Thứ 6 13/03, Done hẳn Thứ 2 16/03 → 1.
+    const s = sub({
+      changelog: [
+        status('10001', '2026-03-11T10:00:00Z'),
+        status('3', '2026-03-13T01:00:00Z'),
+        status('10001', '2026-03-16T10:00:00Z'),
+      ],
+      worklogs: [wl('2026-03-09T02:00:00Z'), wl('2026-03-13T02:00:00Z')],
+    });
+    expect(resolveCloseLagWorkdays(s, STATUS, cal())).toBe(1);
   });
 });

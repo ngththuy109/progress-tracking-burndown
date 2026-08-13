@@ -13,6 +13,7 @@ import {
   computePhaseRollups,
   detectPlanShift,
   listCalendarDays,
+  resolveCloseLagWorkdays,
   resolveSubtaskActualDates,
 } from '@app/engine';
 import {
@@ -34,6 +35,8 @@ import {
 /** Ngày thực tế của một Sub-task, kèm khoá để ghi xuống bảng chi tiết. */
 export interface SubtaskActualRecord extends SubtaskActualDates {
   readonly issueKey: string;
+  /** Số ngày làm việc đóng trễ so với worklog cuối (B1). `null` = không đo được. */
+  readonly closeLagWorkdays: number | null;
 }
 
 export interface ReconstructPorts {
@@ -140,6 +143,7 @@ export async function reconstructEpic(
       subtasks.map((s) => ({
         issueKey: s.key,
         ...resolveSubtaskActualDates(s, deps.statusIdMap, deps.calendar.timezone),
+        closeLagWorkdays: resolveCloseLagWorkdays(s, deps.statusIdMap, deps.calendar),
       })),
     );
     if (shifts.length > 0) {
