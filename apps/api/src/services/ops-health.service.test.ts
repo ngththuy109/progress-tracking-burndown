@@ -23,7 +23,6 @@ function input(over: Partial<OpsHealthInput> = {}): OpsHealthInput {
       missingWbsDateRatio: 0.05,
       unparsedSubtaskRatio: 0.05,
       closedNoWorklogRatio: 0.05,
-      closeLagRatio: 0.05,
     },
     dataByEpic: [],
     recentRuns: [],
@@ -65,7 +64,7 @@ describe('buildOpsHealth — hợp đồng phản hồi', () => {
     expect(() => opsHealthResponseSchema.parse(res)).not.toThrow();
     expect(res.jobs.metrics.length).toBeGreaterThan(0);
     expect(res.jira.metrics.length).toBeGreaterThan(0);
-    expect(res.data.metrics.length).toBe(6);
+    expect(res.data.metrics.length).toBe(5);
     expect(res.planDrift.rows).toEqual([]);
   });
 
@@ -133,23 +132,6 @@ describe('buildOpsHealth — số đo vượt ngưỡng bị đánh dấu', () =
     );
     expect(crit?.level).toBe('CRITICAL');
   });
-
-  it('task đóng trễ hơn ngày làm thật: 10% → WARN, 30% → CRITICAL', () => {
-    const warn = metricByName(
-      buildOpsHealth(input({ data: { ...input().data, closeLagRatio: 0.1 } })),
-      'closeLag',
-    );
-    expect(warn?.value).toBe(10);
-    expect(warn?.threshold).toBe(10);
-    expect(warn?.unit).toBe('%');
-    expect(warn?.level).toBe('WARN');
-
-    const crit = metricByName(
-      buildOpsHealth(input({ data: { ...input().data, closeLagRatio: 0.3 } })),
-      'closeLag',
-    );
-    expect(crit?.level).toBe('CRITICAL');
-  });
 });
 
 describe('buildOpsHealth — chưa đo được nói "chưa đo được", KHÔNG hiện 0', () => {
@@ -184,7 +166,6 @@ describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () =
             missingWbsDateRatio: 0,
             unparsedSubtaskRatio: 0,
             closedNoWorklogRatio: 0,
-            closeLagRatio: 0,
           },
           {
             epicKey: 'CRM-1',
@@ -195,7 +176,6 @@ describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () =
             missingWbsDateRatio: 0,
             unparsedSubtaskRatio: 0,
             closedNoWorklogRatio: 0,
-            closeLagRatio: 0,
           },
         ],
       }),
@@ -221,7 +201,6 @@ describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () =
             missingWbsDateRatio: 0,
             unparsedSubtaskRatio: 0,
             closedNoWorklogRatio: 0,
-            closeLagRatio: 0,
           },
         ],
       }),

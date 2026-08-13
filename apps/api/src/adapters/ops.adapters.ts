@@ -1,6 +1,5 @@
 import type { PrismaClient } from '@app/db';
 import type { DataQualityIssue, DqProblem, OpsHealthResponse, SyncRunDetail } from '@app/shared';
-import { CLOSE_LAG_MIN_WORKDAYS } from '@app/shared';
 import {
   buildOpsHealth,
   type RawEpicDataQuality,
@@ -99,14 +98,11 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
             no_wbs: bigint;
             unparsed: bigint;
             closed_no_worklog: bigint;
-            close_lag: bigint;
           }[]
         >(
           // `closed_no_worklog`: task đã đóng, CÓ ước lượng (>0) mà không còn
           // worklog nào — xem chú thích ở `loadHealthRatios`. `> 0` loại cả 0 lẫn
           // NULL, nên không chồng lấn với `no_estimate`.
-          // `close_lag`: đóng trễ ≥ CLOSE_LAG_MIN_WORKDAYS ngày làm việc so với
-          // worklog cuối; engine tính sẵn `close_lag_workdays`, ở đây chỉ so cột.
           `SELECT COUNT(*)::bigint AS total,
                   COUNT(*) FILTER (WHERE original_estimate_s IS NULL OR original_estimate_s = 0)::bigint AS no_estimate,
                   COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
@@ -118,10 +114,8 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                         SELECT 1 FROM worklog_entry w
                          WHERE w.issue_key = jira_issue.issue_key AND w.is_deleted = FALSE
                       )
-                  )::bigint AS closed_no_worklog,
-                  COUNT(*) FILTER (WHERE sad.close_lag_workdays >= ${CLOSE_LAG_MIN_WORKDAYS})::bigint AS close_lag
+                  )::bigint AS closed_no_worklog
              FROM jira_issue
-             LEFT JOIN subtask_actual_dates sad ON sad.issue_key = jira_issue.issue_key
             WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = FALSE`,
         ),
         // Cùng số đo, tách theo TỪNG Epic đang theo dõi — số toàn cục không nói
@@ -136,7 +130,6 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
             no_wbs: bigint;
             unparsed: bigint;
             closed_no_worklog: bigint;
-            close_lag: bigint;
           }[]
         >(
           `SELECT te.epic_key,
@@ -152,15 +145,13 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                         SELECT 1 FROM worklog_entry w
                          WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
                       )
-                  )::bigint AS closed_no_worklog,
-                  COUNT(ji.*) FILTER (WHERE sad.close_lag_workdays >= ${CLOSE_LAG_MIN_WORKDAYS})::bigint AS close_lag
+                  )::bigint AS closed_no_worklog
              FROM tracked_epic te
              LEFT JOIN jira_issue ji
                ON ji.epic_key = te.epic_key
               AND ji.issue_type = 'SUBTASK'
               AND ji.removed_at IS NULL
               AND ji.dq_exempt = FALSE
-             LEFT JOIN subtask_actual_dates sad ON sad.issue_key = ji.issue_key
             GROUP BY te.epic_key, te.display_name
             ORDER BY te.epic_key`,
         ),
@@ -250,7 +241,6 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           missingWbsDateRatio: epicRatio(r.no_wbs),
           unparsedSubtaskRatio: epicRatio(r.unparsed),
           closedNoWorklogRatio: epicRatio(r.closed_no_worklog),
-          closeLagRatio: epicRatio(r.close_lag),
         };
       });
 
@@ -267,7 +257,6 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           missingWbsDateRatio: ratio(dataRow?.no_wbs),
           unparsedSubtaskRatio: ratio(dataRow?.unparsed),
           closedNoWorklogRatio: ratio(dataRow?.closed_no_worklog),
-          closeLagRatio: ratio(dataRow?.close_lag),
         },
         dataByEpic,
         recentRuns,
@@ -336,15 +325,13 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           unclassified: boolean;
           unparsed: boolean;
           closed_no_worklog: boolean;
-          close_lag: boolean;
           dq_exempt: boolean;
           dq_exempt_by: string | null;
         }[]
       >(
         // Điều kiện `closed_no_worklog` lặp lại y hệt ở SELECT và WHERE — SQL
         // không cho tham chiếu alias của SELECT trong WHERE, và bốn lỗi cũ cũng
-        // đang lặp theo đúng cách này nên giữ nhất quán. `close_lag` đọc thẳng
-        // cột engine tính sẵn nên không cần lặp biểu thức.
+        // đang lặp theo đúng cách này nên giữ nhất quán.
         `SELECT ji.issue_key,
                 te.epic_key,
                 te.display_name,
@@ -358,12 +345,10 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                    SELECT 1 FROM worklog_entry w
                     WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
                  )) AS closed_no_worklog,
-                (sad.close_lag_workdays >= ${CLOSE_LAG_MIN_WORKDAYS}) AS close_lag,
                 ji.dq_exempt,
                 ji.dq_exempt_by
            FROM jira_issue ji
            JOIN tracked_epic te ON te.epic_key = ji.epic_key
-           LEFT JOIN subtask_actual_dates sad ON sad.issue_key = ji.issue_key
           WHERE ji.issue_type = 'SUBTASK'
             AND ji.removed_at IS NULL
             AND (ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0
@@ -374,8 +359,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                      AND NOT EXISTS (
                        SELECT 1 FROM worklog_entry w
                         WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
-                     ))
-                 OR sad.close_lag_workdays >= ${CLOSE_LAG_MIN_WORKDAYS})
+                     )))
           ORDER BY te.epic_key, ji.issue_key`,
       );
       return rows.map((r) => {
@@ -385,7 +369,6 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         if (r.unclassified) problems.push('UNCLASSIFIED_PHASE');
         if (r.unparsed) problems.push('UNPARSED_TITLE');
         if (r.closed_no_worklog) problems.push('CLOSED_NO_WORKLOG');
-        if (r.close_lag) problems.push('CLOSE_LAG');
         return {
           issueKey: r.issue_key,
           epicKey: r.epic_key,

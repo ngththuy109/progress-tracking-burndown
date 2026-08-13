@@ -98,9 +98,8 @@ PRD §4.3.2), không phải ngày làm xong thật. Task đóng trễ mà không
 | ID | Tiêu đề | Effort | Model | Phụ thuộc | Vùng chính |
 |---|---|---|---|---|---|
 | **T-40** | [Cảnh báo task đóng nhưng chưa log giờ](./T-40-closed-no-worklog-dq.md) | medium | opus | T-13, T-14, T-27, T-33 | `apps/api`, `packages/db`, `packages/shared`, `apps/web/routes/ops` |
-| **T-41** | [Cảnh báo đóng ticket trễ (close-lag) + Quy tắc 1b](./T-41-close-lag-dq.md) | medium | opus | T-13, T-14, T-17, T-27, T-33, T-40 | `packages/engine`, `apps/worker`, `packages/db`, `apps/api`, `packages/shared`, `apps/web/routes/ops` |
 
-> **Quy tắc 1b** (backdate đường Thực tế khi đóng trễ) thuộc T-13 (cập nhật 2026-08-13); T-41 lưu con số close-lag và cảnh báo. Hai card này không có trong sơ đồ phụ thuộc bên dưới.
+Card này không có trong sơ đồ phụ thuộc bên dưới.
 
 ---
 

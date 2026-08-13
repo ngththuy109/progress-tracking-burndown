@@ -24,7 +24,6 @@ export interface HealthRatios {
   readonly missingWbsDateRatio: number;
   readonly unparsedSubtaskRatio: number;
   readonly closedNoWorklogRatio: number;
-  readonly closeLagRatio: number;
 }
 
 export function levelOf(name: HealthMetricName, ratio: number): HealthLevel {
@@ -63,12 +62,6 @@ const MESSAGE: Record<HealthMetricName, (ratio: number, level: HealthLevel) => s
       : `${PERCENT(r)} of sub-tasks were closed with an estimate but no logged work, so their remaining effort ` +
         'only drops to zero on the day the ticket is closed — if that is later than the real finish, the Actual line looks late. ' +
         'Ask the team to log work (or close tickets on the day work finished); see "Show ticket details" for the list.',
-  closeLagRatio: (r, l) =>
-    l === 'OK'
-      ? `${PERCENT(r)} of sub-tasks were closed well after the last logged work — within the acceptable range.`
-      : `${PERCENT(r)} of sub-tasks were closed two or more working days after their last logged work. ` +
-        'The Actual line is already corrected for this (Rule 1b), but it points to a habit of closing tickets late; ' +
-        'ask the team to close tickets on the day work finishes. See "Show ticket details" for the list.',
 };
 
 const WORST: Record<HealthLevel, number> = { OK: 0, WARN: 1, CRITICAL: 2 };

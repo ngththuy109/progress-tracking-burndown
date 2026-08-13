@@ -101,14 +101,13 @@ export const dataQualityEpicSchema = z.object({
 });
 export type DataQualityEpic = z.infer<typeof dataQualityEpicSchema>;
 
-/** Sáu loại lỗi dữ liệu — khớp với sáu số đo ở nhóm Data quality. */
+/** Năm loại lỗi dữ liệu — khớp với năm số đo ở nhóm Data quality. */
 export const DQ_PROBLEMS = [
   'MISSING_ESTIMATE',
   'MISSING_WBS_DATE',
   'UNCLASSIFIED_PHASE',
   'UNPARSED_TITLE',
   'CLOSED_NO_WORKLOG',
-  'CLOSE_LAG',
 ] as const;
 export type DqProblem = (typeof DQ_PROBLEMS)[number];
 

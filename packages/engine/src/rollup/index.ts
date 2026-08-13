@@ -1,4 +1,4 @@
-export { resolveSubtaskActualDates, resolveCloseLagWorkdays } from './subtask-actual-dates.js';
+export { resolveSubtaskActualDates } from './subtask-actual-dates.js';
 export { computePhaseRollups, type ComputeRollupArgs } from './compute-phase-rollups.js';
 export {
   detectPlanShift,

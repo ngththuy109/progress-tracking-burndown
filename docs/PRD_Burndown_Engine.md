@@ -1570,8 +1570,6 @@ Trong đó `ActiveSubtasks(T_d)` = tập các Sub-task **đã tồn tại và c�
 
 > **Vì sao Quy tắc 1b chỉ áp cho lần đóng DÍNH-LUÔN và chỉ khi CÓ worklog:** đóng non rồi mở lại (QA trả về) nghĩa là việc CHƯA thật sự xong — phần dư của những ngày trước lần đóng non là có thật, không được backdate. Và task không có worklog nào thì không có bằng chứng để suy "ngày làm thật cuối" (quy ước C-10: không đoán) — nó rơi xuống Quy tắc 3 như cũ, và được cảnh báo riêng ở màn hình Data quality (`CLOSED_NO_WORKLOG`).
 
-> **Đóng trễ vẫn là thói quen cần sửa dù chart đã đúng.** Quy tắc 1b sửa đường Thực tế cho ca đóng-trễ-có-worklog, nhưng độ trễ bấm nút (số ngày làm việc giữa worklog cuối và lúc đóng) vẫn được nêu riêng ở Data quality bằng cảnh báo `CLOSE_LAG` (T-41) để đội chỉnh quy trình.
-
 **Ví dụ số cụ thể** — Sub-task `PAY-121`, Original Estimate = 40 giờ:
 
 | Ngày | Việc xảy ra | Quy tắc áp dụng | Còn lại |
