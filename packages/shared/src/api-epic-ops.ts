@@ -71,8 +71,8 @@ export const explainRowSchema = z.object({
   summary: z.string(),
   phaseCode: z.string(),
   statusCategoryAtDay: z.enum(['new', 'indeterminate', 'done']),
-  /** 1, 2 hay 3 — quy tắc nào của PRD §4.3.2 đã được áp dụng. */
-  appliedRule: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  /** 1, '1b', 2 hay 3 — quy tắc nào của PRD §4.3.2 đã được áp dụng. */
+  appliedRule: z.union([z.literal(1), z.literal('1b'), z.literal(2), z.literal(3)]),
   /** Câu tiếng Việt PM đọc được. Chỉ có số quy tắc thì endpoint này vô dụng. */
   ruleExplanation: z.string(),
   originalEstimateHours: z.number(),
