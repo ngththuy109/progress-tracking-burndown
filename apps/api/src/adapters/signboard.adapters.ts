@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@app/db';
-import type { SignboardPhase, SignboardSubtask } from '@app/shared';
+import type { SignboardPhase, SignboardPic, SignboardSubtask } from '@app/shared';
 import { normalize, normalizePreservingCase } from '@app/engine';
 import type { SignboardReadPort } from '../routes/signboard.routes.js';
 import type { ColumnSpec, SubPhaseMetaEntry } from '../services/signboard.service.js';
@@ -25,9 +25,44 @@ interface SubtaskRow {
   actual_start: Date | null;
   actual_end: Date | null;
   status_category: string | null;
+  /** JSONB — driver `pg` trả về đã parse. Có thể null (chưa có PIC / cột mới). */
+  sb_request_participants: unknown;
 }
 
 const d = (v: Date | null): string | null => (v === null ? null : v.toISOString().slice(0, 10));
+
+/**
+ * Chuẩn hoá cột JSONB `sb_request_participants` thành `SignboardPic[]`.
+ *
+ * Đọc PHÒNG THỦ: cột do worker ghi (đã đúng hình dạng) nhưng vẫn có thể là null,
+ * hoặc dữ liệu cũ trước migration. Bỏ phần tử thiếu `accountId`; `displayName`
+ * không phải chuỗi thì coi như `null` (chưa tra được tên).
+ */
+function toPics(raw: unknown): SignboardPic[] {
+  // Driver `pg` thường trả JSONB đã parse (mảng), nhưng phòng ca trả về chuỗi.
+  const value =
+    typeof raw === 'string'
+      ? ((): unknown => {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        })()
+      : raw;
+  if (!Array.isArray(value)) return [];
+  const out: SignboardPic[] = [];
+  for (const item of value) {
+    if (item === null || typeof item !== 'object') continue;
+    const o = item as { accountId?: unknown; displayName?: unknown };
+    if (typeof o.accountId !== 'string' || o.accountId === '') continue;
+    out.push({
+      accountId: o.accountId,
+      displayName: typeof o.displayName === 'string' ? o.displayName : null,
+    });
+  }
+  return out;
+}
 
 function toCategory(raw: string | null): 'new' | 'indeterminate' | 'done' {
   return raw === 'done' || raw === 'indeterminate' ? raw : 'new';
@@ -97,7 +132,7 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
       const rows = await prisma.$queryRawUnsafe<SubtaskRow[]>(
         `SELECT i.issue_key, i.summary, i.function_key, i.function_name, i.sb_phase_raw,
                 i.task_type, i.sb_parse_status, i.wbs_start_date, i.wbs_end_date, i.status_category,
-                a.actual_start, a.actual_end
+                i.sb_request_participants, a.actual_start, a.actual_end
            FROM jira_issue i
            LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
           WHERE i.epic_key = $1 AND i.phase_code = $2
@@ -119,6 +154,7 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
         actualStart: d(r.actual_start),
         actualEnd: d(r.actual_end),
         statusCategory: toCategory(r.status_category),
+        pics: toPics(r.sb_request_participants),
       }));
     },
 

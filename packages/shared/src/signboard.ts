@@ -19,6 +19,18 @@ export interface CellStatusInput {
   readonly actualStart: DateOnly | null;
 }
 
+/**
+ * Một người phụ trách (PIC) — gom từ "Request participants" của Jira.
+ *
+ * `accountId` là khoá bỏ trùng (cùng người trên nhiều Sub-task chỉ hiện MỘT lần).
+ * `displayName` tra từ Jira lúc đồng bộ; `null` khi field chỉ có accountId và tra
+ * tên chưa được (thiếu quyền/API lỗi) — khi đó giao diện hiện accountId.
+ */
+export interface SignboardPic {
+  readonly accountId: string;
+  readonly displayName: string | null;
+}
+
 /** Một ticket trong ô, kèm trạng thái riêng — dùng cho tooltip. */
 export interface CellTicket {
   readonly issueKey: string;

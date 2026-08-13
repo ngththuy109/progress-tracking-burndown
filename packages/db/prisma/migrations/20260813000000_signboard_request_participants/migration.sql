@@ -1,0 +1,12 @@
+-- Cột PIC trên Signboard: gom "Request participants" (Jira) của các Sub-task
+-- trong cùng một Function.
+--
+-- Lưu theo TỪNG Sub-task, dạng JSONB [{ "accountId": …, "displayName": … }].
+-- Signboard gom lại theo Function và bỏ trùng lúc ĐỌC (không có bảng snapshot
+-- riêng). displayName tra từ Jira lúc đồng bộ vì field có thể chỉ lưu accountId;
+-- null khi chưa tra được tên. NULL = Sub-task không có người tham gia (hoặc
+-- field chưa được cấu hình).
+--
+-- JSONB (không phải JSON): so sánh/đối chiếu không phụ thuộc thứ tự khoá, và đây
+-- là mặc định của kiểu `Json` trên PostgreSQL trong Prisma — khớp schema.prisma.
+ALTER TABLE "jira_issue" ADD COLUMN "sb_request_participants" JSONB;

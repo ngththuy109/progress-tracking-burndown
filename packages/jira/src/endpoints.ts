@@ -35,6 +35,21 @@ export const jiraIssueSchema = z.object({
   fields: z.record(z.string(), z.unknown()),
 });
 
+export const jiraUserSchema = z.object({
+  accountId: z.string(),
+  // Có thể vắng với account bị xoá/ẩn — khi đó không tra được tên, giữ nguyên id.
+  displayName: z.string().optional(),
+});
+
+/** `/user/bulk` phân trang kiểu PageBean (`startAt` + `isLast`). */
+export const bulkUserPageSchema = z.object({
+  values: z.array(jiraUserSchema),
+  startAt: z.number().optional(),
+  maxResults: z.number().optional(),
+  total: z.number().optional(),
+  isLast: z.boolean().optional(),
+});
+
 export const searchResultSchema = z.object({
   issues: z.array(jiraIssueSchema),
   startAt: z.number().optional(),
@@ -120,6 +135,7 @@ export type JiraField = z.infer<typeof jiraFieldSchema>;
 export type JiraIssue = z.infer<typeof jiraIssueSchema>;
 export type JiraWorklog = z.infer<typeof worklogSchema>;
 export type JiraChangelogEntry = z.infer<typeof changelogEntrySchema>;
+export type JiraUser = z.infer<typeof jiraUserSchema>;
 
 // --------------------------------------------------------------------------
 // Endpoint
@@ -291,6 +307,50 @@ async function collectWorklogIds(
   }
 
   return ids;
+}
+
+/**
+ * Tra tên hiển thị của user theo `accountId` — `GET /rest/api/3/user/bulk`.
+ *
+ * Dùng cho cột PIC (Signboard) khi "Request participants" chỉ trả về accountId.
+ * Gọi theo lô ≤ 200 accountId (giới hạn của endpoint) và phân trang từng lô.
+ *
+ * Query có nhiều `accountId` LẶP LẠI — `JiraClient.request` chỉ nhận query dạng
+ * `Record` (một khoá một giá trị) nên chuỗi query được dựng TAY vào path; hàm
+ * request giữ nguyên query có sẵn trên path (nó chỉ `set` thêm các khoá của
+ * `opts.query`, ở đây bỏ trống).
+ *
+ * Cần quyền "Browse users and groups". Thiếu quyền → Jira trả 403; nơi gọi
+ * (worker) bắt lỗi và để cột PIC hiện accountId thay vì tên, KHÔNG làm hỏng đồng bộ.
+ */
+export async function getUsersByAccountIds(
+  client: JiraClient,
+  accountIds: readonly string[],
+): Promise<JiraUser[]> {
+  const MAX_IDS_PER_CALL = 200;
+  const out: JiraUser[] = [];
+
+  for (let i = 0; i < accountIds.length; i += MAX_IDS_PER_CALL) {
+    const batch = accountIds.slice(i, i + MAX_IDS_PER_CALL);
+    let startAt = 0;
+
+    for (;;) {
+      const qs = new URLSearchParams();
+      qs.set('startAt', String(startAt));
+      qs.set('maxResults', String(MAX_IDS_PER_CALL));
+      for (const id of batch) qs.append('accountId', id);
+
+      const raw = await client.request<unknown>(`/rest/api/3/user/bulk?${qs.toString()}`);
+      const page = bulkUserPageSchema.parse(raw);
+      out.push(...page.values);
+
+      const total = page.total ?? out.length;
+      startAt += page.values.length;
+      if (page.isLast === true || page.values.length === 0 || startAt >= total) break;
+    }
+  }
+
+  return out;
 }
 
 /** Lấy chi tiết worklog theo lô — tối đa 1000 ID mỗi lần gọi. */

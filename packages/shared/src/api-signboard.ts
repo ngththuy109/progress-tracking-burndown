@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SIGNBOARD_STATUS } from './enums.js';
-import type { SignboardCell } from './signboard.js';
+import type { SignboardCell, SignboardPic } from './signboard.js';
 
 /**
  * Hợp đồng HTTP của bảng Signboard — PRD §6.
@@ -67,11 +67,30 @@ export const signboardColumnGroupSchema = z.object({
   taskColumns: z.array(z.object({ taskCode: z.string(), label: z.string() })),
 });
 
+/**
+ * Một người phụ trách (PIC) của Function — gom từ "Request participants".
+ *
+ * `displayName` là `null` khi field Jira chỉ có accountId và chưa tra được tên.
+ */
+export const signboardPicSchema = z.object({
+  accountId: z.string(),
+  displayName: z.string().nullable(),
+});
+
 export const signboardRowSchema = z.object({
   /** Khoá gộp hàng: NFKC + chữ thường (E-31). */
   functionKey: z.string(),
   /** Dạng hiển thị — lấy theo lần gặp ĐẦU TIÊN. */
   functionName: z.string(),
+  /**
+   * Cột "PIC": gom "Request participants" của MỌI Sub-task thuộc Function này,
+   * bỏ trùng theo `accountId`, sắp theo tên. Rỗng khi chưa cấu hình field hoặc
+   * không Sub-task nào có người tham gia.
+   *
+   * `.default([])` để web MỚI vẫn đọc được phản hồi từ API CŨ (chưa có `pics`)
+   * trong lúc deploy — khi đó cột PIC rỗng thay vì cả bảng gãy validate.
+   */
+  pics: z.array(signboardPicSchema).default([]),
   /** Cùng thứ tự (và cùng độ dài) với `columns` — mảng cột LÁ đã làm phẳng. */
   cells: z.array(signboardCellSchema),
   /** Ô "Σ" của mỗi nhóm Sub-phase — cùng thứ tự với `columnGroups`. */
@@ -119,6 +138,8 @@ export interface SignboardColumnGroup {
 export interface SignboardRow {
   readonly functionKey: string;
   readonly functionName: string;
+  /** Cột "PIC" — gom "Request participants" của cả Function, bỏ trùng, sắp theo tên. */
+  readonly pics: readonly SignboardPic[];
   /** 1:1 với `columns` (mảng cột lá đã làm phẳng). */
   readonly cells: readonly SignboardCell[];
   /** 1:1 với `columnGroups` — ô "Σ" mỗi Sub-phase. */
@@ -233,4 +254,10 @@ export interface SignboardSubtask {
   readonly actualStart: string | null;
   readonly actualEnd: string | null;
   readonly statusCategory: 'new' | 'indeterminate' | 'done';
+  /**
+   * "Request participants" của Sub-task này (đã bỏ trùng theo `accountId`).
+   * `displayName` là `null` khi field chỉ có accountId và chưa tra được tên.
+   * Signboard gom danh sách này theo Function để dựng cột PIC.
+   */
+  readonly pics: readonly SignboardPic[];
 }

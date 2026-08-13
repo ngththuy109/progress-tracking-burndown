@@ -4,6 +4,7 @@ import {
   SIGNBOARD_STATUS,
   type SignboardCell,
   type SignboardColumnGroup,
+  type SignboardPic,
   type SignboardRow,
   type SignboardStatus,
 } from '@app/shared';
@@ -560,6 +561,12 @@ function BoardTable({
               >
                 Function
               </th>
+              {/* Cột PIC: người phụ trách Function, gom "Request participants" của
+                  mọi Sub-task (bỏ trùng). Đứng ngay sau tên Function để đọc theo
+                  hàng. */}
+              <th scope="col" rowSpan={2} className="table__th signboard__pic-head">
+                PIC
+              </th>
               {columnGroups.map((g) => (
                 <th
                   key={g.subPhaseKey}
@@ -603,6 +610,9 @@ function BoardTable({
                 <th scope="row" className="table__td signboard__sticky">
                   {row.functionName}
                 </th>
+                <td className="table__td signboard__pic">
+                  <PicList pics={row.pics} />
+                </td>
                 {columnGroups.map((g, gi) => (
                   <Fragment key={g.subPhaseKey}>
                     {g.taskColumns.map((c, ci) => {
@@ -651,6 +661,29 @@ function BoardTable({
 
       {shown.length === 0 && <p className="muted">No Function matches that search.</p>}
     </section>
+  );
+}
+
+/**
+ * Cột PIC của một Function: danh sách người phụ trách, gom từ "Request
+ * participants" của mọi Sub-task (đã bỏ trùng ở API).
+ *
+ * Hiện tên; người chưa tra được tên hiện accountId để KHÔNG im lặng bỏ sót ai.
+ * `title` liệt kê đầy đủ để rê chuột đọc khi ô bị cắt bớt.
+ */
+function PicList({ pics }: { readonly pics: readonly SignboardPic[] }) {
+  if (pics.length === 0) {
+    return (
+      <span className="cell cell--empty" title="No participants">
+        —
+      </span>
+    );
+  }
+  const labels = pics.map((p) => p.displayName ?? p.accountId);
+  return (
+    <span className="signboard__pic-names" title={labels.join(', ')}>
+      {labels.join(', ')}
+    </span>
   );
 }
 

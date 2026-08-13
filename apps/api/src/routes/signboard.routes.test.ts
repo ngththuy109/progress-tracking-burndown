@@ -43,6 +43,7 @@ function sub(over: Partial<SignboardSubtask> & { issueKey: string }): SignboardS
     actualStart: null,
     actualEnd: null,
     statusCategory: 'new',
+    pics: [],
     ...over,
   };
 }
@@ -195,6 +196,76 @@ describe('dựng bảng', () => {
     await get<SignboardResponse>(BOARD);
 
     expect(reads.queries).toBe(1);
+  });
+});
+
+describe('cột PIC', () => {
+  it('gom Request participants của mọi Sub-task cùng Function, bỏ trùng theo accountId', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', taskType: 'Create', pics: [{ accountId: 'u1', displayName: 'An' }] }),
+      sub({
+        issueKey: 'S-2',
+        taskType: 'BALReview',
+        pics: [
+          { accountId: 'u1', displayName: 'An' },
+          { accountId: 'u2', displayName: 'Bình' },
+        ],
+      }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    // u1 xuất hiện ở cả hai Sub-task nhưng chỉ tính MỘT lần.
+    expect(body.rows[0]?.pics).toEqual([
+      { accountId: 'u1', displayName: 'An' },
+      { accountId: 'u2', displayName: 'Bình' },
+    ]);
+  });
+
+  it('cùng accountId nhưng một nơi thiếu tên thì ưu tiên bản CÓ tên', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', taskType: 'Create', pics: [{ accountId: 'u1', displayName: null }] }),
+      sub({ issueKey: 'S-2', taskType: 'BALReview', pics: [{ accountId: 'u1', displayName: 'An' }] }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.rows[0]?.pics).toEqual([{ accountId: 'u1', displayName: 'An' }]);
+  });
+
+  it('người chưa tra được tên (chỉ accountId) xếp SAU người có tên', async () => {
+    reads.subtaskList = [
+      sub({
+        issueKey: 'S-1',
+        pics: [
+          { accountId: 'zzz', displayName: null },
+          { accountId: 'u2', displayName: 'An' },
+        ],
+      }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.rows[0]?.pics.map((p) => p.accountId)).toEqual(['u2', 'zzz']);
+  });
+
+  it('mỗi Function có danh sách PIC riêng, không trộn lẫn', async () => {
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', functionKey: 'a', functionName: 'A', pics: [{ accountId: 'u1', displayName: 'An' }] }),
+      sub({ issueKey: 'S-2', functionKey: 'b', functionName: 'B', pics: [{ accountId: 'u2', displayName: 'Bình' }] }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.rows.find((r) => r.functionKey === 'a')?.pics).toEqual([
+      { accountId: 'u1', displayName: 'An' },
+    ]);
+    expect(body.rows.find((r) => r.functionKey === 'b')?.pics).toEqual([
+      { accountId: 'u2', displayName: 'Bình' },
+    ]);
+  });
+
+  it('Function không có ai tham gia thì pics rỗng', async () => {
+    reads.subtaskList = [sub({ issueKey: 'S-1' })];
+    const { body } = await get<SignboardResponse>(BOARD);
+    expect(body.rows[0]?.pics).toEqual([]);
   });
 });
 

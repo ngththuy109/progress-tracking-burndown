@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { changelogItemSchema, changelogPageSchema } from './endpoints.js';
+import { changelogItemSchema, changelogPageSchema, getUsersByAccountIds } from './endpoints.js';
+import { BasicAuthProvider } from './credentials.js';
+import { JiraClient } from './client.js';
+
+const CREDS = {
+  JIRA_BASE_URL: 'https://example.atlassian.net',
+  JIRA_EMAIL: 'svc@example.com',
+  JIRA_API_TOKEN: 'secret-token-123',
+};
+
+function makeClient(fetchImpl: typeof fetch) {
+  return new JiraClient({
+    credentials: new BasicAuthProvider(CREDS as unknown as NodeJS.ProcessEnv),
+    fetchImpl,
+    retry: { sleep: async () => {}, random: () => 0.5 },
+  });
+}
+
+function jsonResponse(body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
 
 /**
  * Bẫy `toString`.
@@ -51,5 +74,52 @@ describe('changelog — bẫy trường tên toString', () => {
 
   it('trường toString mang kiểu sai vẫn bị từ chối', () => {
     expect(changelogItemSchema.safeParse({ field: 'status', toString: 42 }).success).toBe(false);
+  });
+});
+
+describe('getUsersByAccountIds — tra tên PIC', () => {
+  it('gửi mỗi accountId thành một tham số query LẶP LẠI và trả về user đã parse', async () => {
+    const urls: string[] = [];
+    const client = makeClient(async (input) => {
+      urls.push(String(input));
+      return jsonResponse({
+        values: [
+          { accountId: 'u1', displayName: 'Nguyễn An' },
+          { accountId: 'u2', displayName: 'Trần Bình' },
+        ],
+        isLast: true,
+      });
+    });
+
+    const users = await getUsersByAccountIds(client, ['u1', 'u2']);
+
+    expect(users).toEqual([
+      { accountId: 'u1', displayName: 'Nguyễn An' },
+      { accountId: 'u2', displayName: 'Trần Bình' },
+    ]);
+    // Query mang HAI accountId (endpoint /user/bulk nhận nhiều), không ghi đè nhau.
+    const url = new URL(urls[0]!);
+    expect(url.pathname).toBe('/rest/api/3/user/bulk');
+    expect(url.searchParams.getAll('accountId')).toEqual(['u1', 'u2']);
+  });
+
+  it('phân trang: đi tiếp khi chưa hết trang', async () => {
+    let call = 0;
+    const client = makeClient(async () => {
+      call += 1;
+      return call === 1
+        ? jsonResponse({ values: [{ accountId: 'u1', displayName: 'An' }], isLast: false, total: 2 })
+        : jsonResponse({ values: [{ accountId: 'u2', displayName: 'Bình' }], isLast: true, total: 2 });
+    });
+
+    const users = await getUsersByAccountIds(client, ['u1', 'u2']);
+    expect(users.map((u) => u.accountId)).toEqual(['u1', 'u2']);
+    expect(call).toBe(2);
+  });
+
+  it('user bị ẩn/xoá (thiếu displayName) vẫn parse được', async () => {
+    const client = makeClient(async () => jsonResponse({ values: [{ accountId: 'u1' }], isLast: true }));
+    const users = await getUsersByAccountIds(client, ['u1']);
+    expect(users).toEqual([{ accountId: 'u1' }]);
   });
 });
