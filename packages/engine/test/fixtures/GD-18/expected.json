@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. PAY-13 chuyển từ DESIGN sang DEV nên PHẢI tính lại cả hai Phase. DESIGN còn PAY-11 (kết thúc 03/03) và PAY-12 (kết thúc 04/03) → mốc kết thúc co từ 06/03 về 04/03; đếm ngày làm việc 04,05,06 = 3, trừ 1 đầu mút = 2, mang dấu âm. DEV nhận PAY-13 (bắt đầu 05/03) nên mốc bắt đầu kéo sớm từ 09/03 về 05/03; đếm 05,06,09 = 3, trừ 1 = 2, cũng mang dấu âm. DESIGN có 57600s trên 3 ngày làm việc → 19200s/ngày, đã cháy 19200, 38400, 57600. DEV bắt đầu 05/03 nên trong cả ba ngày snapshot chưa cháy gì. Kế hoạch của Epic = 115200 − phần đã cháy của DESIGN: 96000, 76800, 57600. Không log giờ nên Thực tế nằm ngang ở 115200.",
+  "_how": "TÍNH TAY (ramp theo TỪNG Sub-task). PAY-13 chuyển từ DESIGN sang DEV nên PHẢI tính lại cả hai Phase. DESIGN còn PAY-11 (kết thúc 03/03) và PAY-12 (kết thúc 04/03) → mốc kết thúc co từ 06/03 về 04/03; đếm ngày làm việc 04,05,06 = 3, trừ 1 đầu mút = 2, mang dấu âm. DEV nhận PAY-13 (bắt đầu 05/03) → mốc bắt đầu kéo sớm từ 09/03 về 05/03; đếm 05,06,09 = 3, trừ 1 = 2, cũng âm. Lịch ramp DESIGN: PAY-11 = 28800s trên 02→03/03 (2 ngày) = 14400/ngày; PAY-12 = 28800s trên 02→04/03 (3 ngày) = 9600/ngày. DESIGN đã cháy: 02/03 = 14400+9600 = 24000 → 33600; 03/03 = 28800(trọn)+19200 = 48000 → 9600; 04/03 = 28800+28800 = 57600 → 0. DEV có PAY-13 (05→06/03) và PAY-14 (09→10/03) đều bắt đầu SAU 04/03 nên cả ba ngày snapshot chưa cháy gì → 57600. Kế hoạch Epic = 115200 − phần đã cháy DESIGN: 91200, 67200, 57600. Không log giờ nên Thực tế nằm ngang ở 115200.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -81,7 +81,7 @@
     {
       "snapshotDate": "2026-03-02",
       "snapshotAtUtc": "2026-03-02T16:59:59.999Z",
-      "plannedRemainingS": 96000,
+      "plannedRemainingS": 91200,
       "actualRemainingS": 115200,
       "totalScopeS": 115200,
       "totalSpentS": 0,
@@ -99,7 +99,7 @@
           "countTodo": 2,
           "countInProgress": 0,
           "countDone": 0,
-          "plannedRemainingS": 38400
+          "plannedRemainingS": 33600
         },
         {
           "phaseCode": "DEV",
@@ -116,7 +116,7 @@
     {
       "snapshotDate": "2026-03-03",
       "snapshotAtUtc": "2026-03-03T16:59:59.999Z",
-      "plannedRemainingS": 76800,
+      "plannedRemainingS": 67200,
       "actualRemainingS": 115200,
       "totalScopeS": 115200,
       "totalSpentS": 0,
@@ -134,7 +134,7 @@
           "countTodo": 2,
           "countInProgress": 0,
           "countDone": 0,
-          "plannedRemainingS": 19200
+          "plannedRemainingS": 9600
         },
         {
           "phaseCode": "DEV",

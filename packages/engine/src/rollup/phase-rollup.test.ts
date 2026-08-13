@@ -220,6 +220,44 @@ describe('số ngày làm việc của Phase', () => {
   });
 });
 
+describe('plannedItems — lịch ramp per-Sub-task', () => {
+  it('chỉ gồm Sub-task đủ HAI ngày, kèm planWorkdays tính sẵn', () => {
+    const [r] = run([
+      sub('A', { wbsStartDate: '2026-03-02', wbsEndDate: '2026-03-06' }), // đủ ngày → có mặt
+      sub('B', { wbsStartDate: '2026-03-02', wbsEndDate: null }), // thiếu ngày kết thúc → loại
+      sub('C', { wbsStartDate: null, wbsEndDate: '2026-03-06' }), // thiếu ngày bắt đầu → loại
+    ]);
+    expect(r!.plannedItems).toHaveLength(1);
+    expect(r!.plannedItems[0]).toEqual({
+      wbsStartDate: '2026-03-02',
+      wbsEndDate: '2026-03-06',
+      originalS: 8 * H,
+      planWorkdays: 5, // 02→06/03 = 5 ngày làm việc, tính sẵn lúc dựng rollup
+    });
+    // Cả B và C đều thiếu một mốc → missingDateCount = 2, nhưng vẫn cộng khối lượng.
+    expect(r!.missingDateCount).toBe(2);
+  });
+
+  it('KHÔNG gồm Sub-task đã bị gỡ khỏi Epic', () => {
+    const [r] = run([
+      sub('A', { wbsStartDate: '2026-03-02', wbsEndDate: '2026-03-06' }),
+      sub('B', {
+        wbsStartDate: '2026-03-02',
+        wbsEndDate: '2026-03-06',
+        removedAtMs: Date.parse('2026-03-05T00:00:00Z'),
+      }),
+    ]);
+    expect(r!.plannedItems).toHaveLength(1);
+    expect(r!.plannedItems.map((i) => i.originalS)).toEqual([8 * H]);
+  });
+
+  it('planWorkdays của item cũng loại ngày lễ/cuối tuần', () => {
+    const tet = cal({ holidays: new Set(['2026-03-10', '2026-03-11']) });
+    const [r] = run([sub('A', { wbsStartDate: '2026-03-09', wbsEndDate: '2026-03-13' })], tet);
+    expect(r!.plannedItems[0]!.planWorkdays).toBe(3);
+  });
+});
+
 // ---------------------------------------------------------------------------
 
 const rollup = (over: Partial<Parameters<typeof detectPlanShift>[1]>) =>
@@ -234,6 +272,7 @@ const rollup = (over: Partial<Parameters<typeof detectPlanShift>[1]>) =>
     totalOriginalS: 0,
     subtaskCount: 0,
     missingDateCount: 0,
+    plannedItems: [],
     warnings: [],
     ...over,
   }) as Parameters<typeof detectPlanShift>[1];

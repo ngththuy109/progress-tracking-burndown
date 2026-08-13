@@ -36,6 +36,11 @@ function rollup(phaseCode: string, planStart: string | null, planEnd: string | n
     totalOriginalS,
     subtaskCount: 0,
     missingDateCount: 0,
+    // Một item phủ TRỌN Phase ⇒ đường chiếu per-Sub-task trùng ramp per-Phase cũ.
+    plannedItems:
+      planStart !== null && planEnd !== null && planWorkdays !== null
+        ? [{ wbsStartDate: planStart, wbsEndDate: planEnd, originalS: totalOriginalS, planWorkdays }]
+        : [],
     warnings: [],
   };
 }

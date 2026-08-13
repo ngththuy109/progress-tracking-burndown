@@ -1,6 +1,7 @@
 import type {
   DateOnly,
   PhaseRollup,
+  PlannedSubtaskItem,
   StatusIdMap,
   SubtaskRecord,
   WorkCalendar,
@@ -68,6 +69,7 @@ export function computePhaseRollups(args: ComputeRollupArgs): PhaseRollup[] {
     const actualStarts: (DateOnly | null)[] = [];
     const actualEnds: (DateOnly | null)[] = [];
 
+    const plannedItems: PlannedSubtaskItem[] = [];
     let totalOriginalS = 0;
     let missingDateCount = 0;
     let anyUnfinished = false;
@@ -81,6 +83,17 @@ export function computePhaseRollups(args: ComputeRollupArgs): PhaseRollup[] {
       planEnds.push(s.wbsEndDate);
       // Thiếu MỘT trong hai ngày đã là không so sánh được sớm/trễ (E-30).
       if (s.wbsStartDate === null || s.wbsEndDate === null) missingDateCount += 1;
+      else {
+        // Đủ hai ngày → đưa vào lịch ramp per-Sub-task. Ngày đảo (start > end)
+        // cho countWorkdays = 0 → planWorkdays 0 → thành sàn (không đốt), KHÔNG
+        // crash; cảnh báo INVALID_PHASE_PERIOD cấp Phase vẫn nổ ở dưới.
+        plannedItems.push({
+          wbsStartDate: s.wbsStartDate,
+          wbsEndDate: s.wbsEndDate,
+          originalS: s.originalEstimateSeconds,
+          planWorkdays: countWorkdays(s.wbsStartDate, s.wbsEndDate, calendar),
+        });
+      }
 
       const actual = resolveSubtaskActualDates(s, statusIdMap, calendar.timezone);
       actualStarts.push(actual.actualStart);
@@ -125,6 +138,7 @@ export function computePhaseRollups(args: ComputeRollupArgs): PhaseRollup[] {
       totalOriginalS,
       subtaskCount: list.length,
       missingDateCount,
+      plannedItems,
       warnings,
     });
   }
