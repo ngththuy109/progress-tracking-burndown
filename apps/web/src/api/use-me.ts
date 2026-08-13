@@ -6,8 +6,8 @@ import { apiClient, ApiError, type ApiClient } from './client.js';
  * Ai đang đăng nhập — để hiện tên và ẩn/hiện nút theo vai trò.
  *
  * 401 (chưa đăng nhập) KHÔNG coi là lỗi: trả `null` thay vì ném, để khung layout
- * hiện trạng thái "chưa đăng nhập" gọn gàng thay vì một dải đỏ. Việc đá qua trang
- * đăng nhập là của cổng SSO (và `maybeRedirectToSignIn`), không phải hook này.
+ * hiện trạng thái "chưa đăng nhập" gọn gàng thay vì một dải đỏ. Việc đổ về form
+ * đăng nhập là của `funnelExpiredLdapSession` + `AuthGate`, không phải hook này.
  */
 export const meKey = ['me'] as const;
 

@@ -7,7 +7,7 @@
  * bắt buộc, vốn đã có) — xem `resolveJiraBaseUrl` ở đó. Vẫn có thể đặt
  * `VITE_JIRA_BASE_URL` tường minh để trỏ sang site khác, hoặc đặt `= ""` để TẮT
  * liên kết — khi đó màn hình vẫn chạy, chỉ copy được MÃ ticket chứ không mở thẳng
- * sang Jira. Cùng cách làm với `signInPath()` (VITE_SIGN_IN_PATH).
+ * sang Jira.
  */
 
 /** Base URL của Jira, đã bỏ dấu `/` thừa ở cuối. `''` = chưa cấu hình. */

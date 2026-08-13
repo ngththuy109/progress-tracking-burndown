@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 
 /**
- * Phiên đăng nhập SSO in-app — lưu trên Redis, nhận diện qua cookie `ptb_sess`.
+ * Phiên đăng nhập LDAP in-app — lưu trên Redis, nhận diện qua cookie `ptb_sess`.
  *
  * VÌ SAO KHÔNG KÝ COOKIE: giá trị cookie chỉ là một session id 32 byte (256 bit)
  * ngẫu nhiên từ CSPRNG, còn nội dung phiên nằm HOÀN TOÀN phía server (Redis).
@@ -32,19 +32,6 @@ export interface SessionStore {
   destroy(sessionId: string): Promise<void>;
 }
 
-/** Trạng thái MỘT lượt đăng nhập OIDC đang dở (giữa /auth/login và /auth/callback). */
-export interface LoginState {
-  readonly nonce: string;
-  readonly verifier: string;
-  readonly redirectTo: string;
-}
-
-export interface LoginStateStore {
-  put(state: string, data: LoginState): Promise<void>;
-  /** Lấy VÀ XOÁ — state là dùng-một-lần (chặn replay callback). */
-  take(state: string): Promise<LoginState | null>;
-}
-
 /**
  * Token ngẫu nhiên từ CSPRNG, mã hoá base64url (an toàn cho cookie/URL).
  * 32 byte = 256 bit — xem chú thích "VÌ SAO KHÔNG KÝ COOKIE" ở đầu file.
@@ -54,10 +41,6 @@ export function randomToken(bytes: number): string {
 }
 
 const SESSION_KEY_PREFIX = 'sess:';
-const LOGIN_STATE_KEY_PREFIX = 'ssostate:';
-
-/** Lượt đăng nhập phải xong trong 10 phút — quá hạn thì state bốc hơi. */
-export const LOGIN_STATE_TTL_S = 10 * 60;
 
 export function createRedisSessionStore(redis: SessionRedis): SessionStore {
   return {
@@ -86,42 +69,6 @@ export function createRedisSessionStore(redis: SessionRedis): SessionStore {
 
     async destroy(sessionId) {
       await redis.del(`${SESSION_KEY_PREFIX}${sessionId}`);
-    },
-  };
-}
-
-export function createRedisLoginStateStore(redis: SessionRedis): LoginStateStore {
-  return {
-    async put(state, data) {
-      await redis.set(
-        `${LOGIN_STATE_KEY_PREFIX}${state}`,
-        JSON.stringify(data),
-        'EX',
-        LOGIN_STATE_TTL_S,
-      );
-    },
-
-    async take(state) {
-      const key = `${LOGIN_STATE_KEY_PREFIX}${state}`;
-      const raw = await redis.get(key);
-      if (raw === null) return null;
-      // Xoá NGAY sau khi đọc — mỗi state chỉ đổi được một phiên. GET rồi DEL
-      // không nguyên tử, nhưng cửa sổ đua chỉ tồn tại khi kẻ tấn công đã có
-      // ĐÚNG state 128-bit trong 10 phút hiệu lực — lúc đó vấn đề nằm ở chỗ khác.
-      await redis.del(key);
-      try {
-        const parsed = JSON.parse(raw) as Partial<LoginState>;
-        if (
-          typeof parsed.nonce !== 'string' ||
-          typeof parsed.verifier !== 'string' ||
-          typeof parsed.redirectTo !== 'string'
-        ) {
-          return null;
-        }
-        return { nonce: parsed.nonce, verifier: parsed.verifier, redirectTo: parsed.redirectTo };
-      } catch {
-        return null;
-      }
     },
   };
 }
@@ -173,7 +120,7 @@ export function isHttpsRequest(req: FastifyRequest): boolean {
 /**
  * Giá trị `Set-Cookie` cho phiên mới. HttpOnly chặn JS đọc trộm; SameSite=Lax
  * chặn CSRF cho mọi request "sâu" (POST/PUT từ site khác) mà vẫn cho phép
- * điều hướng top-level quay về từ IdP mang cookie theo.
+ * điều hướng top-level (GET) mang cookie theo.
  */
 export function sessionCookieHeader(sessionId: string, args: { maxAgeS: number; secure: boolean }): string {
   const parts = [

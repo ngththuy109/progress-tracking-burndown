@@ -112,20 +112,19 @@ function isLoopbackHost(host: string): boolean {
 const DEFAULT_IDENTITY_HEADER = 'x-user-id';
 
 /**
- * Danh tính giả cho DEV — Vite đóng vai cổng SSO khi chạy `pnpm dev`.
+ * Danh tính giả cho DEV — Vite tự chèn header danh tính khi chạy `pnpm dev`.
  *
- * Ở môi trường thật, một auth proxy (nginx/oauth2-proxy — xem `config/auth-proxy/`
- * và `docs/AUTH.md`) đứng trước API và đặt header `x-user-id` = email đã xác
- * thực cho MỌI request. Ở local KHÔNG có cổng đó: trình duyệt → Vite → API không
- * mang danh tính nào, nên API không phân giải được principal và mọi thao tác GHI
- * (thêm Epic, sửa cấu hình, quản lý người dùng) trả **401 UNAUTHENTICATED**.
+ * Ở production, xác thực là ĐĂNG NHẬP LDAP trong app (xem `docs/AUTH.md`). Ở local
+ * (chưa dựng LDAP) thì trình duyệt → Vite → API không mang danh tính nào, nên API
+ * không phân giải được principal và mọi thao tác GHI (thêm Epic, sửa cấu hình,
+ * quản lý người dùng) trả **401 UNAUTHENTICATED**.
  *
  * Đặt `VITE_DEV_USER=you@cty.com` để Vite tự chèn header danh tính vào request
- * `/api` khi dev — đúng như cổng làm ở production. Kết hợp với
- * `AUTH_BOOTSTRAP_ADMINS=you@cty.com` (phía API) thì `you@cty.com` thành ADMIN và
- * thêm được Epic. KHÔNG đặt biến này thì Vite không chèn gì — giữ nguyên hành vi cũ.
+ * `/api` khi dev. Kết hợp với `AUTH_BOOTSTRAP_ADMINS=you@cty.com` (phía API) thì
+ * `you@cty.com` thành ADMIN và thêm được Epic. KHÔNG đặt biến này thì Vite không
+ * chèn gì — giữ nguyên hành vi cũ.
  *
- * Đổi tên header cho khớp cổng khác qua `VITE_DEV_IDENTITY_HEADER` (hiếm khi cần).
+ * Đổi tên header qua `VITE_DEV_IDENTITY_HEADER` (hiếm khi cần).
  *
  * VÌ SAO ĐẶT Ở VITE CHỨ KHÔNG PHẢI API: model bảo mật của API là "chỉ tin DANH
  * TÍNH do cổng đặt, không bao giờ tự đăng nhập". Nhét một lối tắt auth vào API sẽ
