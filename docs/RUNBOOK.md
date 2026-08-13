@@ -398,9 +398,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Sau đó, **vẫn đang ở chế độ header** (đăng nhập bằng cổng/dev như thường):
 
 1. Đăng nhập bằng tài khoản **ADMIN**, vào **Admin → LDAP**.
-2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn ĐÚNG MỘT cách xác định DN:
+2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn một cách xác định user:
    - **Direct bind (template DN)** — `Template DN` chứa `{username}`, ví dụ
      `uid={username},ou=users,dc=cty,dc=vn` (hợp OpenLDAP).
+   - **Direct bind + tự tra email (Active Directory)** — bind bằng CHÍNH mật khẩu
+     người dùng: `Template DN` kiểu `cty.com.vn\{username}` (hoặc UPN
+     `{username}@cty.com.vn`), rồi khai `Search base` + `User filter` (vd
+     `(cn={username})`) để app TỰ TRA email trên chính kết nối đó. KHÔNG cần tài
+     khoản dịch vụ (bỏ trống Bind DN/password).
    - **Search rồi bind (Active Directory)** — `Bind DN` + `Bind password` tài khoản
      dịch vụ, `Search base`, và `User filter` chứa `{username}` (ví dụ
      `(sAMAccountName={username})` cho Active Directory).

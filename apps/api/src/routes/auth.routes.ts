@@ -379,12 +379,14 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
       }
       const data = parsed.data;
 
-      // Khai cả hai (hoặc không khai gì) là mơ hồ — server không đoán hộ.
-      if ((data.userDnTemplate !== null) === (data.searchBase !== null)) {
+      // Không khai gì là mơ hồ — server không đoán hộ. Nhưng khai CẢ hai là hợp
+      // lệ: đó là AD direct-bind + tự tra email (bind bằng mật khẩu user, rồi
+      // search email trên chính kết nối đó — không cần tài khoản dịch vụ).
+      if (data.userDnTemplate === null && data.searchBase === null) {
         throw new ApiError(
           400,
           'BAD_REQUEST',
-          'Phải khai đúng MỘT trong hai: User DN template (direct bind) hoặc Search base (search-then-bind).',
+          'Phải khai cách xác định user: User DN template (direct bind) hoặc Search base (search-then-bind) — hoặc cả hai (AD direct-bind + tự tra email).',
         );
       }
 

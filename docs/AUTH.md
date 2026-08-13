@@ -23,9 +23,10 @@ Không cần dựng oauth2-proxy nữa.
 
 ```
 Trình duyệt ──POST /auth/login {username, password}──▶ API
-                 │  Direct bind:      bind(DN từ template, password)
-                 │  Search-then-bind: bind(tài khoản dịch vụ) → search user
-                 │                    theo filter → bind(DN tìm được, password)
+                 │  Direct bind:       bind(DN từ template, password)
+                 │  Direct bind + tra: bind(mật khẩu user) → tự search email cùng kết nối
+                 │  Search-then-bind:  bind(tài khoản dịch vụ) → search user
+                 │                     theo filter → bind(DN tìm được, password)
                  ▼
    LDAP server (ldap:// hoặc ldaps://)
                  │ bind OK → đọc attribute email (danh tính app_user)
@@ -33,10 +34,13 @@ Trình duyệt ──POST /auth/login {username, password}──▶ API
    session Redis + cookie ptb_sess (HttpOnly) → API tra app_user → role + projects
 ```
 
-- **Hai cách xác định DN** (chọn một ở màn hình cấu hình): *direct bind* bằng
-  template (`uid={username},ou=users,dc=congty,dc=vn` — hợp OpenLDAP) hoặc
-  *search-then-bind* bằng tài khoản dịch vụ (cách chuẩn với **Active
-  Directory**, filter kiểu `(sAMAccountName={username})`).
+- **Ba cách xác định user** (chọn một ở màn hình cấu hình): *direct bind* bằng
+  template (`uid={username},ou=users,dc=congty,dc=vn` — hợp OpenLDAP);
+  *direct bind + tự tra email* cho **Active Directory** (bind bằng chính mật khẩu
+  user như `congty.vn\{username}`/UPN, rồi tự tra email trên đúng kết nối đó —
+  KHÔNG cần tài khoản dịch vụ); hoặc *search-then-bind* bằng tài khoản dịch vụ
+  (filter kiểu `(sAMAccountName={username})`). Hai cách sau đều chuẩn với AD —
+  chọn direct-bind khi không muốn tạo/giữ mật khẩu tài khoản dịch vụ.
 - Server **từ chối bật LDAP** khi bài test CONNECT/BIND chưa pass — không thể
   tự khóa mình bằng một cấu hình hỏng.
 - Đã bật LDAP thì header `x-user-id` bị **bỏ qua hoàn toàn** (chống giả mạo khi
@@ -121,8 +125,9 @@ người bind thành công nhưng chưa được cấp quyền vẫn rơi về `
   gán PM: `project_key` (chữ HOA, PK), `display_name`. **Không** ràng buộc
   `tracked_epic` (Epic đến từ Jira với mọi project).
 - **`auth_ldap_config`** — cấu hình đăng nhập LDAP, **một dòng duy nhất** (`id=1`,
-  có CHECK chặn dòng thứ hai). Giữ `enabled`, `server_url`, cách xác định DN
-  (`user_dn_template` HOẶC `search_base`+`user_filter`+`bind_dn`), `email_attribute`,
+  có CHECK chặn dòng thứ hai). Giữ `enabled`, `server_url`, cách xác định user
+  (`user_dn_template` và/hoặc `search_base`+`user_filter`; `bind_dn`+`bind_password_enc`
+  chỉ khi search-then-bind), `email_attribute`,
   `allow_self_signed`, `session_ttl_hours` (1–168), và `bind_password_enc` — bind
   password của tài khoản dịch vụ, **mã hoá AES-256-GCM** bằng `APP_ENCRYPTION_KEY`
   (write-only, xem §8). ADMIN chỉnh ở màn hình **Admin → LDAP**; KHÔNG có biến env

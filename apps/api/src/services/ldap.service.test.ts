@@ -36,6 +36,16 @@ function stbCfg(over: Partial<LdapEffectiveConfig> = {}): LdapEffectiveConfig {
   });
 }
 
+/** AD direct-bind + tự tra email: template (bind mật khẩu user) + search base, KHÔNG tài khoản dịch vụ. */
+function directSearchCfg(over: Partial<LdapEffectiveConfig> = {}): LdapEffectiveConfig {
+  return directCfg({
+    userDnTemplate: 'fst.com.vn\\{username}',
+    searchBase: 'DC=fst,DC=vn',
+    userFilter: '(cn={username})',
+    ...over,
+  });
+}
+
 describe('escapeLdapFilterValue (RFC 4515)', () => {
   it('escape đủ 4 ký tự đặc biệt + NUL thành mã hex', () => {
     expect(escapeLdapFilterValue('a*b(c)d\\e\0f')).toBe('a\\2ab\\28c\\29d\\5ce\\00f');
@@ -361,6 +371,133 @@ describe('authenticate — search-then-bind', () => {
   });
 });
 
+describe('authenticate — direct bind + tự tra email (Active Directory)', () => {
+  it('bind bằng mật khẩu user (template DOMAIN\\user) → tự tra email TRÊN CÙNG kết nối', async () => {
+    const { factory, clients } = fakeLdapFactory(
+      () =>
+        new FakeLdapClient({
+          onSearch: () => [{ dn: 'CN=Alice,OU=NV,DC=fst,DC=vn', mail: 'Alice@FST.vn' }],
+        }),
+    );
+    const result = await authenticate({
+      config: directSearchCfg(),
+      username: 'alice',
+      password: 'user-pw',
+      clientFactory: factory,
+    });
+    expect(result).toEqual({ email: 'alice@fst.vn' });
+
+    // MỘT kết nối duy nhất, KHÔNG có tài khoản dịch vụ: bind bằng mật khẩu user.
+    expect(clients).toHaveLength(1);
+    const client = clients[0]!;
+    expect(client.bindCalls).toEqual([{ dn: 'fst.com.vn\\alice', password: 'user-pw' }]);
+    // Đọc email bằng subtree search theo filter, trong search base, TRÊN chính
+    // kết nối vừa xác thực (không mở kết nối thứ hai).
+    expect(client.searchCalls).toEqual([
+      {
+        base: 'DC=fst,DC=vn',
+        options: { scope: 'sub', filter: '(cn=alice)', attributes: ['mail'] },
+      },
+    ]);
+    expect(client.unbindCount).toBe(1);
+  });
+
+  it('username độc trong filter được escape (chặn LDAP injection)', async () => {
+    const { factory, clients } = fakeLdapFactory(
+      () => new FakeLdapClient({ onSearch: () => [{ dn: 'x', mail: 'a@fst.vn' }] }),
+    );
+    await authenticate({
+      config: directSearchCfg(),
+      username: 'a)(uid=*',
+      password: 'pw',
+      clientFactory: factory,
+    });
+    expect(clients[0]!.searchCalls[0]!.options.filter).toBe('(cn=a\\29\\28uid=\\2a)');
+  });
+
+  it('0 kết quả (không tra được email) → LOGIN_FAILED, dù đã bind thành công', async () => {
+    const { factory, clients } = fakeLdapFactory(() => new FakeLdapClient({ onSearch: () => [] }));
+    const result = await authenticate({
+      config: directSearchCfg(),
+      username: 'ghost',
+      password: 'pw',
+      clientFactory: factory,
+    });
+    expect(result).toEqual({ error: 'LOGIN_FAILED' });
+    expect(clients[0]!.bindCalls).toHaveLength(1);
+  });
+
+  it('>1 kết quả (filter nhập nhằng) → LOGIN_FAILED', async () => {
+    const { factory } = fakeLdapFactory(
+      () =>
+        new FakeLdapClient({
+          onSearch: () => [
+            { dn: 'CN=A1,DC=fst,DC=vn', mail: 'a1@fst.vn' },
+            { dn: 'CN=A2,DC=fst,DC=vn', mail: 'a2@fst.vn' },
+          ],
+        }),
+    );
+    const result = await authenticate({
+      config: directSearchCfg(),
+      username: 'alice',
+      password: 'pw',
+      clientFactory: factory,
+    });
+    expect(result).toEqual({ error: 'LOGIN_FAILED' });
+  });
+
+  it('sai mật khẩu (bind bị từ chối) → LOGIN_FAILED, KHÔNG tra email', async () => {
+    const { factory, clients } = fakeLdapFactory(
+      () =>
+        new FakeLdapClient({
+          onBind: () => {
+            throw new InvalidCredentialsError();
+          },
+        }),
+    );
+    const result = await authenticate({
+      config: directSearchCfg(),
+      username: 'alice',
+      password: 'sai',
+      clientFactory: factory,
+    });
+    expect(result).toEqual({ error: 'LOGIN_FAILED' });
+    expect(clients[0]!.searchCalls).toHaveLength(0);
+    expect(clients[0]!.unbindCount).toBe(1);
+  });
+
+  it('tra được entry nhưng thiếu attribute email → LOGIN_FAILED', async () => {
+    const { factory } = fakeLdapFactory(
+      () => new FakeLdapClient({ onSearch: () => [{ dn: 'CN=Alice,DC=fst,DC=vn' }] }),
+    );
+    const result = await authenticate({
+      config: directSearchCfg(),
+      username: 'alice',
+      password: 'pw',
+      clientFactory: factory,
+    });
+    expect(result).toEqual({ error: 'LOGIN_FAILED' });
+  });
+
+  it('đứt mạng khi tra email → SERVER_UNREACHABLE', async () => {
+    const { factory } = fakeLdapFactory(
+      () =>
+        new FakeLdapClient({
+          onSearch: () => {
+            throw new Error('socket hang up');
+          },
+        }),
+    );
+    const result = await authenticate({
+      config: directSearchCfg(),
+      username: 'alice',
+      password: 'pw',
+      clientFactory: factory,
+    });
+    expect(result).toEqual({ error: 'SERVER_UNREACHABLE' });
+  });
+});
+
 describe('authenticate — cấu hình hỏng', () => {
   it('thiếu serverUrl → CONFIG_INVALID', async () => {
     const { factory } = fakeLdapFactory(() => new FakeLdapClient());
@@ -373,21 +510,14 @@ describe('authenticate — cấu hình hỏng', () => {
     expect(result).toEqual({ error: 'CONFIG_INVALID' });
   });
 
-  it('khai CẢ HAI (hoặc không khai) userDnTemplate/searchBase → CONFIG_INVALID', async () => {
+  it('KHÔNG khai userDnTemplate lẫn searchBase → CONFIG_INVALID', async () => {
     const { factory } = fakeLdapFactory(() => new FakeLdapClient());
-    const both = await authenticate({
-      config: directCfg({ searchBase: 'ou=users,dc=x' }),
-      username: 'a',
-      password: 'p',
-      clientFactory: factory,
-    });
     const neither = await authenticate({
       config: directCfg({ userDnTemplate: null }),
       username: 'a',
       password: 'p',
       clientFactory: factory,
     });
-    expect(both).toEqual({ error: 'CONFIG_INVALID' });
     expect(neither).toEqual({ error: 'CONFIG_INVALID' });
   });
 });
@@ -406,16 +536,6 @@ describe('testConnection — tính đầy đủ của cấu hình (chưa chạm 
     expect(res.steps).toEqual([
       { step: 'CONNECT', ok: false, detail: expect.stringContaining('Server URL') },
     ]);
-  });
-
-  it('khai cả hai chế độ → BIND fail với chỉ dẫn rõ', async () => {
-    const res = await testConnection({
-      config: directCfg({ searchBase: 'ou=users,dc=x' }),
-      clientFactory: noNetwork.factory,
-    });
-    expect(res.ok).toBe(false);
-    expect(res.steps[0]).toMatchObject({ step: 'BIND', ok: false });
-    expect(res.steps[0]!.detail).toContain('MỘT trong hai');
   });
 
   it('không khai chế độ nào → BIND fail', async () => {
@@ -457,6 +577,22 @@ describe('testConnection — direct bind', () => {
     expect(clients[0]!.searchCalls[0]!.base).toBe('');
     expect(clients[0]!.bindCalls).toHaveLength(0);
     expect(clients[0]!.unbindCount).toBe(1);
+  });
+
+  it('AD direct-bind (template + search base): 3 bước ok, không dùng tài khoản dịch vụ', async () => {
+    const { factory, clients } = fakeLdapFactory(() => new FakeLdapClient());
+    const res = await testConnection({ config: directSearchCfg(), clientFactory: factory });
+    expect(res.ok).toBe(true);
+    expect(res.steps.map((s) => [s.step, s.ok])).toEqual([
+      ['CONNECT', true],
+      ['BIND', true],
+      ['SEARCH', true],
+    ]);
+    // Chỉ đọc root DSE nặc danh để kiểm kết nối — KHÔNG bind tài khoản dịch vụ.
+    expect(clients[0]!.bindCalls).toHaveLength(0);
+    expect(clients[0]!.searchCalls[0]!.base).toBe('');
+    // SEARCH nói rõ email sẽ được tra bằng kết nối của user khi đăng nhập thật.
+    expect(res.steps[2]!.detail).toContain('kết nối của user');
   });
 
   it('server từ chối đọc nặc danh (mã LDAP) vẫn tính là NỐI ĐƯỢC', async () => {

@@ -335,8 +335,11 @@ export type LdapConfigView = z.infer<typeof ldapConfigSchema>;
  * Cập nhật cấu hình LDAP. `bindPassword`: chuỗi = mã hóa rồi lưu; `null` = xóa;
  * không gửi trường = GIỮ mật khẩu cũ (cùng quy ước với token Jira).
  *
- * Hai cách xác định DN của user — khai MỘT trong hai:
- *   - `userDnTemplate` (direct bind), ví dụ 'uid={username},ou=users,dc=x,dc=vn'
+ * Ba cách xác định user — suy ra từ trường được khai (khai ít nhất một):
+ *   - `userDnTemplate` (direct bind OpenLDAP), ví dụ 'uid={username},ou=users,dc=x,dc=vn'
+ *   - `userDnTemplate` + `searchBase` + `userFilter`, KHÔNG có bindDn/bindPassword
+ *     (AD direct-bind: bind bằng mật khẩu user như 'congty.vn\{username}', rồi tự
+ *     tra email bằng chính kết nối đó — không cần tài khoản dịch vụ).
  *   - `searchBase` + `userFilter` + tài khoản dịch vụ bindDn/bindPassword
  *     (search-then-bind — cách chuẩn với Active Directory).
  *
