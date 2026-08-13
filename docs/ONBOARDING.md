@@ -122,6 +122,14 @@ pnpm dev                 # chạy song song api + worker + web
 | API | 3000 | |
 | E2E | 5199 | Cổng riêng, để chạy test không phải tắt dev server |
 
+> **Mở dev server từ MÁY KHÁC (qua IP)?** Mặc định dev server nghe trên
+> `0.0.0.0`, nên máy khác / điện thoại cùng LAN / VM / container mở
+> `http://<IP-máy-này>:5180` là vào được — **cổng 5180, KHÔNG phải 8080** (8080 là
+> máy chủ đã build ở ghi chú dưới). Thu hẹp về chỉ máy này bằng
+> `WEB_DEV_HOST=127.0.0.1`. ⚠️ Nếu đang bật `VITE_DEV_USER` (chèn danh tính giả —
+> xem [AUTH.md §9](./AUTH.md)), mở ra `0.0.0.0` cũng mở lối **GHI** theo danh tính
+> đó cho cả mạng; mạng không tin cậy thì đặt `WEB_DEV_HOST=127.0.0.1`.
+
 > **Muốn chạy bản ĐÃ BUILD (không phải dev server)?** `pnpm web:start` build
 > `apps/web` rồi phục vụ bản tĩnh ở **cổng 8080** (đổi qua `WEB_PORT`). Dùng khi
 > thử bản production tại chỗ, chạy trong container, hoặc self-host. Chi tiết:
