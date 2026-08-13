@@ -514,6 +514,40 @@ code {
   flex-wrap: wrap;
 }
 
+/* Ô chọn tệp NATIVE (input[type=file]) mặc định lệch tông và CHẬT: nút "Choose
+   File" nhỏ, xám, dính sát tên tệp ("No file chosen"). Tạo dáng lại nút chọn tệp
+   cho khớp nút phụ của app và chừa khoảng thở giữa nút với tên tệp. Nhắm trong
+   `.field` nên chỉ chạm ô nạp CSV ở màn Ngày nghỉ, không đụng input nào khác. */
+.field input[type='file'] {
+  font: inherit;
+  color: var(--text-muted);
+  max-width: 100%;
+  padding: 4px 0;
+}
+.field input[type='file']::file-selector-button {
+  font: inherit;
+  margin-right: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.field input[type='file']::file-selector-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Field đứng NGAY TRƯỚC nhóm nút Mode (`.scope`) hoặc hàng hành động (`.actions`)
+   phải cách ra như giữa các field — nếu không, hàng "Choose File" (và ô nạp
+   ngày làm bù) dính sát ngay hàng Mode bên dưới. Chỉ áp khi hai khối KỀ NHAU nên
+   không đụng `.scope` đứng riêng ở đầu thanh công cụ. */
+.field + .scope,
+.field + .actions {
+  margin-top: 12px;
+}
+
 .inherit {
   display: flex;
   align-items: center;
