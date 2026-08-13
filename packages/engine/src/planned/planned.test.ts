@@ -31,6 +31,12 @@ const phase = (
   totalOriginalS: hours * H,
   subtaskCount: 1,
   missingDateCount: 0,
+  // Một item phủ TRỌN Phase ⇒ ramp per-Sub-task trùng khít ramp per-Phase cũ, nên
+  // các con số kinh điển của ví dụ PRD giữ nguyên. Thiếu ngày → [] (Phase bị skip).
+  plannedItems:
+    planStart !== null && planEnd !== null && planWorkdays !== null
+      ? [{ wbsStartDate: planStart, wbsEndDate: planEnd, originalS: hours * H, planWorkdays }]
+      : [],
   warnings: [],
 });
 
@@ -118,7 +124,7 @@ describe('thiếu dữ liệu kế hoạch', () => {
     const r = computePlannedRemaining(weekendOnly, TOTAL, '2026-03-20', cal());
     expect(r.seconds).toBe(TOTAL);
     expect(Number.isFinite(r.seconds)).toBe(true);
-    expect(r.skippedPhases[0]!.reason).toContain('không có ngày làm việc');
+    expect(r.skippedPhases[0]!.reason).toContain('rơi trọn vào ngày nghỉ');
   });
 
   it('planWorkdays null cũng bị bỏ qua', () => {
@@ -197,5 +203,77 @@ describe('đường Kế hoạch TRÔI — hành vi mong muốn, không phải b
   it('hàm cho cùng kết quả khi gọi lại với cùng đầu vào', () => {
     const runs = Array.from({ length: 5 }, () => at('2026-03-10'));
     expect(new Set(runs).size).toBe(1);
+  });
+});
+
+describe('ramp theo TỪNG Sub-task', () => {
+  // Rollup với danh sách plannedItems tùy ý. Các trường mức Phase (planStart…)
+  // KHÔNG còn ảnh hưởng phép tính — chỉ plannedItems và totalScope quyết định.
+  const withItems = (
+    items: { start: string; end: string; hours: number; workdays: number }[],
+    phaseCode = 'DESIGN',
+  ): PhaseRollup => ({
+    phaseCode,
+    planStart: null,
+    planEnd: null,
+    planWorkdays: null,
+    actualStart: null,
+    actualEnd: null,
+    actualEndIsProvisional: false,
+    totalOriginalS: items.reduce((s, i) => s + i.hours * H, 0),
+    subtaskCount: items.length,
+    missingDateCount: 0,
+    plannedItems: items.map((i) => ({
+      wbsStartDate: i.start,
+      wbsEndDate: i.end,
+      originalS: i.hours * H,
+      planWorkdays: i.workdays,
+    })),
+    warnings: [],
+  });
+
+  it('hai Sub-task chồng lấn cộng dồn ramp của từng cái', () => {
+    // A: 40h trên 02→06/03 (5 ngày) = 8h/ngày. B: 60h trên 02→04/03 (3 ngày) = 20h/ngày.
+    // 03/03 đã trôi 2 ngày cho cả hai: A cháy 16h, B cháy 40h = 56h → còn 44h.
+    const r = computePlannedRemaining(
+      [
+        withItems([
+          { start: '2026-03-02', end: '2026-03-06', hours: 40, workdays: 5 },
+          { start: '2026-03-02', end: '2026-03-04', hours: 60, workdays: 3 },
+        ]),
+      ],
+      100 * H,
+      '2026-03-03',
+      cal(),
+    );
+    expect(r.seconds).toBe(44 * H);
+  });
+
+  it('Sub-task thiếu ngày thành SÀN — đường Kế hoạch không bao giờ chạm 0', () => {
+    // Chỉ 40h có lịch (02→06/03); tổng scope 60h → 20h dateless là sàn cố định.
+    const dated = [withItems([{ start: '2026-03-02', end: '2026-03-06', hours: 40, workdays: 5 }])];
+    expect(computePlannedRemaining(dated, 60 * H, '2026-03-06', cal()).seconds).toBe(20 * H);
+    expect(computePlannedRemaining(dated, 60 * H, '2026-04-30', cal()).seconds).toBe(20 * H);
+  });
+
+  it('item planWorkdays = 0 (cửa sổ rơi trọn vào ngày nghỉ) thành sàn, Phase bị bỏ qua', () => {
+    const weekendItem = [
+      withItems([{ start: '2026-03-14', end: '2026-03-15', hours: 40, workdays: 0 }]),
+    ];
+    const r = computePlannedRemaining(weekendItem, 40 * H, '2026-03-20', cal());
+    expect(r.seconds).toBe(40 * H); // không cháy giờ nào
+    expect(r.skippedPhases.map((s) => s.phaseCode)).toEqual(['DESIGN']);
+  });
+
+  it('Σ đốt của cả Epic bằng tổng từng Phase (bất biến còn giữ khi ramp per-Sub-task)', () => {
+    const phases = [
+      withItems([{ start: '2026-03-02', end: '2026-03-06', hours: 40, workdays: 5 }], 'DESIGN'),
+      withItems([{ start: '2026-03-02', end: '2026-03-04', hours: 60, workdays: 3 }], 'DEV'),
+    ];
+    const epic = computePlannedRemaining(phases, 100 * H, '2026-03-03', cal()).seconds;
+    const design = computePlannedRemaining([phases[0]!], 40 * H, '2026-03-03', cal()).seconds;
+    const dev = computePlannedRemaining([phases[1]!], 60 * H, '2026-03-03', cal()).seconds;
+    expect(epic).toBe(design + dev);
+    expect(epic).toBe(44 * H);
   });
 });

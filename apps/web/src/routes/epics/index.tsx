@@ -13,6 +13,7 @@ import {
   type BadgeTone,
   type Column,
 } from '../../components/ui/index.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { AddEpicsPanel, AddQueryScopePanel } from './add-epics-panel.js';
 import {
   buildMissingDatesCsv,
@@ -109,7 +110,7 @@ export function EpicListScreen() {
       header: 'Epic',
       render: (e) => (
         <span>
-          <code>{e.epicKey}</code> {e.displayName}
+          <IssueLink issueKey={e.epicKey} /> {e.displayName}
         </span>
       ),
       sortKey: (e) => e.epicKey,
@@ -325,7 +326,7 @@ function MissingDatesPanel({ epicKey, onClose }: { readonly epicKey: string; rea
         <ul className="rows">
           {query.data.rows.map((r) => (
             <li className="row" key={r.issueKey}>
-              <code>{r.issueKey}</code>
+              <IssueLink issueKey={r.issueKey} />
               <span>{r.summary}</span>
               {r.missingStart && <Badge tone="warning">no start date</Badge>}
               {r.missingEnd && <Badge tone="warning">no end date</Badge>}

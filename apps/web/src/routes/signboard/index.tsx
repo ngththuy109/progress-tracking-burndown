@@ -4,6 +4,7 @@ import {
   SIGNBOARD_STATUS,
   type SignboardCell,
   type SignboardColumnGroup,
+  type SignboardPic,
   type SignboardRow,
   type SignboardStatus,
 } from '@app/shared';
@@ -12,6 +13,7 @@ import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { EpicPicker } from '../../components/epic-picker/index.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { jiraBaseUrl } from '../../api/jira.js';
 import type { PlanConflict } from '@app/shared';
 
@@ -96,7 +98,7 @@ export function SignboardScreen() {
     <div className="stack">
       <div className="scope">
         <span className="scope__label">Epic:</span>
-        <code>{epicKey}</code>
+        <IssueLink issueKey={epicKey} />
         {/* Về lại bộ chọn Epic — xoá cả Epic lẫn lựa chọn Phase khỏi URL. */}
         <button type="button" className="button" onClick={() => setParams({})}>
           Change Epic
@@ -560,6 +562,12 @@ function BoardTable({
               >
                 Function
               </th>
+              {/* Cột PIC: người phụ trách Function, gom "Request participants" của
+                  mọi Sub-task (bỏ trùng). Đứng ngay sau tên Function để đọc theo
+                  hàng. */}
+              <th scope="col" rowSpan={2} className="table__th signboard__pic-head">
+                PIC
+              </th>
               {columnGroups.map((g) => (
                 <th
                   key={g.subPhaseKey}
@@ -603,6 +611,9 @@ function BoardTable({
                 <th scope="row" className="table__td signboard__sticky">
                   {row.functionName}
                 </th>
+                <td className="table__td signboard__pic">
+                  <PicList pics={row.pics} />
+                </td>
                 {columnGroups.map((g, gi) => (
                   <Fragment key={g.subPhaseKey}>
                     {g.taskColumns.map((c, ci) => {
@@ -654,6 +665,29 @@ function BoardTable({
   );
 }
 
+/**
+ * Cột PIC của một Function: danh sách người phụ trách, gom từ "Request
+ * participants" của mọi Sub-task (đã bỏ trùng ở API).
+ *
+ * Hiện tên; người chưa tra được tên hiện accountId để KHÔNG im lặng bỏ sót ai.
+ * `title` liệt kê đầy đủ để rê chuột đọc khi ô bị cắt bớt.
+ */
+function PicList({ pics }: { readonly pics: readonly SignboardPic[] }) {
+  if (pics.length === 0) {
+    return (
+      <span className="cell cell--empty" title="No participants">
+        —
+      </span>
+    );
+  }
+  const labels = pics.map((p) => p.displayName ?? p.accountId);
+  return (
+    <span className="signboard__pic-names" title={labels.join(', ')}>
+      {labels.join(', ')}
+    </span>
+  );
+}
+
 function UnparsedPanel({ query }: { readonly query: ReturnType<typeof useUnparsedSubtasks> }) {
   if (query.isPending) return <LoadingState label="Looking for sub-tasks not on the board…" rows={2} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -696,7 +730,7 @@ function UnparsedPanel({ query }: { readonly query: ReturnType<typeof useUnparse
       <ul className="rows">
         {data.items.map((item) => (
           <li className="row" key={item.issueKey}>
-            <code>{item.issueKey}</code>
+            <IssueLink issueKey={item.issueKey} />
             <span>{item.summary}</span>
             <Badge tone={item.reason === 'BAD_TITLE_FORMAT' ? 'danger' : 'warning'}>
               {item.reason === 'BAD_TITLE_FORMAT' ? 'title format is wrong' : 'unknown task type'}

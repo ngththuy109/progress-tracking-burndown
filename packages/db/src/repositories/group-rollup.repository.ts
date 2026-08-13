@@ -89,6 +89,9 @@ export async function loadGroupRollups(
     totalOriginalS: Number(r.totalOriginalS),
     subtaskCount: r.subtaskCount,
     missingDateCount: r.missingDateCount,
+    // Không persist ở group_rollup (tính lại mỗi sync). Chỉ luồng dựng snapshot
+    // in-memory cần plannedItems; bản đọc từ DB không dùng cho đường Kế hoạch.
+    plannedItems: [],
     warnings: [],
   }));
 }

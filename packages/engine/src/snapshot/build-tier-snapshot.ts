@@ -142,6 +142,9 @@ function asPhaseRollup(r: GroupRollup): PhaseRollup {
     totalOriginalS: r.totalOriginalS,
     subtaskCount: r.subtaskCount,
     missingDateCount: r.missingDateCount,
+    // Đường Kế hoạch của nút tính từ ramp per-lá này (computePlannedRemaining bản
+    // main chỉ đọc plannedItems). Thiếu nó thì mọi nút thành null — mất drill-down.
+    plannedItems: r.plannedItems,
     warnings: r.warnings,
   };
 }

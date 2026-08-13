@@ -58,6 +58,23 @@ code {
   padding: 1px 5px;
 }
 
+/* Mã ticket bấm được — mở thẳng ticket chi tiết trên Jira (tab mới), dùng ở mọi
+   màn đang in mã ticket. Cùng affordance với link "mở ticket" ở ô Signboard.
+   Giữ nguyên "chip mã" (nền xám của <code>), chỉ tô chữ theo màu nhấn + mũi tên ↗
+   để báo là link. Chưa cấu hình VITE_JIRA_BASE_URL thì <IssueLink> hạ về <code>
+   thô, không mang class này. */
+.issue-link {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.issue-link > code {
+  color: inherit;
+}
+.issue-link:hover > code {
+  text-decoration: underline;
+}
+
 .muted {
   color: var(--text-muted);
 }
@@ -537,6 +554,40 @@ code {
   flex-wrap: wrap;
 }
 
+/* Ô chọn tệp NATIVE (input[type=file]) mặc định lệch tông và CHẬT: nút "Choose
+   File" nhỏ, xám, dính sát tên tệp ("No file chosen"). Tạo dáng lại nút chọn tệp
+   cho khớp nút phụ của app và chừa khoảng thở giữa nút với tên tệp. Nhắm trong
+   `.field` nên chỉ chạm ô nạp CSV ở màn Ngày nghỉ, không đụng input nào khác. */
+.field input[type='file'] {
+  font: inherit;
+  color: var(--text-muted);
+  max-width: 100%;
+  padding: 4px 0;
+}
+.field input[type='file']::file-selector-button {
+  font: inherit;
+  margin-right: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.field input[type='file']::file-selector-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Field đứng NGAY TRƯỚC nhóm nút Mode (`.scope`) hoặc hàng hành động (`.actions`)
+   phải cách ra như giữa các field — nếu không, hàng "Choose File" (và ô nạp
+   ngày làm bù) dính sát ngay hàng Mode bên dưới. Chỉ áp khi hai khối KỀ NHAU nên
+   không đụng `.scope` đứng riêng ở đầu thanh công cụ. */
+.field + .scope,
+.field + .actions {
+  margin-top: 12px;
+}
+
 .inherit {
   display: flex;
   align-items: center;
@@ -694,6 +745,16 @@ fieldset.field > legend {
   padding-top: var(--gap);
 }
 
+/* Bảng Signboard co theo NỘI DUNG, KHÔNG ép đầy khung như các bảng khác
+   (`.table` đặt `width: 100%`). Khi một Phase chỉ có vài cột loại task trên màn
+   hình rộng, ép 100% khiến trình duyệt đổ phần dư vào các cột task (nội dung
+   `nowrap`) làm chúng phình to bất thường — chữ nằm lọt thỏm góc trên-trái — còn
+   cột PIC (chữ xuống dòng được) bị nén lại. Để bảng bám theo nội dung: ít cột thì
+   gọn về bên trái, nhiều cột thì `.table-wrap` vẫn cuộn ngang như cũ. */
+.signboard {
+  width: auto;
+}
+
 .signboard__sticky {
   position: sticky;
   left: 0;
@@ -721,6 +782,27 @@ fieldset.field > legend {
 }
 .signboard__subtotal-head {
   text-align: center;
+}
+
+/* Cột PIC — người phụ trách Function. Có bề rộng TỐI THIỂU để tên người đọc
+   thoải mái và cột không bị nén còn tí xíu; đồng thời có bề rộng TỐI ĐA và cho
+   XUỐNG DÒNG để một Function nhiều người không kéo giãn cả bảng; danh sách đầy đủ
+   nằm trong tooltip (thuộc tính title). */
+.signboard__pic-head {
+  text-align: left;
+}
+.signboard__pic {
+  vertical-align: top;
+  min-width: 8rem;
+  max-width: 16rem;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.signboard__pic-names {
+  display: inline-block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .cell {

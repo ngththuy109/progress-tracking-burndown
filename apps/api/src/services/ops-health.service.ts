@@ -70,12 +70,13 @@ function capMetric(args: {
   };
 }
 
-/** Bốn số đo chất lượng dữ liệu, tính trên toàn bộ Sub-task đang hoạt động. */
+/** Năm số đo chất lượng dữ liệu, tính trên toàn bộ Sub-task đang hoạt động. */
 const DATA_METRICS: readonly { name: string; label: string; key: HealthMetricName }[] = [
   { name: 'missingWbsDate', label: 'Sub-task thiếu ngày kế hoạch', key: 'missingWbsDateRatio' },
   { name: 'missingEstimate', label: 'Sub-task thiếu ước lượng', key: 'missingEstimateRatio' },
   { name: 'unclassifiedPhase', label: 'Task chưa phân loại', key: 'unclassifiedPhaseRatio' },
   { name: 'unparsedSubtask', label: 'Sub-task sai định dạng', key: 'unparsedSubtaskRatio' },
+  { name: 'closedNoWorklog', label: 'Task đóng nhưng chưa log giờ', key: 'closedNoWorklogRatio' },
 ];
 
 export interface RawRun {
@@ -109,6 +110,7 @@ export interface RawDataQualityRatios {
   readonly unclassifiedPhaseRatio: number;
   readonly missingWbsDateRatio: number;
   readonly unparsedSubtaskRatio: number;
+  readonly closedNoWorklogRatio: number;
 }
 
 export interface RawEpicDataQuality extends RawDataQualityRatios {

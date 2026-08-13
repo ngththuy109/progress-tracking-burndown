@@ -27,6 +27,15 @@ export const HEALTH_THRESHOLD = {
   missingWbsDateRatio: { warn: 0.1, critical: 0.3 },
   /** Sub-task đặt tên sai định dạng — E-27. */
   unparsedSubtaskRatio: { warn: 0.3, critical: 0.5 },
+  /**
+   * Sub-task đã đóng, CÓ ước lượng nhưng KHÔNG có worklog nào.
+   *
+   * Đây là tập task mà đường Thực tế chỉ tụt về 0 đúng vào ngày bấm đóng ticket
+   * (Quy tắc 1), không có mốc worklog để suy ra "làm xong thật lúc nào" — nên
+   * nếu ticket đóng trễ hơn ngày làm thật thì biểu đồ trông như task bị trễ.
+   * Cùng thang với `missingEstimateRatio` vì cùng là "khối lượng bị khai thiếu".
+   */
+  closedNoWorklogRatio: { warn: 0.1, critical: 0.3 },
 } as const;
 
 export type HealthMetricName = keyof typeof HEALTH_THRESHOLD;
@@ -62,8 +71,8 @@ export const explainRowSchema = z.object({
   summary: z.string(),
   phaseCode: z.string(),
   statusCategoryAtDay: z.enum(['new', 'indeterminate', 'done']),
-  /** 1, 2 hay 3 — quy tắc nào của PRD §4.3.2 đã được áp dụng. */
-  appliedRule: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  /** 1, '1b', 2 hay 3 — quy tắc nào của PRD §4.3.2 đã được áp dụng. */
+  appliedRule: z.union([z.literal(1), z.literal('1b'), z.literal(2), z.literal(3)]),
   /** Câu tiếng Việt PM đọc được. Chỉ có số quy tắc thì endpoint này vô dụng. */
   ruleExplanation: z.string(),
   originalEstimateHours: z.number(),

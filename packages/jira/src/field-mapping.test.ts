@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveFieldMapping,
   readWbsDates,
+  readRequestParticipants,
   toDateOnly,
   FieldMappingError,
   fieldMappingConfigSchema,
@@ -15,6 +16,7 @@ const FIELDS: JiraField[] = [
   { id: 'customfield_10101', name: 'wbs_end_date', custom: true, schema: { type: 'date' } },
   { id: 'customfield_10200', name: '開始日', custom: true, schema: { type: 'datetime' } },
   { id: 'customfield_10300', name: 'Ghi chú', custom: true, schema: { type: 'string' } },
+  { id: 'customfield_10400', name: 'Request participants', custom: true, schema: { type: 'array' } },
 ];
 
 const baseConfig = (over: Partial<FieldMappingConfig['fieldMapping']> = {}): FieldMappingConfig =>
@@ -55,6 +57,89 @@ describe('chặn khởi động khi cấu hình sai', () => {
   it('field kiểu datetime được chấp nhận', () => {
     const r = resolveFieldMapping(baseConfig({ wbsStartDate: 'customfield_10200' }), FIELDS);
     expect(r.wbsStartDate).toBe('customfield_10200');
+  });
+});
+
+describe('field Request participants (tuỳ chọn)', () => {
+  it('không khai thì requestParticipants là undefined — cột PIC tắt', () => {
+    const r = resolveFieldMapping(baseConfig(), FIELDS);
+    expect(r.requestParticipants).toBeUndefined();
+  });
+
+  it('khai đúng mã thì resolve ra mã field, KHÔNG kiểm kiểu (mảng-user)', () => {
+    const r = resolveFieldMapping(baseConfig({ requestParticipants: 'customfield_10400' }), FIELDS);
+    expect(r.requestParticipants).toBe('customfield_10400');
+  });
+
+  it('khai mã không tồn tại thì CHẶN khởi động và gợi ý field gần đúng', () => {
+    expect(() =>
+      resolveFieldMapping(baseConfig({ requestParticipants: 'customfield_99999' }), FIELDS),
+    ).toThrow(FieldMappingError);
+  });
+});
+
+describe('đọc Request participants từ issue', () => {
+  const mapping = { requestParticipants: 'customfield_10400' };
+  const issue = (fields: Record<string, unknown>): JiraIssue => ({ id: '1', key: 'PAY-1', fields });
+
+  it('mảng object user đầy đủ → giữ accountId + displayName', () => {
+    const r = readRequestParticipants(
+      issue({
+        customfield_10400: [
+          { accountId: 'u1', displayName: 'Nguyễn An' },
+          { accountId: 'u2', displayName: 'Trần Bình' },
+        ],
+      }),
+      mapping,
+    );
+    expect(r).toEqual([
+      { accountId: 'u1', displayName: 'Nguyễn An' },
+      { accountId: 'u2', displayName: 'Trần Bình' },
+    ]);
+  });
+
+  it('mảng CHỈ accountId (chuỗi) → displayName null để tra thêm sau', () => {
+    const r = readRequestParticipants(issue({ customfield_10400: ['u1', 'u2'] }), mapping);
+    expect(r).toEqual([
+      { accountId: 'u1', displayName: null },
+      { accountId: 'u2', displayName: null },
+    ]);
+  });
+
+  it('bỏ trùng theo accountId ngay trong một issue', () => {
+    const r = readRequestParticipants(
+      issue({
+        customfield_10400: [
+          { accountId: 'u1', displayName: 'An' },
+          { accountId: 'u1', displayName: 'An' },
+        ],
+      }),
+      mapping,
+    );
+    expect(r).toEqual([{ accountId: 'u1', displayName: 'An' }]);
+  });
+
+  it('displayName rỗng/thiếu coi như null', () => {
+    const r = readRequestParticipants(
+      issue({ customfield_10400: [{ accountId: 'u1', displayName: '   ' }, { accountId: 'u2' }] }),
+      mapping,
+    );
+    expect(r).toEqual([
+      { accountId: 'u1', displayName: null },
+      { accountId: 'u2', displayName: null },
+    ]);
+  });
+
+  it('field vắng, không phải mảng, hay phần tử rác đều trả rỗng/bỏ qua, không ném lỗi', () => {
+    expect(readRequestParticipants(issue({}), mapping)).toEqual([]);
+    expect(readRequestParticipants(issue({ customfield_10400: 'không phải mảng' }), mapping)).toEqual([]);
+    expect(
+      readRequestParticipants(issue({ customfield_10400: [null, 42, { noId: true }, ''] }), mapping),
+    ).toEqual([]);
+  });
+
+  it('field chưa cấu hình (undefined) thì luôn trả rỗng', () => {
+    expect(readRequestParticipants(issue({ customfield_10400: ['u1'] }), {})).toEqual([]);
   });
 });
 

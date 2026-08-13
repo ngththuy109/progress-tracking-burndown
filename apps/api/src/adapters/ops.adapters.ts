@@ -91,13 +91,30 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         // Ticket đã đánh dấu "không cần sửa dữ liệu" bị loại khỏi cả tử số lẫn
         // mẫu số — đó chính là ý nghĩa của cờ dq_exempt.
         prisma.$queryRawUnsafe<
-          { total: bigint; no_estimate: bigint; unclassified: bigint; no_wbs: bigint; unparsed: bigint }[]
+          {
+            total: bigint;
+            no_estimate: bigint;
+            unclassified: bigint;
+            no_wbs: bigint;
+            unparsed: bigint;
+            closed_no_worklog: bigint;
+          }[]
         >(
+          // `closed_no_worklog`: task đã đóng, CÓ ước lượng (>0) mà không còn
+          // worklog nào — xem chú thích ở `loadHealthRatios`. `> 0` loại cả 0 lẫn
+          // NULL, nên không chồng lấn với `no_estimate`.
           `SELECT COUNT(*)::bigint AS total,
                   COUNT(*) FILTER (WHERE original_estimate_s IS NULL OR original_estimate_s = 0)::bigint AS no_estimate,
                   COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
                   COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
-                  COUNT(*) FILTER (WHERE sb_parse_status = 'UNPARSED')::bigint AS unparsed
+                  COUNT(*) FILTER (WHERE sb_parse_status = 'UNPARSED')::bigint AS unparsed,
+                  COUNT(*) FILTER (
+                    WHERE status_category = 'done' AND original_estimate_s > 0
+                      AND NOT EXISTS (
+                        SELECT 1 FROM worklog_entry w
+                         WHERE w.issue_key = jira_issue.issue_key AND w.is_deleted = FALSE
+                      )
+                  )::bigint AS closed_no_worklog
              FROM jira_issue
             WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = FALSE`,
         ),
@@ -112,6 +129,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
             unclassified: bigint;
             no_wbs: bigint;
             unparsed: bigint;
+            closed_no_worklog: bigint;
           }[]
         >(
           `SELECT te.epic_key,
@@ -120,7 +138,14 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                   COUNT(ji.*) FILTER (WHERE ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0)::bigint AS no_estimate,
                   COUNT(ji.*) FILTER (WHERE ji.phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
                   COUNT(ji.*) FILTER (WHERE ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL)::bigint AS no_wbs,
-                  COUNT(ji.*) FILTER (WHERE ji.sb_parse_status = 'UNPARSED')::bigint AS unparsed
+                  COUNT(ji.*) FILTER (WHERE ji.sb_parse_status = 'UNPARSED')::bigint AS unparsed,
+                  COUNT(ji.*) FILTER (
+                    WHERE ji.status_category = 'done' AND ji.original_estimate_s > 0
+                      AND NOT EXISTS (
+                        SELECT 1 FROM worklog_entry w
+                         WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
+                      )
+                  )::bigint AS closed_no_worklog
              FROM tracked_epic te
              LEFT JOIN jira_issue ji
                ON ji.epic_key = te.epic_key
@@ -215,6 +240,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           unclassifiedPhaseRatio: epicRatio(r.unclassified),
           missingWbsDateRatio: epicRatio(r.no_wbs),
           unparsedSubtaskRatio: epicRatio(r.unparsed),
+          closedNoWorklogRatio: epicRatio(r.closed_no_worklog),
         };
       });
 
@@ -230,6 +256,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           unclassifiedPhaseRatio: ratio(dataRow?.unclassified),
           missingWbsDateRatio: ratio(dataRow?.no_wbs),
           unparsedSubtaskRatio: ratio(dataRow?.unparsed),
+          closedNoWorklogRatio: ratio(dataRow?.closed_no_worklog),
         },
         dataByEpic,
         recentRuns,
@@ -297,10 +324,14 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           no_wbs: boolean;
           unclassified: boolean;
           unparsed: boolean;
+          closed_no_worklog: boolean;
           dq_exempt: boolean;
           dq_exempt_by: string | null;
         }[]
       >(
+        // Điều kiện `closed_no_worklog` lặp lại y hệt ở SELECT và WHERE — SQL
+        // không cho tham chiếu alias của SELECT trong WHERE, và bốn lỗi cũ cũng
+        // đang lặp theo đúng cách này nên giữ nhất quán.
         `SELECT ji.issue_key,
                 te.epic_key,
                 te.display_name,
@@ -309,6 +340,11 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                 (ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL) AS no_wbs,
                 (ji.phase_code = 'UNCLASSIFIED') AS unclassified,
                 (ji.sb_parse_status = 'UNPARSED') AS unparsed,
+                (ji.status_category = 'done' AND ji.original_estimate_s > 0
+                 AND NOT EXISTS (
+                   SELECT 1 FROM worklog_entry w
+                    WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
+                 )) AS closed_no_worklog,
                 ji.dq_exempt,
                 ji.dq_exempt_by
            FROM jira_issue ji
@@ -318,7 +354,12 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
             AND (ji.original_estimate_s IS NULL OR ji.original_estimate_s = 0
                  OR ji.wbs_start_date IS NULL OR ji.wbs_end_date IS NULL
                  OR ji.phase_code = 'UNCLASSIFIED'
-                 OR ji.sb_parse_status = 'UNPARSED')
+                 OR ji.sb_parse_status = 'UNPARSED'
+                 OR (ji.status_category = 'done' AND ji.original_estimate_s > 0
+                     AND NOT EXISTS (
+                       SELECT 1 FROM worklog_entry w
+                        WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
+                     )))
           ORDER BY te.epic_key, ji.issue_key`,
       );
       return rows.map((r) => {
@@ -327,6 +368,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         if (r.no_wbs) problems.push('MISSING_WBS_DATE');
         if (r.unclassified) problems.push('UNCLASSIFIED_PHASE');
         if (r.unparsed) problems.push('UNPARSED_TITLE');
+        if (r.closed_no_worklog) problems.push('CLOSED_NO_WORKLOG');
         return {
           issueKey: r.issue_key,
           epicKey: r.epic_key,

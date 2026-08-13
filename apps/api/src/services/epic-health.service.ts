@@ -23,6 +23,7 @@ export interface HealthRatios {
   readonly unclassifiedPhaseRatio: number;
   readonly missingWbsDateRatio: number;
   readonly unparsedSubtaskRatio: number;
+  readonly closedNoWorklogRatio: number;
 }
 
 export function levelOf(name: HealthMetricName, ratio: number): HealthLevel {
@@ -55,6 +56,12 @@ const MESSAGE: Record<HealthMetricName, (ratio: number, level: HealthLevel) => s
       ? `${PERCENT(r)} of sub-task titles are in the wrong format — within the acceptable range.`
       : `${PERCENT(r)} of sub-task titles are in the wrong format, so they never reach the Signboard ` +
         '(they DO still count towards Burndown). See "Not on the board" to find which ones to fix.',
+  closedNoWorklogRatio: (r, l) =>
+    l === 'OK'
+      ? `${PERCENT(r)} of sub-tasks were closed with an estimate but no logged work — within the acceptable range.`
+      : `${PERCENT(r)} of sub-tasks were closed with an estimate but no logged work, so their remaining effort ` +
+        'only drops to zero on the day the ticket is closed — if that is later than the real finish, the Actual line looks late. ' +
+        'Ask the team to log work (or close tickets on the day work finished); see "Show ticket details" for the list.',
 };
 
 const WORST: Record<HealthLevel, number> = { OK: 0, WARN: 1, CRITICAL: 2 };

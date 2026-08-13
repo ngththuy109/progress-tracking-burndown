@@ -9,6 +9,7 @@ import {
   LoadingState,
   type Column,
 } from '../../components/ui/index.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { DataQualitySection } from './data-quality.js';
 import { formatLocalDateTime } from './format.js';
 import { LEVEL_TONE, MetricChips } from './metric-chips.js';
@@ -118,7 +119,7 @@ function ErroredEpics({
         <ul className="rows">
           {epics.map((e) => (
             <li className="row" key={e.epicKey}>
-              <code>{e.epicKey}</code>
+              <IssueLink issueKey={e.epicKey} />
               <Badge tone="danger">{Math.round(e.erroredSinceHours)}h</Badge>
               {/* NGUYÊN VĂN lỗi — "Sync failed" không nói được phải làm gì tiếp. */}
               <span>{e.lastError}</span>
@@ -153,7 +154,7 @@ function RecentRuns({
       render: (r) => <span title={r.startedAt}>{formatLocalDateTime(r.startedAt)}</span>,
       sortKey: (r) => r.startedAt,
     },
-    { key: 'epic', header: 'Epic', render: (r) => <code>{r.epicKey}</code>, sortKey: (r) => r.epicKey },
+    { key: 'epic', header: 'Epic', render: (r) => <IssueLink issueKey={r.epicKey} />, sortKey: (r) => r.epicKey },
     { key: 'type', header: 'Type', render: (r) => r.runType, sortKey: (r) => r.runType },
     {
       key: 'duration',
@@ -232,7 +233,7 @@ function PlanDrift({
         <ul className="rows">
           {sorted.map((r) => (
             <li className="row" key={`${r.epicKey}:${r.phaseCode}`}>
-              <code>{r.epicKey}</code>
+              <IssueLink issueKey={r.epicKey} />
               <span>{r.phaseCode}</span>
               <Badge tone={LEVEL_TONE[r.level] ?? 'muted'}>{r.level}</Badge>
               <span>

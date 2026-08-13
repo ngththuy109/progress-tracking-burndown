@@ -1,4 +1,5 @@
 import type { DateOnly } from './calendar.js';
+import type { PlannedSubtaskItem } from './phase-rollup.js';
 
 /**
  * Tổng hợp N tầng theo `group_path` — DYNAMIC-TIERS-DESIGN.md §4.3, §5.
@@ -35,6 +36,14 @@ export interface GroupRollup {
   readonly subtaskCount: number;
   /** Số lá thiếu `wbsStartDate` HOẶC `wbsEndDate`. */
   readonly missingDateCount: number;
+
+  /**
+   * Lịch ramp per-lá của nút (đủ hai ngày) — để `buildTierSnapshotForDay` chiếu
+   * đường Kế hoạch từng nút bằng CÙNG cách với tầng Phase (`computePlannedRemaining`
+   * đọc `plannedItems`). Không persist ở `group_rollup` — tính lại mỗi lần đồng bộ
+   * và snapshot theo tầng đã chốt sẵn `plannedRemainingS` vào `daily_snapshot.per_tier`.
+   */
+  readonly plannedItems: readonly PlannedSubtaskItem[];
 
   readonly warnings: readonly { readonly code: string; readonly message: string }[];
 }

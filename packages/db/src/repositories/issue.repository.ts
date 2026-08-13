@@ -1,3 +1,6 @@
+import type { SignboardPic } from '@app/shared';
+// `Prisma` là VALUE import (cần `Prisma.DbNull` để ghi JSONB null cho group_path);
+// `PrismaClient` chỉ là type.
 import { Prisma } from '../client.js';
 import type { PrismaClient } from '../client.js';
 
@@ -36,6 +39,12 @@ export interface IssueUpsertRow {
   taskType: string | null;
   sbTaskRaw: string | null;
   sbParseStatus: string;
+  /**
+   * "Request participants" của Sub-task, đã bỏ trùng + sắp theo `accountId`.
+   * Mảng RỖNG khi không có ai (hoặc field chưa cấu hình) — không dùng null để
+   * giữ kết quả TẤT ĐỊNH (C-6): ghi lại nhiều lần luôn ra cùng một JSON.
+   */
+  sbRequestParticipants: readonly SignboardPic[];
 }
 
 /**
@@ -82,6 +91,10 @@ export async function upsertIssues(
       taskType: r.taskType,
       sbTaskRaw: r.sbTaskRaw,
       sbParseStatus: r.sbParseStatus,
+      // Mảng luôn hợp lệ làm giá trị JSON. Ép kiểu vì `InputJsonValue` của Prisma
+      // không cho `null` LỒNG bên trong (mà `displayName` có thể null) — dữ liệu
+      // vẫn là JSON đúng, chỉ là kiểu tĩnh của Prisma quá chặt cho ca null lồng.
+      sbRequestParticipants: r.sbRequestParticipants as unknown as Prisma.InputJsonValue,
       // Issue xuất hiện lại sau khi từng bị gỡ thì phải bỏ cờ, nếu không nó sẽ
       // vĩnh viễn bị coi là đã biến mất.
       removedAt: null,

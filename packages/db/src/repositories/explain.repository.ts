@@ -165,15 +165,35 @@ export async function loadHealthRatios(
   unclassifiedPhaseRatio: number;
   missingWbsDateRatio: number;
   unparsedSubtaskRatio: number;
+  closedNoWorklogRatio: number;
 }> {
   const [row] = await prisma.$queryRawUnsafe<
-    { total: bigint; no_estimate: bigint; unclassified: bigint; no_wbs: bigint; unparsed: bigint }[]
+    {
+      total: bigint;
+      no_estimate: bigint;
+      unclassified: bigint;
+      no_wbs: bigint;
+      unparsed: bigint;
+      closed_no_worklog: bigint;
+    }[]
   >(
+    // `closed_no_worklog`: task đã đóng, CÓ ước lượng (>0) mà không có worklog nào
+    // còn hiệu lực. Lọc `original_estimate_s > 0` để KHÔNG chồng lấn với
+    // `no_estimate` — task đóng mà cũng chẳng ước lượng thì đã bị bắt ở cột kia,
+    // và task 0 ước lượng không tạo "vách đá" trên đường Thực tế nên không thuộc
+    // diện này. `> 0` cũng loại luôn NULL (NULL > 0 là false).
     `SELECT COUNT(*)::bigint AS total,
             COUNT(*) FILTER (WHERE original_estimate_s IS NULL OR original_estimate_s = 0)::bigint AS no_estimate,
             COUNT(*) FILTER (WHERE phase_code = 'UNCLASSIFIED')::bigint AS unclassified,
             COUNT(*) FILTER (WHERE wbs_start_date IS NULL OR wbs_end_date IS NULL)::bigint AS no_wbs,
-            COUNT(*) FILTER (WHERE sb_parse_status <> 'OK')::bigint AS unparsed
+            COUNT(*) FILTER (WHERE sb_parse_status <> 'OK')::bigint AS unparsed,
+            COUNT(*) FILTER (
+              WHERE status_category = 'done' AND original_estimate_s > 0
+                AND NOT EXISTS (
+                  SELECT 1 FROM worklog_entry w
+                   WHERE w.issue_key = jira_issue.issue_key AND w.is_deleted = FALSE
+                )
+            )::bigint AS closed_no_worklog
        FROM jira_issue
       WHERE epic_key = $1 AND issue_type = 'SUBTASK' AND removed_at IS NULL`,
     epicKey,
@@ -188,5 +208,6 @@ export async function loadHealthRatios(
     unclassifiedPhaseRatio: ratio(row?.unclassified),
     missingWbsDateRatio: ratio(row?.no_wbs),
     unparsedSubtaskRatio: ratio(row?.unparsed),
+    closedNoWorklogRatio: ratio(row?.closed_no_worklog),
   };
 }

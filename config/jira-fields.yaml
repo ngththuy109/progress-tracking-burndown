@@ -8,3 +8,17 @@
 fieldMapping:
   wbsStartDate: customfield_10100 # tên hiển thị trên Jira: wbs_start_date
   wbsEndDate: customfield_10101 # tên hiển thị trên Jira: wbs_end_date
+
+  # (TUỲ CHỌN) Cột "PIC" trên Signboard — gom "Request participants" của các
+  # Sub-task trong cùng một Function, bỏ trùng theo user.
+  #
+  # Để nguyên dòng dưới ở dạng comment thì tính năng TẮT: cột PIC luôn rỗng và
+  # không tốn thêm lời gọi Jira nào. Muốn bật thì bỏ dấu "#" và điền MÃ THẬT.
+  #
+  # Mã field khác nhau ở mỗi Jira — tra bằng:
+  #     GET https://<site>.atlassian.net/rest/api/3/field
+  # rồi tìm field có `name` là "Request participants".
+  #
+  # Trường này có thể CHỈ trả về accountId (không kèm tên). Khi đó hệ thống tự
+  # tra tên hiển thị qua GET /rest/api/3/user/bulk lúc đồng bộ để cột PIC đọc được.
+  # requestParticipants: customfield_10200

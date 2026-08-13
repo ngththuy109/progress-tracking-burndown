@@ -48,7 +48,7 @@ ProgressTracking/
 │       └── src/
 │
 ├── config/
-│   └── jira-fields.yaml     ánh xạ custom field wbs_* (PRD §2.8)
+│   └── jira-fields.yaml     ánh xạ custom field wbs_* (PRD §2.8); tuỳ chọn: requestParticipants → cột PIC
 │
 └── docs/
     ├── PRD_Burndown_Engine.md

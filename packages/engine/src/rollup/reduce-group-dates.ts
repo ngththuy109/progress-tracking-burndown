@@ -1,4 +1,4 @@
-import type { DateOnly, StatusIdMap, SubtaskRecord, WorkCalendar } from '@app/shared';
+import type { DateOnly, PlannedSubtaskItem, StatusIdMap, SubtaskRecord, WorkCalendar } from '@app/shared';
 import { countWorkdays } from '../calendar/count-workdays.js';
 import { resolveStatusCategoryAt } from '../status/resolve-status-category.js';
 import { minDate, maxDate } from '../signboard/merge-cell.js';
@@ -29,6 +29,12 @@ export interface ReducedGroupDates {
   readonly totalOriginalS: number;
   readonly subtaskCount: number;
   readonly missingDateCount: number;
+  /**
+   * Lịch ramp theo TỪNG lá đủ hai ngày — đường Kế hoạch per-Sub-task (main). Lá
+   * thiếu ngày KHÔNG nằm ở đây. Dùng chung cho `PhaseRollup` và `GroupRollup` nên
+   * đường Kế hoạch của mọi tầng (kể cả N tầng) tính cùng một cách.
+   */
+  readonly plannedItems: readonly PlannedSubtaskItem[];
   readonly warnings: readonly { readonly code: string; readonly message: string }[];
 }
 
@@ -47,6 +53,7 @@ export function reduceGroupDates(
   const actualStarts: (DateOnly | null)[] = [];
   const actualEnds: (DateOnly | null)[] = [];
 
+  const plannedItems: PlannedSubtaskItem[] = [];
   let totalOriginalS = 0;
   let missingDateCount = 0;
   let anyUnfinished = false;
@@ -58,7 +65,19 @@ export function reduceGroupDates(
     planStarts.push(s.wbsStartDate);
     planEnds.push(s.wbsEndDate);
     // Thiếu MỘT trong hai ngày đã là không so sánh được sớm/trễ (E-30).
-    if (s.wbsStartDate === null || s.wbsEndDate === null) missingDateCount += 1;
+    if (s.wbsStartDate === null || s.wbsEndDate === null) {
+      missingDateCount += 1;
+    } else {
+      // Đủ hai ngày → đưa vào lịch ramp per-Sub-task. Ngày đảo (start > end) cho
+      // countWorkdays = 0 → planWorkdays 0 → thành sàn (không đốt), KHÔNG crash;
+      // cảnh báo INVALID_PHASE_PERIOD cấp nút vẫn nổ ở dưới.
+      plannedItems.push({
+        wbsStartDate: s.wbsStartDate,
+        wbsEndDate: s.wbsEndDate,
+        originalS: s.originalEstimateSeconds,
+        planWorkdays: countWorkdays(s.wbsStartDate, s.wbsEndDate, calendar),
+      });
+    }
 
     const actual = resolveSubtaskActualDates(s, statusIdMap, calendar.timezone);
     actualStarts.push(actual.actualStart);
@@ -93,6 +112,7 @@ export function reduceGroupDates(
     totalOriginalS,
     subtaskCount: list.length,
     missingDateCount,
+    plannedItems,
     warnings,
   };
 }

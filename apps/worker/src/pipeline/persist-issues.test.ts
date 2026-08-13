@@ -203,3 +203,79 @@ describe('buildRecords — group_path cho lá', () => {
     expect(sub.groupPath).toEqual(['UNCLASSIFIED']);
   });
 });
+
+// ===========================================================================
+// Request participants → cột PIC của Signboard.
+// ===========================================================================
+describe('buildRecords — Request participants (cột PIC)', () => {
+  const FIELDS_PIC: ResolvedFieldMapping = { ...FIELDS, requestParticipants: 'customfield_10400' };
+
+  function subtaskWith(participants: unknown): JiraIssue {
+    return {
+      id: '2001',
+      key: 'PAY-201',
+      fields: {
+        summary: '[PAY][TeamA][Development][Login]_Create',
+        status: { id: '1', statusCategory: { key: 'new' } },
+        timeoriginalestimate: 3600,
+        timeestimate: 3600,
+        timespent: 0,
+        created: '2026-03-01T00:00:00.000+0000',
+        updated: '2026-03-01T00:00:00.000+0000',
+        parent: { key: 'PAY-101' },
+        customfield_10400: participants,
+      },
+    };
+  }
+
+  function run(subtask: JiraIssue, participantNames: Map<string, string> = new Map()) {
+    const tree: EpicTree = {
+      epic: mkIssue('1000', 'PAY-100', 'Cổng thanh toán'),
+      tasks: [mkIssue('1001', 'PAY-101', '[Phase] Development', 'PAY-100')],
+      subtasks: [subtask],
+      liveKeys: new Set(['PAY-100', 'PAY-101', subtask.key]),
+    };
+    return buildRecords({
+      epicKey: 'PAY-100',
+      tree,
+      worklogsByIssue: new Map(),
+      changelogByIssue: new Map(),
+      config: CONFIG,
+      fields: FIELDS_PIC,
+      participantNames,
+    });
+  }
+
+  it('lưu accountId + displayName từ field, sắp theo accountId (tất định)', () => {
+    const built = run(
+      subtaskWith([
+        { accountId: 'u2', displayName: 'Bình' },
+        { accountId: 'u1', displayName: 'An' },
+      ]),
+    );
+    expect(bySub(built, 'PAY-201').sbRequestParticipants).toEqual([
+      { accountId: 'u1', displayName: 'An' },
+      { accountId: 'u2', displayName: 'Bình' },
+    ]);
+  });
+
+  it('field CHỈ có accountId thì điền tên từ participantNames đã tra sẵn', () => {
+    const built = run(subtaskWith(['u1']), new Map([['u1', 'Nguyễn An']]));
+    expect(bySub(built, 'PAY-201').sbRequestParticipants).toEqual([
+      { accountId: 'u1', displayName: 'Nguyễn An' },
+    ]);
+  });
+
+  it('không tra được tên thì displayName null (giữ accountId để hiển thị)', () => {
+    const built = run(subtaskWith(['u9']));
+    expect(bySub(built, 'PAY-201').sbRequestParticipants).toEqual([
+      { accountId: 'u9', displayName: null },
+    ]);
+  });
+
+  it('Epic/Task luôn có mảng PIC rỗng', () => {
+    const built = run(subtaskWith([]));
+    expect(bySub(built, 'PAY-100').sbRequestParticipants).toEqual([]);
+    expect(bySub(built, 'PAY-101').sbRequestParticipants).toEqual([]);
+  });
+});

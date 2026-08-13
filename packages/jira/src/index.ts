@@ -59,10 +59,12 @@ export {
 export {
   resolveFieldMapping,
   readWbsDates,
+  readRequestParticipants,
   toDateOnly,
   fieldIdsForSearch,
   fieldMappingConfigSchema,
   FieldMappingError,
   type FieldMappingConfig,
   type ResolvedFieldMapping,
+  type JiraParticipantRef,
 } from './field-mapping.js';
