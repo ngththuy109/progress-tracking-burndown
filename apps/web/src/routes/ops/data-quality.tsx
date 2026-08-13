@@ -9,6 +9,7 @@ import {
   LoadingState,
   type Column,
 } from '../../components/ui/index.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { buildDataQualityCsv, csvFileName, PROBLEM_LABEL } from './data-quality-csv.js';
 import { MetricChips } from './metric-chips.js';
 
@@ -42,7 +43,7 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
       {data.byEpic.map((e) => (
         <div key={e.epicKey}>
           <h3 className="panel__title">
-            <code>{e.epicKey}</code> — {e.displayName}{' '}
+            <IssueLink issueKey={e.epicKey} /> — {e.displayName}{' '}
             <span className="muted">({e.total} sub-tasks checked)</span>
           </h3>
           <MetricChips metrics={e.metrics} />
@@ -110,8 +111,8 @@ function DataQualityDetails({
   };
 
   const columns: readonly Column<DataQualityIssue>[] = [
-    { key: 'epic', header: 'Epic', render: (i) => <code>{i.epicKey}</code>, sortKey: (i) => i.epicKey },
-    { key: 'ticket', header: 'Ticket', render: (i) => <code>{i.issueKey}</code>, sortKey: (i) => i.issueKey },
+    { key: 'epic', header: 'Epic', render: (i) => <IssueLink issueKey={i.epicKey} />, sortKey: (i) => i.epicKey },
+    { key: 'ticket', header: 'Ticket', render: (i) => <IssueLink issueKey={i.issueKey} />, sortKey: (i) => i.issueKey },
     { key: 'summary', header: 'Summary', render: (i) => i.summary, sortKey: (i) => i.summary },
     {
       key: 'problems',

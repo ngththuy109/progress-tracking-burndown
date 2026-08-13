@@ -13,6 +13,7 @@ import { usePlanConflicts } from '../../api/use-plan-conflicts.js';
 import { EpicPicker } from '../../components/epic-picker/index.js';
 import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { SignboardCellView, STATUS_LABEL } from './signboard-cell.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 import { jiraBaseUrl } from '../../api/jira.js';
 import type { PlanConflict } from '@app/shared';
 
@@ -97,7 +98,7 @@ export function SignboardScreen() {
     <div className="stack">
       <div className="scope">
         <span className="scope__label">Epic:</span>
-        <code>{epicKey}</code>
+        <IssueLink issueKey={epicKey} />
         {/* Về lại bộ chọn Epic — xoá cả Epic lẫn lựa chọn Phase khỏi URL. */}
         <button type="button" className="button" onClick={() => setParams({})}>
           Change Epic
@@ -729,7 +730,7 @@ function UnparsedPanel({ query }: { readonly query: ReturnType<typeof useUnparse
       <ul className="rows">
         {data.items.map((item) => (
           <li className="row" key={item.issueKey}>
-            <code>{item.issueKey}</code>
+            <IssueLink issueKey={item.issueKey} />
             <span>{item.summary}</span>
             <Badge tone={item.reason === 'BAD_TITLE_FORMAT' ? 'danger' : 'warning'}>
               {item.reason === 'BAD_TITLE_FORMAT' ? 'title format is wrong' : 'unknown task type'}

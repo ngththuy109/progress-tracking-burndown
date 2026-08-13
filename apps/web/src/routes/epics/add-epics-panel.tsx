@@ -4,6 +4,7 @@ import { useAddEpics, useValidateEpics } from '../../api/use-epics.js';
 import { useCalendars } from '../../api/use-calendars.js';
 import { useMe } from '../../api/use-me.js';
 import { Badge, ErrorState } from '../../components/ui/index.js';
+import { IssueLink } from '../../components/issue-link/index.js';
 
 /**
  * Thêm Epic — LUÔN qua hai bước: Kiểm tra rồi mới Thêm.
@@ -136,7 +137,7 @@ export function AddEpicsPanel() {
           <ul className="rows" aria-label="Check results">
             {results.map((r) => (
               <li className="row" key={r.key}>
-                <code>{r.key}</code>
+                <IssueLink issueKey={r.key} />
                 {r.valid ? (
                   <>
                     <Badge tone="success">can add</Badge>
