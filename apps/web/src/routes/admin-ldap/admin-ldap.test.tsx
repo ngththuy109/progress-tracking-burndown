@@ -139,6 +139,52 @@ describe('AdminLdapScreen — hai cách xác định user', () => {
   });
 });
 
+describe('AdminLdapScreen — direct bind + tự tra email (AD)', () => {
+  /** Bản đã lưu kiểu AD direct-bind: có CẢ template lẫn search base, KHÔNG tài khoản dịch vụ. */
+  const AD_DIRECT: LdapConfigView = {
+    ...CONFIG,
+    bindDn: null,
+    hasBindPassword: false,
+    userDnTemplate: 'fst.com.vn\\{username}',
+    searchBase: 'DC=fst,DC=vn',
+    userFilter: '(cn={username})',
+  };
+
+  it('bản lưu có CẢ template lẫn search base → radio AD direct-bind chọn sẵn, KHÔNG có ô tài khoản dịch vụ', async () => {
+    stubApi(AD_DIRECT);
+    renderScreen();
+
+    const radio = await screen.findByLabelText('Direct bind + tự tra email (Active Directory)');
+    expect((radio as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByLabelText('Template DN (chứa {username})') as HTMLInputElement).value,
+    ).toBe('fst.com.vn\\{username}');
+    expect((screen.getByLabelText('Search base') as HTMLInputElement).value).toBe('DC=fst,DC=vn');
+    expect(screen.getByLabelText('User filter (chứa {username})')).toBeTruthy();
+    // Mode này bind bằng mật khẩu user → không có tài khoản dịch vụ.
+    expect(screen.queryByLabelText('Bind DN (tài khoản dịch vụ)')).toBeNull();
+    expect(
+      screen.queryByLabelText('Bind password (chỉ ghi — không bao giờ hiển thị lại)'),
+    ).toBeNull();
+  });
+
+  it('lưu ở mode AD direct-bind: PUT gửi template + search base/filter, bindDn/bindPassword = null', async () => {
+    const calls = stubApi(AD_DIRECT);
+    renderScreen();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(putBodies(calls)).toHaveLength(1));
+    expect(putBodies(calls)[0]).toMatchObject({
+      userDnTemplate: 'fst.com.vn\\{username}',
+      searchBase: 'DC=fst,DC=vn',
+      userFilter: '(cn={username})',
+      bindDn: null,
+      bindPassword: null,
+    });
+  });
+});
+
 describe('AdminLdapScreen — bind password ba trạng thái', () => {
   it('đã có mật khẩu thì ô hiện "•••• (đã lưu)"; không đụng tới thì PUT KHÔNG gửi trường bindPassword', async () => {
     const calls = stubApi();
@@ -256,6 +302,23 @@ describe('buildLdapBody', () => {
       bindPassword: null,
     });
   });
+
+  it('mode DIRECT_SEARCH: gửi CẢ template lẫn search base/filter, KHÔNG tài khoản dịch vụ', () => {
+    const body = buildLdapBody({
+      ...FORM,
+      bindMode: 'DIRECT_SEARCH',
+      userDnTemplate: 'fst.com.vn\\{username}',
+      searchBase: 'DC=fst,DC=vn',
+      userFilter: '(cn={username})',
+    });
+    expect(body).toMatchObject({
+      userDnTemplate: 'fst.com.vn\\{username}',
+      searchBase: 'DC=fst,DC=vn',
+      userFilter: '(cn={username})',
+      bindDn: null,
+      bindPassword: null,
+    });
+  });
 });
 
 describe('ldapSaveHint', () => {
@@ -265,7 +328,7 @@ describe('ldapSaveHint', () => {
   it('ba lỗi lưu đặc thù đều có câu hướng dẫn riêng', () => {
     expect(ldapSaveHint(err(400, 'LDAP_TEST_FAILED'))).toContain('bài test chưa pass');
     expect(ldapSaveHint(err(400, 'ENCRYPTION_KEY_MISSING'))).toContain('ENCRYPTION_KEY');
-    expect(ldapSaveHint(err(400, 'BAD_REQUEST'))).toContain('MỘT trong hai cách');
+    expect(ldapSaveHint(err(400, 'BAD_REQUEST'))).toContain('cách xác định user');
   });
 
   it('lỗi khác không thêm gì — ErrorState tự hiện message của server', () => {

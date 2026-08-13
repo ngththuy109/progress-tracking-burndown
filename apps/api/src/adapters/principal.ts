@@ -2,23 +2,19 @@ import type { FastifyRequest } from 'fastify';
 import type { Principal, UserRole } from '@app/shared';
 
 /**
- * Xác định người gọi từ DANH TÍNH do cổng SSO xác thực — mô hình B1.
+ * Xác định người gọi (principal) cho mỗi request: tìm DANH TÍNH trước, rồi tra
+ * VAI TRÒ ở bảng `app_user`.
  *
- * Kiến trúc: một auth proxy (oauth2-proxy / IAP / ALB…) đứng TRƯỚC API. Nó đăng
- * nhập người dùng qua SSO (OIDC), rồi đặt header danh tính `x-user-id` = email
- * đã xác thực, và XOÁ mọi header `x-user-*` mà client tự gửi (xem
- * config/auth-proxy/). API chỉ được nhận request qua cổng này, không bao giờ
- * trực tiếp từ Internet.
+ * Hai nguồn danh tính (xem `createAuthResolver` cuối file):
+ *   - Phiên đăng nhập LDAP (cookie `ptb_sess`) — đường chính của người dùng.
+ *   - Header danh tính `x-user-id` — CHỈ cho local dev và van khôi phục
+ *     `AUTH_FORCE_HEADER`. Khi LDAP đang bật và KHÔNG bị ép header thì header
+ *     BỊ BỎ QUA hoàn toàn (chống giả mạo khi API lỡ lộ ra ngoài).
  *
- * KHÁC BẢN CŨ (và cố ý an toàn hơn): API **không đọc `role`/`projects` từ
- * header**. Nó chỉ tin DANH TÍNH, rồi tra vai trò ở bảng `app_user`. Nhờ vậy dù
- * cổng có lỡ để lọt một header `x-user-role: ADMIN` giả từ client thì cũng vô
- * hại — vai trò luôn đến từ database của chính hệ thống.
- *
- * BỔ SUNG (đăng nhập LDAP in-app): khi admin bật LDAP, danh tính đến từ PHIÊN
- * (cookie `ptb_sess`, xem `createAuthResolver` cuối file) và header BỊ BỎ QUA;
- * khi LDAP tắt (hoặc AUTH_FORCE_HEADER=1) mọi thứ y như cũ. Vai trò vẫn tra
- * `app_user` bất kể danh tính đến từ nguồn nào.
+ * AN TOÀN CỐT LÕI: API **không đọc `role`/`projects` từ header** — chỉ tin
+ * DANH TÍNH, rồi tra vai trò ở `app_user`. Dù ai đó lỡ để lọt một header
+ * `x-user-role: ADMIN` giả thì cũng vô hại — vai trò luôn đến từ database của
+ * chính hệ thống.
  */
 
 /** Cổng đọc vai trò từ nguồn sự thật (bảng `app_user`). */

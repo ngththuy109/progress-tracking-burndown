@@ -151,9 +151,9 @@ describe('POST /auth/login', () => {
     expect(res.json().error).toBe('LDAP_UNREACHABLE');
   });
 
-  it('cấu hình hỏng (khai cả hai chế độ) → 500 với thông điệp an toàn', async () => {
+  it('cấu hình hỏng (không khai template lẫn search base) → 500 với thông điệp an toàn', async () => {
     const { app } = build({
-      row: ldapConfigRow({ searchBase: 'ou=users,dc=x' }), // template CŨNG đang khai
+      row: ldapConfigRow({ userDnTemplate: null, searchBase: null }),
     });
     const res = await app.inject({ ...LOGIN, payload: { username: 'a', password: 'p' } });
     expect(res.statusCode).toBe(500);
@@ -308,18 +308,29 @@ describe('PUT /api/admin/auth/ldap', () => {
     expect(clear.store.row?.bindPasswordEnc).toBeNull();
   });
 
-  it('khai cả hai (hoặc không khai) userDnTemplate/searchBase → 400 BAD_REQUEST', async () => {
+  it('KHÔNG khai userDnTemplate lẫn searchBase → 400 BAD_REQUEST, không lưu', async () => {
     const { app, store } = build({ principal: asAdmin(), row: null });
-    const both = await put(app, {
-      ...STB_BODY,
-      userDnTemplate: 'uid={username},ou=users,dc=x',
-    });
-    expect(both.statusCode).toBe(400);
-    expect(both.json().error).toBe('BAD_REQUEST');
-
     const neither = await put(app, { ...STB_BODY, searchBase: null });
     expect(neither.statusCode).toBe(400);
+    expect(neither.json().error).toBe('BAD_REQUEST');
     expect(store.upserts).toHaveLength(0);
+  });
+
+  it('khai CẢ template lẫn searchBase (AD direct-bind + tự tra email, không tài khoản dịch vụ) → lưu', async () => {
+    const { app, store } = build({ principal: asAdmin(), row: null });
+    const res = await put(app, {
+      enabled: false,
+      serverUrl: 'ldaps://10.135.62.50:636',
+      userDnTemplate: 'fst.com.vn\\{username}',
+      searchBase: 'DC=fst,DC=vn',
+      userFilter: '(cn={username})',
+    });
+    expect(res.statusCode).toBe(200);
+    // Lưu direct-bind AD: có CẢ template lẫn searchBase, KHÔNG có tài khoản dịch vụ.
+    expect(store.row?.userDnTemplate).toBe('fst.com.vn\\{username}');
+    expect(store.row?.searchBase).toBe('DC=fst,DC=vn');
+    expect(store.row?.bindDn).toBeNull();
+    expect(store.row?.bindPasswordEnc).toBeNull();
   });
 
   it('bindPassword mới mà thiếu APP_ENCRYPTION_KEY → 400 ENCRYPTION_KEY_MISSING', async () => {

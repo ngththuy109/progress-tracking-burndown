@@ -1,7 +1,6 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import type { AuthModeResponse } from '@app/shared';
 import { ApiError } from './client.js';
-import { maybeRedirectToSignIn } from './auth-redirect.js';
 import { authModeKey } from './use-auth-mode.js';
 import { meKey } from './use-me.js';
 
@@ -49,7 +48,7 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
  * đứng đúng trang đang xem (form chỉ invalidate cache, không reload).
  *
  * Chỉ làm vậy khi mode = LDAP (đọc từ cache của `/api/auth/mode`): ở mode
- * HEADER, 401 vẫn theo đường cũ — `maybeRedirectToSignIn` + `ErrorState`.
+ * HEADER (dev/khôi phục), 401 để `ErrorState` hiện lỗi như thường.
  */
 export function funnelExpiredLdapSession(client: QueryClient, error: unknown): void {
   if (!(error instanceof ApiError) || error.status !== 401) return;
@@ -59,11 +58,9 @@ export function funnelExpiredLdapSession(client: QueryClient, error: unknown): v
 }
 
 export function createQueryClient(): QueryClient {
-  // Một chỗ DUY NHẤT bắt lỗi 401 cho mọi query lẫn mutation. Hai nhánh theo
-  // chế độ xác thực: HEADER → đá qua cổng SSO ngoài (nếu có VITE_SIGN_IN_PATH);
-  // LDAP → đổ về form đăng nhập trong app (xem `funnelExpiredLdapSession`).
+  // Một chỗ DUY NHẤT bắt lỗi 401 cho mọi query lẫn mutation: phiên LDAP hết hạn
+  // giữa chừng thì đổ về form đăng nhập trong app (xem `funnelExpiredLdapSession`).
   const onError = (error: unknown): void => {
-    maybeRedirectToSignIn(error);
     funnelExpiredLdapSession(client, error);
   };
   const client: QueryClient = new QueryClient({

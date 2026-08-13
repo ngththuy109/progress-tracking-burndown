@@ -259,8 +259,8 @@ async function bootstrap(): Promise<void> {
     backfillQueue,
     statusIdMap,
     cache: createConfigCache(redis),
-    // Danh tính do cổng SSO đặt vào header; vai trò tra `app_user`. Cấu hình
-    // qua AUTH_* (xem adapters/principal.ts và config/auth-proxy/).
+    // Danh tính qua header (local dev + van khôi phục AUTH_FORCE_HEADER); vai trò
+    // tra `app_user`. Cấu hình qua AUTH_* (xem adapters/principal.ts).
     auth: authConfigFromEnv(process.env),
     // Đăng nhập LDAP in-app: phiên trên Redis (cookie `ptb_sess`), cấu hình ở
     // bảng `auth_ldap_config`, bind password mã hoá bằng TokenBox dưới đây.
