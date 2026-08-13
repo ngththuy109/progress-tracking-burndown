@@ -173,16 +173,16 @@ header danh tính (`x-user-id`).
 
 - Dev server (`pnpm dev`) có thể chèn danh tính giả khi đặt `VITE_DEV_USER`, để
   code-và-thử ở local không vướng 401 (xem [AUTH.md §9](./AUTH.md)).
-- Bản build **không** làm vậy — nó mô phỏng đúng production: đứng **sau một cổng
-  SSO thật**, cổng đó mới là nơi đặt danh tính. Chèn ở đây sẽ mở toang một lối
-  ghi và có nguy cơ lọt lên production.
+- Bản build **không** làm vậy — nó mô phỏng đúng production: xác thực là **đăng
+  nhập LDAP trong app**, không phải header do proxy chèn. Chèn ở đây sẽ mở toang
+  một lối ghi và có nguy cơ lọt lên production.
 
 Hệ quả khi thử bằng `vite preview`:
 
 - Thao tác **ĐỌC** (xem biểu đồ, Signboard, danh sách Epic) — **chạy ngay**.
 - Thao tác **GHI** (thêm Epic, sửa cấu hình, quản lý người dùng) — trả **401
-  UNAUTHENTICATED**, đúng như production khi chưa qua cổng SSO. Muốn thử ghi thì
-  đặt máy chủ web **sau cổng thật** (§6) hoặc dùng dev server với `VITE_DEV_USER`.
+  UNAUTHENTICATED** khi chưa đăng nhập. Muốn thử ghi thì **đăng nhập LDAP** (§6),
+  hoặc dùng dev server với `VITE_DEV_USER`.
 
 ---
 
@@ -192,16 +192,17 @@ Hệ quả khi thử bằng `vite preview`:
 thì **không** phơi `vite preview` ra Internet: nó là máy chủ xem-thử, không phải
 máy chủ web đã tôi luyện.
 
-Cách khuyến nghị: một **auth proxy** (nginx) vừa phục vụ file tĩnh `dist/`, vừa
-chuyển tiếp `/api`, vừa xác thực SSO rồi đặt header danh tính — xem
-[`config/auth-proxy/`](../config/auth-proxy/) và [AUTH.md](./AUTH.md). Ở mô hình
-đó, **nginx** làm chủ cổng (443), nên `WEB_PORT` / `vite preview` không tham gia;
-việc của bạn chỉ là `pnpm web:build` rồi trỏ `root` của nginx vào `apps/web/dist`.
+Cách khuyến nghị: một **reverse proxy** (nginx) đứng trước lo **TLS (443)**, phục
+vụ file tĩnh `dist/` và chuyển tiếp `/api` sang API — xem [AUTH.md](./AUTH.md).
+Xác thực người dùng do **đăng nhập LDAP trong app** đảm nhiệm (proxy không phải lo
+đăng nhập). Ở mô hình đó, **nginx** làm chủ cổng (443), nên `WEB_PORT` /
+`vite preview` không tham gia; việc của bạn chỉ là `pnpm web:build` rồi trỏ `root`
+của nginx vào `apps/web/dist`.
 
 ```
-Trình duyệt ──HTTPS──▶ nginx (cổng 443, +SSO)
+Trình duyệt ──HTTPS──▶ nginx (cổng 443, TLS)
                         ├──▶ file tĩnh: apps/web/dist   (pnpm web:build)
-                        └──▶ /api → API 127.0.0.1:3000
+                        └──▶ /api → API 127.0.0.1:3000  (đăng nhập LDAP)
 ```
 
 ---
@@ -224,7 +225,7 @@ Trình duyệt ──HTTPS──▶ nginx (cổng 443, +SSO)
 | `Port 8080 is already in use` | Cổng đang bận. Đổi `WEB_PORT`, hoặc tắt tiến trình giữ cổng: `lsof -i :8080`. `strictPort` cố ý không cho nhảy cổng ngầm. |
 | Chạy `web:serve` báo không có build / thư mục `dist` trống | Chưa build. Chạy `pnpm web:build` trước, hoặc dùng `pnpm web:start`. |
 | Trang lên nhưng mọi màn hình lỗi tải dữ liệu | API chưa chạy hoặc `VITE_API_TARGET` sai. Bật API (`pnpm dev` / `pnpm --filter @app/api dev`) và kiểm lại đích proxy. |
-| Thao tác ghi trả **401** | Đúng thiết kế — bản build không chèn danh tính. Đặt sau cổng SSO (§6), hoặc thử ghi bằng dev server + `VITE_DEV_USER`. |
+| Thao tác ghi trả **401** | Chưa đăng nhập. Bật **đăng nhập LDAP** rồi đăng nhập (§6, [AUTH.md](./AUTH.md)); hoặc ở dev dùng dev server + `VITE_DEV_USER`. |
 | Máy khác trong LAN không mở được **bằng IP** | `WEB_HOST` đang là `127.0.0.1`. Để trống (mặc định `0.0.0.0`) hoặc đặt IP cụ thể. |
 | Mở **bằng IP thì được, bằng tên máy/tên miền lại `403 Blocked request`** | Lá chắn DNS-rebinding của Vite chặn Host lạ. Mặc định đã cho phép mọi host; nếu bạn có đặt `WEB_ALLOWED_HOSTS` thì thêm tên đó vào (hoặc bỏ trống để mở hết) — xem §3. |
 
@@ -233,5 +234,4 @@ Trình duyệt ──HTTPS──▶ nginx (cổng 443, +SSO)
 ## 9. Liên quan
 
 - [ONBOARDING.md](./ONBOARDING.md) — dựng máy từ đầu, chạy dev server.
-- [AUTH.md](./AUTH.md) — mô hình danh tính, vì sao API không tự đăng nhập.
-- [`config/auth-proxy/`](../config/auth-proxy/) — mẫu nginx + oauth2-proxy cho production.
+- [AUTH.md](./AUTH.md) — mô hình danh tính, đăng nhập LDAP, phân quyền.

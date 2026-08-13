@@ -383,9 +383,8 @@ Worker chờ tối đa 30 giây cho job đang chạy. Quá hạn nó thoát vớ
 
 ### 2a. Bật đăng nhập LDAP (lần đầu)
 
-Chuyển từ chế độ header (cổng SSO) sang app tự đăng nhập bằng LDAP. Toàn bộ cấu
-hình nằm trên UI (bảng `auth_ldap_config`), không sửa file. Chi tiết mô hình: xem
-[AUTH.md §1](./AUTH.md).
+Bật app tự đăng nhập bằng LDAP. Toàn bộ cấu hình nằm trên UI (bảng
+`auth_ldap_config`), không sửa file. Chi tiết mô hình: xem [AUTH.md §1](./AUTH.md).
 
 Nếu dùng **search-then-bind** (có tài khoản dịch vụ), đặt khoá mã hoá bind password
 cho CẢ api lẫn worker trước — direct bind thì bỏ qua bước này:
@@ -427,9 +426,10 @@ LDAP server vẫn có thể hỏng SAU khi bật (đổi mật khẩu tài kho�
 cấu trúc cây LDAP, server sập...). Khi không ai đăng nhập được nữa:
 
 ```bash
-# 1. Tạm quay về chế độ header (cổng/dev):
+# 1. Tạm quay về đường header (dev/khôi phục):
 AUTH_FORCE_HEADER=1   # đặt vào env của API rồi khởi động lại
-# 2. Vào Admin → LDAP bằng đường header như trước, sửa cấu hình, Test pass, Lưu.
+# 2. Vào Admin → LDAP với header danh tính x-user-id=<email admin> (đặt qua
+#    reverse proxy tạm, hoặc gọi API bằng curl -H). Sửa cấu hình, Test pass, Lưu.
 # 3. BỎ AUTH_FORCE_HEADER đi và khởi động lại lần nữa.
 ```
 

@@ -2,24 +2,21 @@
 
 **Ai đọc file này:** dev hoặc người vận hành cần hiểu ai được làm gì, và cách cấp/gỡ quyền.
 
-Đây là nguồn sự thật về mô hình phân quyền. Cấu hình cổng SSO cụ thể (nginx +
-oauth2-proxy cho Microsoft Entra ID) nằm ở [`config/auth-proxy/`](../config/auth-proxy/).
+Đây là nguồn sự thật về mô hình phân quyền. App tự đăng nhập bằng **LDAP** —
+cấu hình ở màn hình **Admin → LDAP** (xem §1).
 
 ---
 
-## 1. Mô hình tổng quan — HAI CHẾ ĐỘ đăng nhập
-
-Hệ thống có hai chế độ xác thực; **vai trò luôn tra DB** ở cả hai (không bao giờ
-tin `role` từ bên ngoài) — vai trò vẫn là mô hình MỘT TẦNG `ADMIN` / `PM` /
-`VIEWER` ở bảng `app_user` (xem §2).
-
-### Chế độ LDAP in-app (khuyến nghị — cấu hình qua UI)
+## 1. Mô hình tổng quan — đăng nhập LDAP
 
 App **tự đăng nhập bằng LDAP**: người dùng nhập username/password vào form của
-app, API bind vào LDAP server của công ty để xác thực. ADMIN vào **Admin →
-LDAP** cấu hình (server URL, cách xác định DN, bind password mã hóa AES-256-GCM
-bằng `APP_ENCRYPTION_KEY` — write-only như token Jira), bấm **Test** rồi bật.
-Không cần dựng oauth2-proxy nữa.
+app, API bind vào LDAP server của công ty để xác thực. **Vai trò luôn tra DB**
+(không bao giờ tin `role` từ bên ngoài) — mô hình MỘT TẦNG `ADMIN` / `PM` /
+`VIEWER` ở bảng `app_user` (xem §2).
+
+ADMIN vào **Admin → LDAP** cấu hình (server URL, cách xác định DN, bind password
+mã hóa AES-256-GCM bằng `APP_ENCRYPTION_KEY` — write-only như token Jira), bấm
+**Test** rồi bật.
 
 ```
 Trình duyệt ──POST /auth/login {username, password}──▶ API
@@ -44,36 +41,32 @@ Trình duyệt ──POST /auth/login {username, password}──▶ API
 - Server **từ chối bật LDAP** khi bài test CONNECT/BIND chưa pass — không thể
   tự khóa mình bằng một cấu hình hỏng.
 - Đã bật LDAP thì header `x-user-id` bị **bỏ qua hoàn toàn** (chống giả mạo khi
-  app lộ ra ngoài không qua cổng). Thoát hiểm khi kẹt: env `AUTH_FORCE_HEADER=1`
-  (xem RUNBOOK).
+  app lỡ lộ ra ngoài). Thoát hiểm khi kẹt: env `AUTH_FORCE_HEADER=1` (xem RUNBOOK
+  §2b).
 - Đăng nhập chỉ xác thực DANH TÍNH — người bind LDAP thành công nhưng chưa được
   cấp quyền trong `app_user` vẫn rơi về `AUTH_DEFAULT_ROLE` (mặc định `VIEWER`),
   đúng mô hình vai-trò-ở-DB.
 - **Bật lần đầu** theo [RUNBOOK §2a](./RUNBOOK.md); lỡ tự khoá vì cấu hình hỏng
   thì khôi phục theo [RUNBOOK §2b](./RUNBOOK.md).
 
-### Chế độ header qua cổng (legacy — vẫn hỗ trợ khi LDAP tắt)
+### Đường danh tính bằng header — chỉ cho dev & khôi phục
 
-Khi LDAP chưa bật (mặc định sau nâng cấp), giữ nguyên mô hình cũ: một **auth
-proxy** đứng trước, đăng nhập bằng SSO rồi bơm header danh tính:
+Ngoài LDAP, API còn phân giải được danh tính từ **một header**
+(`AUTH_IDENTITY_HEADER`, mặc định `x-user-id`). Đây **không phải** đường đăng
+nhập của người dùng cuối — chỉ dùng cho hai việc:
 
-- Cổng chỉ khẳng định **DANH TÍNH** — header `x-user-id` = email đã xác thực.
-- API **không tin `role` từ header** — vai trò tra bảng `app_user` trong DB.
-- Cổng **xoá mọi header `x-user-*` do client gửi** trước khi đặt của mình.
+- **Chạy local dev** (`pnpm dev` + `VITE_DEV_USER`): Vite dev proxy chèn
+  `x-user-id` vào request `/api` để thao tác *ghi* chạy được khi chưa dựng LDAP
+  (xem §9).
+- **Van thoát hiểm** `AUTH_FORCE_HEADER=1`: khi bật LDAP mà cấu hình hỏng làm mọi
+  người hết đường vào, đặt biến này để tạm quay về đường header mà sửa (xem
+  [RUNBOOK §2b](./RUNBOOK.md)).
 
-```
-Trình duyệt ──HTTPS──▶ Cổng (nginx + oauth2-proxy)   [IdP: Microsoft Entra ID]
-                         │  1. Chưa đăng nhập → chuyển tới IdP (OIDC)
-                         │  2. Đã đăng nhập  → đặt x-user-id = email; xoá x-user-* của client
-                         ├──▶ SPA tĩnh (apps/web build)
-                         └──▶ API → tra app_user → role + projects
-```
+Khi LDAP đang bật và KHÔNG bị `AUTH_FORCE_HEADER` ép, header danh tính bị **bỏ
+qua hoàn toàn** (chống giả mạo khi API lỡ lộ ra ngoài) — API chỉ tin cookie
+phiên `ptb_sess`.
 
-> Chế độ này cũng là đường chạy **local dev** (`VITE_DEV_USER` — Vite dev proxy
-> đóng vai cổng) và Basic Auth tạm — xem [`config/auth-proxy/`](../config/auth-proxy/)
-> (`nginx-basic-auth.conf.example`).
-
-Vì sao vai trò luôn ở DB: dù cổng/IdP có lỡ để lọt một header `x-user-role:
+Vì sao vai trò luôn ở DB: dù ai đó có lỡ để lọt một header `x-user-role:
 ADMIN` giả thì cũng vô hại — vai trò chỉ đến từ database của hệ thống.
 
 ## 2. Ba vai trò
@@ -86,7 +79,7 @@ ADMIN` giả thì cũng vô hại — vai trò chỉ đến từ database của 
 
 - **PM ↔ Project là nhiều–nhiều:** một PM gán được nhiều project; một project gắn
   được nhiều PM. Danh sách project của PM lưu ở `app_user.projects` (mảng).
-- Người đã đăng nhập SSO nhưng **chưa được cấp quyền** mặc định là `VIEWER`
+- Người đã đăng nhập nhưng **chưa được cấp quyền** mặc định là `VIEWER`
   (đổi bằng `AUTH_DEFAULT_ROLE`).
 
 ## 3. Danh tính → vai trò được phân giải thế nào
@@ -102,7 +95,7 @@ danh tính đó ra VAI TRÒ.
    proxy (hoặc client) có thể tự đặt.
 2. Không có phiên, và LDAP KHÔNG hiệu lực (tắt trong config, hoặc bị
    `AUTH_FORCE_HEADER=1` ép) → đọc header danh tính (`AUTH_IDENTITY_HEADER`, mặc
-   định `x-user-id`) — mô hình cổng SSO và đường dev `VITE_DEV_USER` đi lối này.
+   định `x-user-id`) — đường dev `VITE_DEV_USER` và van khôi phục đi lối này.
 3. LDAP đang hiệu lực mà KHÔNG có phiên → **bỏ qua header hoàn toàn** (chống giả
    danh khi API lỡ lộ trực tiếp ra ngoài) → không có principal.
 
@@ -177,7 +170,7 @@ sửa email cấp qua `AUTH_BOOTSTRAP_ADMINS` (do env quyết).
 
 | Biến | Mặc định | Việc |
 |---|---|---|
-| `AUTH_IDENTITY_HEADER` | `x-user-id` | Tên header danh tính do cổng đặt (đổi theo proxy) |
+| `AUTH_IDENTITY_HEADER` | `x-user-id` | Tên header danh tính cho đường dev/khôi phục (xem §1) |
 | `AUTH_BOOTSTRAP_ADMINS` | (rỗng) | Danh sách email luôn là ADMIN — mồi admin đầu tiên |
 | `AUTH_DEFAULT_ROLE` | `VIEWER` | Vai trò cho người đã đăng nhập nhưng chưa cấp quyền (`NONE` = từ chối) |
 | `AUTH_FORCE_HEADER` | (rỗng) | `=1`: ép chế độ header dù LDAP đang bật — van thoát hiểm khi lỡ bật cấu hình hỏng (xem RUNBOOK §2b). Nhớ bỏ sau khi sửa xong |
@@ -186,9 +179,8 @@ sửa email cấp qua `AUTH_BOOTSTRAP_ADMINS` (do env quyết).
 Phần cấu hình LDAP còn lại (server URL, bind DN, template/filter, TTL phiên…)
 **không có biến env** — nằm trong bảng `auth_ldap_config`, chỉnh ở Admin → LDAP.
 
-Xem `.env.example`. Frontend: ở chế độ **header**, `VITE_SIGN_IN_PATH` để 401 đá về
-trang đăng nhập của cổng; ở chế độ **LDAP**, 401 hiện form đăng nhập ngay trong app
-(không chuyển hướng) — web tự chọn theo `GET /api/auth/mode`.
+Xem `.env.example`. Ở chế độ **LDAP**, khi phiên hết hạn (401) web hiện form đăng
+nhập ngay trong app (không chuyển hướng) — web tự chọn theo `GET /api/auth/mode`.
 
 ## 7. Cấp / gỡ quyền
 
@@ -210,11 +202,11 @@ trang đăng nhập của cổng; ở chế độ **LDAP**, 401 hiện form đă
 
 ## 8. Bảo mật
 
-- API **không** expose ra Internet — chỉ nghe từ cổng (`HOST=127.0.0.1` hoặc
-  network policy nội bộ).
-- Cổng **xoá** mọi `x-user-*` của client trước khi đặt của mình.
+- API **không** expose thẳng ra Internet — đứng sau reverse proxy TLS
+  (`HOST=127.0.0.1` hoặc network policy nội bộ).
+- Khi LDAP đang bật, header danh tính client tự gửi bị **bỏ qua hoàn toàn** —
+  không thể giả `x-user-id` để mạo danh (chỉ cookie phiên `ptb_sess` được tin).
 - Vai trò luôn từ DB, không từ header; `/api/users` & `/api/projects` chỉ ADMIN.
-- Secret (`client_secret`, `cookie_secret`) từ secret manager, **không commit**.
 
 **Đăng nhập LDAP** (khi bật):
 
@@ -234,9 +226,9 @@ trang đăng nhập của cổng; ở chế độ **LDAP**, 401 hiện form đă
 - **Chống tự khoá**: server từ chối `enabled=true` khi bài test chưa pass; khi LDAP
   đã bật thì header danh tính bị bỏ qua (van thoát hiểm: `AUTH_FORCE_HEADER=1`).
 
-## 9. Chạy local (không có cổng)
+## 9. Chạy local (dev, chưa dựng LDAP)
 
-Ở máy dev không có cổng SSO: API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic,
+Ở máy dev (chưa dựng LDAP): API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic,
 sửa cấu hình, quản lý người dùng) cần header danh tính. Nếu **thiếu** header này
 thì API không phân giải được principal và trả `401 UNAUTHENTICATED` — kể cả khi
 đã đặt `AUTH_BOOTSTRAP_ADMINS`, vì biến đó chỉ ánh xạ *danh tính → ADMIN* chứ
@@ -256,7 +248,7 @@ AUTH_BOOTSTRAP_ADMINS=admin@test.test VITE_DEV_USER=admin@test.test pnpm dev
 - `VITE_DEV_USER` — **web/Vite** đọc; Vite chèn `x-user-id: <email>` vào request
   `/api` khi dev (xem `apps/web/vite.config.ts`). Đổi header qua
   `VITE_DEV_IDENTITY_HEADER` nếu cần. **Chỉ tác dụng dưới `vite dev`** — bản build
-  production phục vụ sau cổng thật, không bao giờ dùng shim này.
+  production dùng đăng nhập LDAP, không bao giờ dùng shim này.
 
 Hai email phải **giống nhau** thì tài khoản Vite chèn mới khớp admin mồi. Đặt cả
 hai ở `.env` ở gốc repo cũng được (xem `.env.example`); shell luôn thắng `.env`.
