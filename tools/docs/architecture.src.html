@@ -1,0 +1,806 @@
+<title>Kiến trúc Burndown Engine</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #f9fafb;
+    --ink: #172130;
+    --muted: #59657a;
+    --faint: #8a94a6;
+    --line: #e4e8ee;
+    --line-strong: #ccd2db;
+    --accent: #0f766e;
+    --accent-soft: #d9f0ec;
+    --write: #b45309;
+    --write-soft: #fbe8cf;
+    --read: #0e7490;
+    --read-soft: #d4edf5;
+    --shadow: 0 1px 2px rgba(23,33,48,.04), 0 8px 24px rgba(23,33,48,.06);
+
+    /* Sơ đồ luôn nằm trên nền sáng (lightbox) để mermaid legible ở cả hai theme */
+    --diagram-bg: #ffffff;
+    --diagram-frame: #d8dde5;
+
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+    --maxw: 1060px;
+    --prose: 68ch;
+  }
+
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #0e131a;
+      --surface: #151c26;
+      --surface-2: #1a222e;
+      --ink: #e7ebf1;
+      --muted: #9aa5b4;
+      --faint: #6b7686;
+      --line: #253039;
+      --line-strong: #35414f;
+      --accent: #4ec6b8;
+      --accent-soft: #113b36;
+      --write: #e6a35c;
+      --write-soft: #3a2a15;
+      --read: #56b8d2;
+      --read-soft: #12313b;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0e131a;
+    --surface: #151c26;
+    --surface-2: #1a222e;
+    --ink: #e7ebf1;
+    --muted: #9aa5b4;
+    --faint: #6b7686;
+    --line: #253039;
+    --line-strong: #35414f;
+    --accent: #4ec6b8;
+    --accent-soft: #113b36;
+    --write: #e6a35c;
+    --write-soft: #3a2a15;
+    --read: #56b8d2;
+    --read-soft: #12313b;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header.masthead {
+    border-bottom: 1px solid var(--line);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--surface)) 0%, var(--surface) 70%);
+  }
+  .masthead .wrap { padding-top: 52px; padding-bottom: 40px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  h1 {
+    font-size: clamp(30px, 4.6vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    font-weight: 780;
+    margin: 0 0 16px;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .lede {
+    font-size: clamp(16px, 1.9vw, 19px);
+    color: var(--muted);
+    margin: 0;
+    max-width: 62ch;
+    line-height: 1.55;
+  }
+  .lede strong { color: var(--ink); font-weight: 640; }
+
+  .factstrip {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 26px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 12px;
+    white-space: nowrap;
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+
+  /* ── Sections ───────────────────────────────────────── */
+  section { padding: 46px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  .sec-head { margin-bottom: 26px; }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+    letter-spacing: .1em;
+  }
+  h2 {
+    font-size: clamp(22px, 3vw, 28px);
+    letter-spacing: -0.015em;
+    font-weight: 720;
+    margin: 4px 0 8px;
+    text-wrap: balance;
+  }
+  .sec-sub { color: var(--muted); margin: 0; max-width: var(--prose); }
+
+  p { max-width: var(--prose); }
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  /* ── Diagram card ───────────────────────────────────── */
+  .diagram {
+    background: var(--diagram-bg);
+    border: 1px solid var(--diagram-frame);
+    border-radius: 14px;
+    padding: 22px 18px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+    margin: 4px 0 20px;
+  }
+  .diagram pre.mermaid {
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    min-width: 520px;
+  }
+  .caption {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+    margin: 0 2px 22px;
+  }
+
+  /* ── Legend ─────────────────────────────────────────── */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 20px; margin: 0 0 20px; }
+  .legend .item { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
+  .swatch { width: 13px; height: 13px; border-radius: 4px; border: 1px solid rgba(0,0,0,.14); flex: none; }
+  .sw-eng { background: #d7f0ec; }
+  .sw-write { background: #fbe8cf; }
+  .sw-read { background: #d3edf5; }
+  .sw-shared { background: #e7eaf0; }
+
+  /* ── Tables ─────────────────────────────────────────── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; background: var(--surface); font-size: 14.5px; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--faint);
+    text-align: left;
+    font-weight: 600;
+    padding: 12px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.mod { font-family: var(--mono); font-size: 13px; color: var(--ink); white-space: nowrap; font-weight: 600; }
+  td.dim { color: var(--muted); }
+  code {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: var(--accent-soft);
+    color: color-mix(in srgb, var(--accent) 82%, var(--ink));
+    padding: 1px 6px;
+    border-radius: 5px;
+  }
+  :root[data-theme="dark"] code, :root:not([data-theme="light"]) code { color: var(--accent); }
+
+  /* ── Flow / step list ───────────────────────────────── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; max-width: var(--prose); }
+  ol.steps li {
+    position: relative;
+    counter-increment: s;
+    padding: 12px 0 12px 46px;
+    border-bottom: 1px dashed var(--line);
+  }
+  ol.steps li:last-child { border-bottom: 0; }
+  ol.steps li::before {
+    content: counter(s);
+    position: absolute; left: 0; top: 11px;
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 8px;
+  }
+  ol.steps li b { font-weight: 640; }
+  ol.steps li span { color: var(--muted); }
+
+  /* ── Path cards (write / read) ──────────────────────── */
+  .path {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .path.write { border-top: 3px solid var(--write); }
+  .path.read { border-top: 3px solid var(--read); }
+  .path h3 { margin: 0 0 4px; font-size: 16px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 9px; }
+  .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 6px; font-weight: 600;
+  }
+  .tag.w { background: var(--write-soft); color: var(--write); }
+  .tag.r { background: var(--read-soft); color: var(--read); }
+  .path p { margin: 8px 0 0; font-size: 14px; color: var(--muted); max-width: none; }
+  .path .flow { font-family: var(--mono); font-size: 12.5px; color: var(--ink); line-height: 1.9; margin-top: 6px; }
+  .path .flow .arw { color: var(--faint); padding: 0 4px; }
+
+  .callout {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 18px 0 0;
+    max-width: var(--prose);
+  }
+  .callout .k { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); padding-top: 2px; white-space: nowrap; }
+  .callout p { margin: 0; font-size: 14px; color: var(--muted); max-width: none; }
+  .callout p b { color: var(--ink); font-weight: 620; }
+
+  /* ── Principle cards ────────────────────────────────── */
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15.5px; letter-spacing: -0.01em; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: none; line-height: 1.55; }
+  .card .mk { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: .1em; }
+
+  footer { padding: 34px 0 60px; color: var(--faint); font-size: 13px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; }
+  footer code { background: none; color: var(--muted); padding: 0; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a, .chip { transition: color .15s ease, border-color .15s ease; }
+  }
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">Kiến trúc hệ thống · Progress-Tracking</p>
+    <h1>Bản đồ kiến trúc Burndown Engine</h1>
+    <p class="lede">Một <strong>monorepo pnpm</strong> gồm 3 ứng dụng và 4 gói thư viện. Nó đọc dữ liệu từ Jira,
+      tính "khối lượng còn lại theo ngày" và trạng thái Signboard trong một <strong>lõi tính toán thuần</strong>,
+      rồi phục vụ biểu đồ cho web. Xương sống là một quy tắc: <strong>phụ thuộc chỉ đi một chiều</strong>.</p>
+    <div class="factstrip">
+      <span class="chip"><b>TypeScript</b> strict · ESM</span>
+      <span class="chip"><b>pnpm</b> workspaces</span>
+      <span class="chip">3 app · 4 package</span>
+      <span class="chip">Vitest · <b>20</b> golden dataset</span>
+      <span class="chip">Tách <b>ghi</b> / <b>đọc</b></span>
+      <span class="chip"><b>PostgreSQL</b> · 26 bảng</span>
+      <span class="chip">CI: typecheck · lint · test</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 1. Bản đồ module -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2>Bản đồ module &amp; ranh giới phụ thuộc</h2>
+      <p class="sec-sub">Bảy module, một chiều mũi tên duy nhất. Đường nét đứt <code>api → jira</code> là ngoại lệ
+        hẹp — chỉ để tra cứu ngắn trong request. Cấm ngược lại tuyệt đối.</p>
+    </div>
+
+    <div class="legend">
+      <span class="item"><span class="swatch sw-eng"></span> Lõi tính toán</span>
+      <span class="item"><span class="swatch sw-write"></span> Đường ghi (worker)</span>
+      <span class="item"><span class="swatch sw-read"></span> Đường đọc (api)</span>
+      <span class="item"><span class="swatch sw-shared"></span> Hợp đồng dùng chung</span>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'13px','lineColor':'#8a94a6','primaryColor':'#ffffff','primaryBorderColor':'#c7ccd6','primaryTextColor':'#18212e'}}}%%
+flowchart TD
+  WEB["apps/web<br/>React SPA"]:::read
+  API["apps/api<br/>Fastify REST"]:::read
+  WRK["apps/worker<br/>BullMQ jobs"]:::write
+  ENG["packages/engine<br/>THUẦN TÍNH TOÁN"]:::eng
+  DB["packages/db<br/>Prisma"]:::write
+  JIRA["packages/jira<br/>Jira client"]:::write
+  SH["packages/shared<br/>type + zod"]:::shared
+
+  WEB --> SH
+  API --> ENG
+  API --> DB
+  API --> SH
+  API -. "tra cứu ngắn" .-> JIRA
+  WRK --> ENG
+  WRK --> DB
+  WRK --> JIRA
+  WRK --> SH
+  ENG --> SH
+  DB --> SH
+  JIRA --> SH
+
+  classDef eng fill:#d7f0ec,stroke:#0f766e,color:#0b3d38,font-weight:600;
+  classDef write fill:#fbe8cf,stroke:#b45309,color:#5c3407;
+  classDef read fill:#d3edf5,stroke:#0e7490,color:#0a3947;
+  classDef shared fill:#e7eaf0,stroke:#8a94a6,color:#2a3342;
+      </pre>
+    </div>
+    <p class="caption">→ được phép import · ⇢ ngoại lệ hẹp, chỉ đọc, có trần cứng</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Module</th><th>Vai trò</th><th>Được import</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mod">apps/web</td><td>SPA React — mọi lời gọi mạng đi qua đúng một client</td><td class="dim"><code>shared</code></td></tr>
+          <tr><td class="mod">apps/api</td><td>REST Fastify, chỉ điều phối — không chứa logic nghiệp vụ</td><td class="dim"><code>engine</code>, <code>db</code>, <code>shared</code>, <code>jira</code>*</td></tr>
+          <tr><td class="mod">apps/worker</td><td>Hàng đợi BullMQ: sync / backfill / reconcile + cron đêm</td><td class="dim"><code>engine</code>, <code>db</code>, <code>jira</code>, <code>shared</code></td></tr>
+          <tr><td class="mod">packages/engine</td><td>Lõi tính toán thuần — không IO, không đọc đồng hồ</td><td class="dim"><code>shared</code> (và chỉ shared)</td></tr>
+          <tr><td class="mod">packages/db</td><td>Prisma schema + repository; đổi <code>snake_case→camelCase</code>, <code>BigInt→number</code></td><td class="dim"><code>shared</code></td></tr>
+          <tr><td class="mod">packages/jira</td><td>Client Jira: auth, phân trang, rate-limit, retry</td><td class="dim"><code>shared</code></td></tr>
+          <tr><td class="mod">packages/shared</td><td>Type + zod schema dùng chung FE ↔ BE</td><td class="dim">— (không phụ thuộc gì)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">* <code>api → jira</code>: chỉ 2 endpoint tra cứu đồng bộ (<code>validate</code>, <code>browse</code>), ≤100 key, số lần gọi cố định.</p>
+  </section>
+
+  <!-- 2. Framework -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2>Framework theo từng tầng</h2>
+      <p class="sec-sub">Công cụ đã chốt trong <code>ARCHITECTURE.md §4</code>. Nhẹ, không Nx/Turborepo; mỗi tầng chỉ mang đúng thứ nó cần.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Tầng</th><th>Vai trò</th><th>Framework / thư viện chính</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mod">web</td><td class="dim">Giao diện người dùng (SPA)</td><td><b>React 18</b> · Vite 6 · TanStack Query 5 · React Router 7 · Recharts 2</td></tr>
+          <tr><td class="mod">api</td><td class="dim">REST điều phối</td><td><b>Fastify 5</b> · zod · ioredis · BullMQ (đẩy job)</td></tr>
+          <tr><td class="mod">worker</td><td class="dim">Job nền / hàng đợi</td><td><b>BullMQ 5</b> (trên Redis) · ioredis 5 · luxon</td></tr>
+          <tr><td class="mod">engine</td><td class="dim">Lõi tính toán thuần</td><td><b>luxon 3</b> (ngày giờ) · re2 (regex an toàn) · fast-check <span class="dim">(test)</span></td></tr>
+          <tr><td class="mod">db</td><td class="dim">Truy cập dữ liệu</td><td><b>Prisma 6.19</b> (client WASM) · @prisma/adapter-pg · pg</td></tr>
+          <tr><td class="mod">jira</td><td class="dim">Cổng ra Jira</td><td>fetch + token-bucket · p-limit · re2 · zod</td></tr>
+          <tr><td class="mod">shared</td><td class="dim">Hợp đồng dùng chung</td><td><b>zod 3</b> (type + schema, một nguồn sự thật)</td></tr>
+          <tr><td class="mod">nền chung</td><td class="dim">Ngôn ngữ &amp; kiểm thử</td><td>TypeScript strict · pnpm workspaces · Vitest · Playwright · ESLint</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. FE <-> BE -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2>Front-end &amp; back-end nối với nhau thế nào</h2>
+      <p class="sec-sub">Web không bao giờ gọi thẳng Jira hay DB. Nó chỉ nói chuyện với API qua HTTP <code>/api</code>,
+        và cả hai đầu chia sẻ cùng một bộ schema zod.</p>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'12.5px','lineColor':'#8a94a6','primaryColor':'#ffffff','primaryBorderColor':'#c7ccd6','primaryTextColor':'#18212e'}}}%%
+flowchart LR
+  subgraph FE["apps/web  ·  trình duyệt"]
+    direction TB
+    CMP["Màn hình + hook use-*.ts<br/>(TanStack Query)"]:::read
+    CLI["client.ts<br/>fetch DUY NHẤT + zod tại biên"]:::read
+  end
+  subgraph GATE["Cổng"]
+    direction TB
+    PXY["Vite proxy (dev)<br/>· SSO gateway (prod)<br/>đặt x-user-id"]:::gate
+  end
+  subgraph BE["apps/api  ·  Fastify"]
+    direction TB
+    HOOK["onRequest → principal<br/>tra vai trò ở app_user"]:::read
+    RT["Route + Port/Adapter<br/>(không chứa logic)"]:::read
+    CORE["engine · db"]:::eng
+  end
+  SHZ["packages/shared · zod<br/>hợp đồng chung 2 đầu"]:::shared
+
+  CMP --> CLI
+  CLI -->|"GET/POST /api/..."| PXY
+  PXY --> HOOK --> RT --> CORE
+  CORE -->|"JSON"| RT -->|"zod parse"| CLI
+  SHZ -. validate .- CLI
+  SHZ -. validate .- RT
+
+  classDef eng fill:#d7f0ec,stroke:#0f766e,color:#0b3d38,font-weight:600;
+  classDef read fill:#d3edf5,stroke:#0e7490,color:#0a3947;
+  classDef shared fill:#e7eaf0,stroke:#8a94a6,color:#2a3342;
+  classDef gate fill:#f2e9d8,stroke:#a98a4b,color:#4a3a17;
+      </pre>
+    </div>
+
+    <ol class="steps">
+      <li><b>Component → hook.</b> <span>Màn hình dùng hook <code>use-*.ts</code> (TanStack Query). Không component nào tự gọi <code>fetch</code>.</span></li>
+      <li><b>Hook → <code>client.ts</code>.</b> <span>Nơi DUY NHẤT gọi <code>fetch</code>: ghép URL <code>/api/…</code>, gửi kèm cookie phiên, đổi mọi lỗi thành <code>ApiError</code>.</span></li>
+      <li><b>Qua cổng.</b> <span>Dev: Vite proxy <code>/api → localhost:3000</code>, đóng vai cổng SSO (chèn <code>x-user-id</code>). Prod: auth proxy thật đứng trước.</span></li>
+      <li><b>Fastify phân giải danh tính.</b> <span>Hook <code>onRequest</code> tin danh tính header, rồi <b>tra vai trò ở bảng <code>app_user</code></b> — không tin <code>role</code> client gửi.</span></li>
+      <li><b>Route gọi lõi.</b> <span>Mỗi route nhận "port" đã tiêm; gọi <code>engine</code>/<code>db</code>. Route chỉ điều phối, không chứa logic nghiệp vụ.</span></li>
+      <li><b>Trả về &amp; kiểm biên.</b> <span>API trả JSON; <code>client.ts</code> validate bằng zod <b>ngay tại biên</b> rồi trả object đã kiểu hoá. TanStack Query lo cache &amp; retry.</span></li>
+    </ol>
+
+    <div class="callout">
+      <span class="k">Hợp đồng zod</span>
+      <p>Cùng một schema trong <code>packages/shared</code> validate ở <b>cả hai đầu</b> — API kiểm đầu ra, web kiểm đầu nhận.
+        Web alias thẳng vào mã nguồn shared, nên <b>sửa schema một chỗ là front-end thấy ngay</b>, không build lại.</p>
+    </div>
+    <div class="callout">
+      <span class="k">Bảo mật SSO</span>
+      <p>API <b>không tự đăng nhập người dùng</b>. Cổng SSO đặt header <code>x-user-id</code> = email đã xác thực và
+        <b>xoá mọi <code>x-user-*</code></b> mà client tự khai. Đây cũng là lý do dev shim danh tính nằm ở Vite proxy, không ở API.</p>
+    </div>
+  </section>
+
+  <!-- 4. Data flow -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <h2>Luồng dữ liệu: tách đường ghi và đường đọc</h2>
+      <p class="sec-sub">Việc dài hơi (gọi Jira, tính toán) đẩy hết vào worker và ghi sẵn kết quả xuống Postgres.
+        Request đọc của web chỉ lấy số đã tính — nhanh, không chạm Jira.</p>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'12.5px','lineColor':'#8a94a6','primaryColor':'#ffffff','primaryBorderColor':'#c7ccd6','primaryTextColor':'#18212e'}}}%%
+flowchart LR
+  JIRA[("Jira Cloud")]:::ext
+  WRK["Worker<br/>cron 00:01 · resync · quét dirty"]:::write
+  ENG["engine<br/>rollup + snapshot/ngày"]:::eng
+  PG[("PostgreSQL<br/>daily_snapshot · rollup")]:::store
+  RDS[("Redis<br/>cache chart · queue")]:::store
+  API["Fastify API"]:::read
+  WEB["Web · Recharts"]:::read
+
+  JIRA -->|"① fetch cây issue"| WRK
+  WRK -->|"② persist"| PG
+  WRK -->|"③ tính"| ENG
+  ENG -->|"④ snapshot"| PG
+  WRK -. "xoá cache" .-> RDS
+  PG -->|"⑤ đọc số đã tính"| API
+  RDS -. "hit" .-> API
+  API -->|"⑥ JSON (zod)"| WEB
+
+  classDef eng fill:#d7f0ec,stroke:#0f766e,color:#0b3d38,font-weight:600;
+  classDef write fill:#fbe8cf,stroke:#b45309,color:#5c3407;
+  classDef read fill:#d3edf5,stroke:#0e7490,color:#0a3947;
+  classDef store fill:#eef1f5,stroke:#8a94a6,color:#2a3342;
+  classDef ext fill:#ffffff,stroke:#c7ccd6,color:#5b6675,stroke-dasharray:4 3;
+      </pre>
+    </div>
+
+    <div class="grid2">
+      <div class="path write">
+        <h3><span class="tag w">Ghi</span> Worker → Postgres</h3>
+        <p>Chạy nền, mỗi lượt vài phút. Kích hoạt: cron đêm <code>00:01</code>, resync tay, quét <code>dirty:epics</code> mỗi giờ (:15), đối soát CN <code>03:00</code>.</p>
+        <p class="flow">Jira <span class="arw">→</span> fetch cây <span class="arw">→</span> persist issue <span class="arw">→</span> engine tính rollup + snapshot <span class="arw">→</span> lưu <code>daily_snapshot</code> / <code>group_rollup</code> <span class="arw">→</span> xoá cache chart</p>
+      </div>
+      <div class="path read">
+        <h3><span class="tag r">Đọc</span> Web → API</h3>
+        <p>Đồng bộ, mili-giây. Không chạm Jira, không tính lại — chỉ lấy snapshot đã dựng sẵn (qua cache Redis).</p>
+        <p class="flow">Web mở biểu đồ <span class="arw">→</span> <code>GET /api/burndown/epic/:key</code> <span class="arw">→</span> đọc Postgres (+cache) <span class="arw">→</span> JSON zod <span class="arw">→</span> Recharts vẽ 3 chế độ xem</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Prisma data model -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <h2>Mô hình dữ liệu Prisma</h2>
+      <p class="sec-sub">26 bảng PostgreSQL trong <code>packages/db/prisma/schema.prisma</code>, chia làm bốn nhóm:
+        dữ liệu <b>thô</b> hút từ Jira, <b>kết quả</b> engine tính ra, <b>cấu hình</b> có version, và <b>master data</b>.
+        Client dùng <code>engineType="client"</code> (WASM) + driver <code>pg</code> — không binary native.</p>
+    </div>
+
+    <div class="legend">
+      <span class="item"><span class="swatch sw-write"></span> Thô từ Jira (ingest)</span>
+      <span class="item"><span class="swatch sw-eng"></span> Kết quả engine</span>
+      <span class="item"><span class="swatch sw-shared"></span> Cấu hình có version</span>
+      <span class="item"><span class="swatch sw-read"></span> Master data &amp; vận hành</span>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'12px','lineColor':'#8a94a6','primaryColor':'#ffffff','primaryBorderColor':'#c7ccd6','primaryTextColor':'#18212e','clusterBkg':'#fbfcfd','clusterBorder':'#dbe0e7'}}}%%
+flowchart LR
+  subgraph ING["① Ingest thô"]
+    JI["jira_issue<br/>Epic·Task·Sub-task"]:::raw
+    CL["issue_changelog_event"]:::raw
+    WL["worklog_entry"]:::raw
+  end
+  subgraph OUT["③ Kết quả engine"]
+    DS["daily_snapshot<br/>per_phase · per_tier"]:::calc
+    PR["phase_rollup"]:::calc
+    GR["group_rollup"]:::calc
+    AD["subtask_actual_dates"]:::calc
+    PS["plan_shift_history"]:::calc
+  end
+  subgraph REG["② Sổ đăng ký · lịch · quyền"]
+    TE["tracked_epic<br/>scope CONTAINER·QUERY"]:::ref
+    WC["work_calendar"]:::ref
+    HO["calendar_holiday"]:::ref
+    MU["calendar_makeup_workday"]:::ref
+    AU["app_user"]:::ref
+    PJ["project"]:::ref
+    SR["sync_run"]:::ref
+  end
+  subgraph CFG["④ Cấu hình (có version)"]
+    PC["phase_config_set"]:::cfg
+    PX["phase_* · 6 bảng"]:::cfg
+    GT["group_tier_* · 4 bảng"]:::cfg
+  end
+
+  JI --> JI
+  JI --> AD
+  TE --> WC
+  TE --> PR
+  TE --> GR
+  WC --> HO
+  WC --> MU
+  PC --> PX
+  PC --> GT
+
+  DS -. "epic_key" .-> TE
+  CL -. "issue_key" .-> JI
+  WL -. "issue_key" .-> JI
+  PS -. "epic_key" .-> TE
+  SR -. "epic_key" .-> TE
+
+  classDef raw fill:#fbe8cf,stroke:#b45309,color:#5c3407;
+  classDef calc fill:#d7f0ec,stroke:#0f766e,color:#0b3d38;
+  classDef cfg fill:#e7eaf0,stroke:#8a94a6,color:#2a3342;
+  classDef ref fill:#d3edf5,stroke:#0e7490,color:#0a3947;
+      </pre>
+    </div>
+    <p class="caption">→ khoá ngoại (FK, cascade) · ⇢ nối theo khoá, KHÔNG FK — để hàng lịch sử sống sót khi issue bị gỡ (chỉ đánh <code>removed_at</code>, không xoá cứng)</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Bảng</th><th>Model</th><th>Vai trò</th></tr></thead>
+        <tbody>
+          <tr><td class="mod">jira_issue</td><td class="dim">JiraIssue</td><td>Cây Epic/Task/Sub-task chung 1 bảng (self-relation). Mang <code>group_path</code>, <code>phase_code</code>, ngày WBS, kết quả parse Signboard</td></tr>
+          <tr><td class="mod">issue_changelog_event</td><td class="dim">IssueChangelogEvent</td><td>Nhật ký đổi trường (status, estimate, parent…) — nguồn suy ra ngày thực tế</td></tr>
+          <tr><td class="mod">worklog_entry</td><td class="dim">WorklogEntry</td><td>Log giờ; khoá chính = ID Jira nên tự chống trùng. Engine lọc theo <code>started_at</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">Nhóm ① — thô từ Jira, ghi bởi worker lúc đồng bộ.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Bảng</th><th>Model</th><th>Vai trò</th></tr></thead>
+        <tbody>
+          <tr><td class="mod">daily_snapshot</td><td class="dim">DailySnapshot</td><td><b>Bảng chính vẽ biểu đồ.</b> Chốt sổ mỗi ngày: plan/actual còn lại, <code>per_phase</code> + <code>per_tier</code> (JSONB)</td></tr>
+          <tr><td class="mod">phase_rollup</td><td class="dim">PhaseRollup</td><td>Ngày plan/actual gộp theo Phase (MIN/MAX), tính lại mỗi lần sync</td></tr>
+          <tr><td class="mod">group_rollup</td><td class="dim">GroupRollup</td><td>Rollup N tầng — mọi nút tiền tố của <code>group_path</code>. Trống với Epic 1 tầng</td></tr>
+          <tr><td class="mod">subtask_actual_dates</td><td class="dim">SubtaskActualDates</td><td>Ngày thực tế từng Sub-task (1-1 với <code>jira_issue</code>), phục vụ từng ô Signboard</td></tr>
+          <tr><td class="mod">plan_shift_history</td><td class="dim">PlanShiftHistory</td><td>Ghi mọi lần kế hoạch một Phase bị lùi — chống giấu độ trễ (R-11)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">Nhóm ③ — engine tính, không đóng băng: dựng lại sau mỗi lần đồng bộ.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Bảng</th><th>Model</th><th>Vai trò</th></tr></thead>
+        <tbody>
+          <tr><td class="mod">phase_config_set</td><td class="dim">PhaseConfigSet</td><td><b>Gốc cấu hình có version</b> (GLOBAL/PROJECT, <code>is_active</code>); quay lại được. Cha của 10 bảng dưới (xoá cascade)</td></tr>
+          <tr><td class="mod">phase_title_pattern</td><td class="dim">PhaseTitlePattern</td><td>Mẫu bóc tên Phase khỏi tiêu đề Task</td></tr>
+          <tr><td class="mod">phase_definition</td><td class="dim">PhaseDefinition</td><td>Định nghĩa Phase chuẩn: mã, nhãn, màu, thứ tự hiển thị</td></tr>
+          <tr><td class="mod">phase_match_rule</td><td class="dim">PhaseMatchRule</td><td>Luật khớp từ khoá → Phase (CONTAINS/REGEX, ưu tiên)</td></tr>
+          <tr><td class="mod">subtask_title_pattern</td><td class="dim">SubtaskTitlePattern</td><td>Mẫu tách tiêu đề Sub-task ([project][team][phase]…)</td></tr>
+          <tr><td class="mod">signboard_column</td><td class="dim">SignboardColumn</td><td>Cột bảng Signboard (loại task, phía VN/JP)</td></tr>
+          <tr><td class="mod">sub_phase_order</td><td class="dim">SubPhaseOrder</td><td>Thứ tự Sub-phase trong từng Phase trên Signboard</td></tr>
+          <tr><td class="mod">group_tier</td><td class="dim">GroupTier</td><td><b>Phân tầng linh động:</b> khai một tầng nhóm (order, role PHASE/GROUP, source)</td></tr>
+          <tr><td class="mod">group_tier_definition</td><td class="dim">GroupTierDefinition</td><td>Giá trị chuẩn của một tầng (tổng quát <code>phase_definition</code>)</td></tr>
+          <tr><td class="mod">group_tier_rule</td><td class="dim">GroupTierRule</td><td>Luật khớp từ khoá → mã tầng (tổng quát <code>phase_match_rule</code>)</td></tr>
+          <tr><td class="mod">group_tier_title_pattern</td><td class="dim">GroupTierTitlePattern</td><td>Mẫu tiêu đề cho tầng dựa trên title</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">Nhóm ④ — PM sửa qua màn hình; bộ <code>group_tier_*</code> đứng cạnh <code>phase_*</code>, backfill từ nó (tầng Phase = tier 1).</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Bảng</th><th>Model</th><th>Vai trò</th></tr></thead>
+        <tbody>
+          <tr><td class="mod">tracked_epic</td><td class="dim">TrackedEpic</td><td>Sổ Epic/scope đang theo dõi — nguồn "job đêm chạy cho ai". FK → <code>work_calendar</code></td></tr>
+          <tr><td class="mod">work_calendar</td><td class="dim">WorkCalendar</td><td>Lịch làm việc + bitmask ngày làm (<code>workdays_mask</code>), múi giờ, giờ/ngày</td></tr>
+          <tr><td class="mod">calendar_holiday</td><td class="dim">CalendarHoliday</td><td>Ngày nghỉ theo lịch (bôi xám biểu đồ, dừng đường Kế hoạch)</td></tr>
+          <tr><td class="mod">calendar_makeup_workday</td><td class="dim">CalendarMakeupWorkday</td><td>Ngày làm bù cuối tuần — ngược nghĩa ngày nghỉ</td></tr>
+          <tr><td class="mod">app_user</td><td class="dim">AppUser</td><td><b>Nguồn sự thật phân quyền</b> (ADMIN/PM/VIEWER + projects) — API tra bảng này, không tin header</td></tr>
+          <tr><td class="mod">project</td><td class="dim">Project</td><td>Danh mục project do Admin quản lý, dùng gán PM</td></tr>
+          <tr><td class="mod">sync_run</td><td class="dim">SyncRun</td><td>Nhật ký chạy job (loại, trạng thái, số lần gọi API, bước lỗi) cho màn Monitoring</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">Nhóm ② — master/tham chiếu &amp; bản ghi vận hành.</p>
+
+    <div class="callout">
+      <span class="k">Quy ước cột</span>
+      <p><b>C-1</b> mốc thời gian dùng <code>TIMESTAMPTZ</code> (lưu UTC), ngày thuần dùng <code>DATE</code>. <b>C-2</b> thời lượng lưu bằng
+        <b>giây</b>, kiểu <code>BigInt</code>, hậu tố <code>_s</code>. <b>C-3</b> bảng/cột <code>snake_case</code> ở DB, đổi sang <code>camelCase</code> tại tầng repository.</p>
+    </div>
+    <div class="callout">
+      <span class="k">Chạy lại an toàn</span>
+      <p><b>C-6:</b> mọi bảng job ghi đều có khoá duy nhất tự nhiên (<code>uq_snapshot</code> = epic+ngày, <code>worklog_id</code> = ID Jira…),
+        nên chạy lại một lượt đồng bộ <b>không nhân đôi</b> dữ liệu.</p>
+    </div>
+    <div class="callout">
+      <span class="k">Không xoá cứng</span>
+      <p>Issue rời Epic chỉ được đánh <code>removed_at</code>, không DELETE — snapshot của những ngày trước vẫn phải nhìn thấy nó.
+        Đây là lý do nhiều bảng lịch sử <b>nối theo khoá, không đặt FK cascade</b>.</p>
+    </div>
+    <div class="callout">
+      <span class="k">Prisma engineType</span>
+      <p><code>engineType="client"</code> chuyển sang query-compiler <b>WASM</b> (đóng gói sẵn) chạy qua driver <code>pg</code> — không tải
+        binary Rust từ CDN (máy dev chặn mạng). Migration <b>viết tay</b>, áp bằng <code>pnpm db:migrate</code> (không dùng <code>prisma migrate</code>).</p>
+    </div>
+  </section>
+
+  <!-- 6. CI/CD -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <h2>Quy trình CI/CD</h2>
+      <p class="sec-sub">Một workflow GitHub Actions (<code>.github/workflows/ci.yml</code>) chạy trên <b>push → main</b> và <b>mọi pull request</b>.
+        Ba job song song; job <code>test</code> dựng hẳn một PostgreSQL thật. Triển khai (CD) làm <b>tay</b> theo runbook — pipeline này thuần kiểm chất lượng.</p>
+    </div>
+
+    <div class="diagram">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-monospace, monospace','fontSize':'12px','lineColor':'#8a94a6','primaryColor':'#ffffff','primaryBorderColor':'#c7ccd6','primaryTextColor':'#18212e'}}}%%
+flowchart LR
+  TRG{{"push → main<br/>· pull_request"}}:::trg
+  TRG --> TC
+  TRG --> LT
+  TRG --> TS
+  TC["typecheck<br/>tsc toàn workspace"]:::job
+  LT["lint<br/>ESLint + rule ranh giới"]:::job
+  TS["test<br/>service Postgres 16"]:::job
+  TS --> MG["db:migrate<br/>áp migration viết tay"]:::step
+  MG --> VT["vitest toàn bộ"]:::step
+  VT --> G1["gate · DB-test phải chạy"]:::gate
+  VT --> G2["gate · engine &lt; 10s"]:::gate
+  TC --> OK
+  LT --> OK
+  G1 --> OK
+  G2 --> OK
+  OK(["CI xanh"]):::ok
+  OK -. "deploy tay · RUNBOOK" .-> DP["db:migrate → db:generate → deploy code"]:::deploy
+
+  classDef trg fill:#d3edf5,stroke:#0e7490,color:#0a3947;
+  classDef job fill:#d7f0ec,stroke:#0f766e,color:#0b3d38,font-weight:600;
+  classDef step fill:#ffffff,stroke:#c7ccd6,color:#18212e;
+  classDef gate fill:#fbe8cf,stroke:#b45309,color:#5c3407;
+  classDef ok fill:#0f766e,stroke:#0b544e,color:#ffffff,font-weight:600;
+  classDef deploy fill:#f1f3f6,stroke:#9aa5b4,color:#3a4250;
+      </pre>
+    </div>
+    <p class="caption">Runner Node 22 · pnpm qua corepack · <code>concurrency: cancel-in-progress</code> huỷ lượt cũ khi push tiếp.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Job</th><th>Các bước</th><th>Chốt điều gì</th></tr></thead>
+        <tbody>
+          <tr><td class="mod">typecheck</td><td class="dim">install <code>--frozen-lockfile</code> → <code>db:generate</code> → <code>tsc</code></td><td>Kiểu đúng toàn workspace (cần Prisma Client đã generate)</td></tr>
+          <tr><td class="mod">lint</td><td class="dim">install → <code>db:generate</code> → <code>eslint .</code></td><td>Gồm rule chặn import xuyên ranh giới &amp; chặn <code>new Date()</code> trong engine</td></tr>
+          <tr><td class="mod">test</td><td class="dim">service Postgres 16 → install → <code>db:generate</code> → <code>db:migrate</code> → <code>vitest</code></td><td>Chạy migration viết tay lên DB thật, rồi toàn bộ test — gồm nhóm ràng buộc DB (CHECK, partial index)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="k">Gate chống xanh giả</span>
+      <p>Nếu <code>DATABASE_URL</code> hỏng, nhóm test ràng buộc DB sẽ <i>skip</i> mà CI vẫn xanh. Một bước grep chuỗi
+        <code>"chưa có DATABASE_URL"</code> trong output và <b>fail nếu thấy</b> — buộc nhóm đó phải thật sự chạy.</p>
+    </div>
+    <div class="callout">
+      <span class="k">Gate tốc độ</span>
+      <p><code>test:engine</code> phải chạy <b>&lt; 10 giây</b> (C-12) — đo bằng đồng hồ, vượt ngưỡng là CI <b>đỏ</b>, không phải cảnh báo.
+        Giữ bộ test lõi đủ nhanh để dev thật sự chạy thường xuyên.</p>
+    </div>
+    <div class="callout">
+      <span class="k">CD làm tay</span>
+      <p>Chưa có job deploy tự động. Triển khai theo <code>RUNBOOK.md</code>: <b>áp migration trước</b> (<code>db:migrate</code>) →
+        <code>db:generate</code> → deploy code. Worker còn tự chặn khởi động nếu còn migration chưa áp (<code>assertMigrationsApplied</code>).</p>
+    </div>
+  </section>
+
+  <!-- 7. Principles -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">07</span>
+      <h2>Năm nguyên tắc giữ hệ thống không mục</h2>
+      <p class="sec-sub">Đây là những ràng buộc được lint/test cưỡng chế, không chỉ là quy ước trên giấy.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <p class="mk">PORTS &amp; ADAPTERS</p>
+        <h3>Một điểm lắp ráp duy nhất</h3>
+        <p><code>server.ts</code> / <code>main.ts</code> là nơi DUY NHẤT biết Prisma, Redis, Jira thật. Mọi tầng dưới chỉ thấy "cổng" ⇒ test được mà không cần dựng hạ tầng.</p>
+      </div>
+      <div class="card">
+        <p class="mk">ENGINE THUẦN</p>
+        <h3>Không IO, không đồng hồ</h3>
+        <p>Engine cấm import <code>db</code>/<code>jira</code> và cấm <code>new Date()</code> (nhận <code>asOfMs</code> qua tham số). Kiểm bằng <b>20 golden dataset</b>, chạy &lt; 10 giây. ESLint chặn vi phạm.</p>
+      </div>
+      <div class="card">
+        <p class="mk">GHI / ĐỌC</p>
+        <h3>Tách hai đường</h3>
+        <p>Việc dài hơi thuộc worker (phút); request đọc thuộc API (mili-giây). Nhờ vậy mở biểu đồ không bao giờ phải chờ Jira.</p>
+      </div>
+      <div class="card">
+        <p class="mk">HÀNG ĐỢI</p>
+        <h3>3 queue + rate-limit chung</h3>
+        <p><code>sync</code> · <code>backfill</code> · <code>reconcile</code> trên BullMQ+Redis. Token-bucket Redis dùng chung giới hạn Jira <b>40 req/s toàn hệ thống</b>, không phải mỗi worker một hạn.</p>
+      </div>
+      <div class="card">
+        <p class="mk">HỢP ĐỒNG</p>
+        <h3>zod là một nguồn sự thật</h3>
+        <p>Type + schema sống chung ở <code>shared</code>, validate ở FE lẫn BE. Lệch kiểu giữa hai đầu bị bắt ngay lúc biên dịch hoặc tại biên request.</p>
+      </div>
+      <div class="card">
+        <p class="mk">PHÂN TẦNG LINH ĐỘNG</p>
+        <h3>Tổng quát N tầng, không phá cũ</h3>
+        <p>Cột <code>group_path</code> JSONB + bảng <code>group_tier*</code> cho phép 1..N tầng nhóm. Epic 3 tầng cũ giữ hành vi <b>byte-identical</b>; đường đa tầng chỉ bật khi có cấu hình mới.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Nguồn: <code>ARCHITECTURE.md</code> · <code>schema.prisma</code> · <code>.github/workflows/ci.yml</code> — đối chiếu mã nguồn thực tế.</span>
+    <span>Progress-Tracking · Burndown Engine</span>
+  </div>
+</footer>

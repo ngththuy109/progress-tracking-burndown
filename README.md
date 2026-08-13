@@ -232,6 +232,21 @@ All under [`docs/`](./docs), in Vietnamese:
 The runbook has one section per alert code, and a test that fails if a documented command or button
 label no longer exists. Documentation that nothing checks rots within three months.
 
+**Visual overview.** [`architecture-overview.html`](./docs/architecture-overview.html) is a single
+**self-contained** page — module map and dependency boundaries, the FE↔BE request flow, the write/read
+data flow, the Prisma data model (26 tables) and the CI/CD pipeline. Its diagrams are pre-rendered to
+inline SVG, so it needs no CDN or JavaScript and opens straight in a browser, even offline (GitHub shows
+only the source — download it, or serve `docs/`). Regenerate it after editing the source
+[`tools/docs/architecture.src.html`](./tools/docs/architecture.src.html) with:
+
+```bash
+pnpm docs:build-arch          # renders the mermaid diagrams to inline SVG via the bundled Chromium
+```
+
+The build borrows Playwright's Chromium (already used for `pnpm e2e`) and installs `mermaid` into a
+git-ignored local cache on first run — deliberately **not** a repo dependency, to keep `pnpm install`
+and CI lean.
+
 ---
 
 ## What is not finished

@@ -22,6 +22,7 @@
     "db:seed": "tsx packages/db/src/seed/cli.ts",
     "db:seed:sql:gen": "tsx packages/db/src/seed/write-sql.ts",
     "db:validate": "prisma validate",
+    "docs:build-arch": "node tools/docs/build-architecture.mjs",
     "auth:grant": "node tools/auth/grant-role.mjs",
     "auth:testuser": "node tools/auth/add-basic-user.mjs",
     "seed:admin": "node tools/auth/seed-admin.mjs",

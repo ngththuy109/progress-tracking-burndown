@@ -7,3 +7,6 @@ coverage/
 test-results/
 playwright-report/
 .DS_Store
+
+# Cache mermaid tự cài của tools/docs/build-architecture.mjs (không phải phụ thuộc repo)
+tools/docs/.cache/
