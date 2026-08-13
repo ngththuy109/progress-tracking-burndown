@@ -161,6 +161,102 @@ describe('thứ tự ưu tiên', () => {
   });
 });
 
+describe('quy tắc 1b — đóng trễ hơn ngày làm thật', () => {
+  it('làm xong ngày 10, bấm Done ngày 15: từ ngày 10 đã về 0 (rule 1b), không chờ ngày 15', () => {
+    const s = sub({
+      changelog: [
+        ev('status', '3', '2026-03-10T02:00:00Z'),
+        ev('status', '10001', '2026-03-15T03:00:00Z'),
+      ],
+      worklogs: [wl(8 * H, '2026-03-10T02:00:00Z')],
+    });
+    // Ngày 12: chưa Done, nhưng worklog cuối (10) ≤ 12 và sẽ đóng hẳn ngày 15.
+    const r = resolveHistoricalRemaining(s, endOfDay('2026-03-12'), STATUS);
+    expect(r.rule).toBe('1b');
+    expect(r.seconds).toBe(0);
+    expect(r.backdate?.toMs).toBe(at('2026-03-10T02:00:00Z'));
+    expect(r.backdate?.doneAtMs).toBe(at('2026-03-15T03:00:00Z'));
+  });
+
+  it('TRƯỚC ngày worklog cuối thì KHÔNG backdate — còn giờ sẽ log sau mốc T', () => {
+    const s = sub({
+      changelog: [ev('status', '10001', '2026-03-15T03:00:00Z')],
+      worklogs: [wl(8 * H, '2026-03-10T02:00:00Z'), wl(8 * H, '2026-03-13T02:00:00Z')],
+    });
+    // Ngày 12: worklog cuối là 13 (sau T) → chưa xong → quy tắc 3.
+    const before = resolveHistoricalRemaining(s, endOfDay('2026-03-12'), STATUS);
+    expect(before.rule).toBe(3);
+    expect(before.seconds).toBe(32 * H); // 40 − 8 (chỉ worklog ngày 10)
+    // Ngày 14: đã qua worklog cuối 13 → backdate.
+    const after = resolveHistoricalRemaining(s, endOfDay('2026-03-14'), STATUS);
+    expect(after.rule).toBe('1b');
+    expect(after.seconds).toBe(0);
+  });
+
+  it('KHÔNG có worklog thì KHÔNG backdate — không có bằng chứng để suy ngày làm thật', () => {
+    const s = sub({ changelog: [ev('status', '10001', '2026-03-15T03:00:00Z')] });
+    const r = resolveHistoricalRemaining(s, endOfDay('2026-03-12'), STATUS);
+    expect(r.rule).toBe(3);
+    expect(r.seconds).toBe(40 * H);
+  });
+
+  it('sửa estimate SAU worklog cuối thì KHÔNG backdate — phần dư là cố ý (quy tắc 2 thắng)', () => {
+    const s = sub({
+      changelog: [
+        ev('timeestimate', String(30 * H), '2026-03-13T03:00:00Z'),
+        ev('status', '10001', '2026-03-15T03:00:00Z'),
+      ],
+      worklogs: [wl(8 * H, '2026-03-10T02:00:00Z')],
+    });
+    // Ngày 14: worklog cuối 10, nhưng có sửa timeestimate ngày 13 (sau 10) → giữ 30h.
+    const r = resolveHistoricalRemaining(s, endOfDay('2026-03-14'), STATUS);
+    expect(r.rule).toBe(2);
+    expect(r.seconds).toBe(30 * H);
+  });
+
+  it('đóng NON (bị mở lại sau đó) thì KHÔNG backdate; chỉ lần đóng DÍNH-LUÔN mới backdate', () => {
+    const s = sub({
+      changelog: [
+        ev('status', '10001', '2026-03-12T03:00:00Z'), // đóng non
+        ev('status', '3', '2026-03-13T03:00:00Z'), // mở lại
+        ev('status', '10001', '2026-03-16T03:00:00Z'), // đóng hẳn
+      ],
+      worklogs: [wl(8 * H, '2026-03-10T02:00:00Z'), wl(8 * H, '2026-03-14T02:00:00Z')],
+    });
+    // Ngày 11: lần đóng kế tiếp (12) là đóng NON → giữ quy tắc 3 = 40 − 8 = 32.
+    const premature = resolveHistoricalRemaining(s, endOfDay('2026-03-11'), STATUS);
+    expect(premature.rule).toBe(3);
+    expect(premature.seconds).toBe(32 * H);
+    // Ngày 15: lần đóng kế tiếp (16) là đóng DÍNH-LUÔN, worklog cuối 14 ≤ 15 → 0.
+    const terminal = resolveHistoricalRemaining(s, endOfDay('2026-03-15'), STATUS);
+    expect(terminal.rule).toBe('1b');
+    expect(terminal.seconds).toBe(0);
+  });
+
+  it('worklog đã bị xoá không tính là bằng chứng làm thật', () => {
+    const s = sub({
+      changelog: [ev('status', '10001', '2026-03-15T03:00:00Z')],
+      worklogs: [wl(8 * H, '2026-03-10T02:00:00Z', true)],
+    });
+    const r = resolveHistoricalRemaining(s, endOfDay('2026-03-12'), STATUS);
+    expect(r.rule).toBe(3);
+    expect(r.seconds).toBe(40 * H);
+  });
+
+  it('không có lần đóng nào ở tương lai (mở lại rồi bỏ đó) thì KHÔNG backdate', () => {
+    const s = sub({
+      changelog: [
+        ev('status', '10001', '2026-03-10T03:00:00Z'),
+        ev('status', '3', '2026-03-12T03:00:00Z'), // mở lại, không đóng lại
+      ],
+      worklogs: [wl(8 * H, '2026-03-10T02:00:00Z')],
+    });
+    const r = resolveHistoricalRemaining(s, endOfDay('2026-03-13'), STATUS);
+    expect(r.rule).toBe(3);
+    expect(r.seconds).toBe(32 * H);
+  });
+});
+
 describe('biên', () => {
   it('log giờ vượt Original Estimate thì trả 0, KHÔNG trả số âm', () => {
     const s = sub({ worklogs: [wl(50 * H, '2026-03-10T02:00:00Z')] });
@@ -278,8 +374,13 @@ describe('giờ đã log trong một khoảng', () => {
 });
 
 describe('câu giải thích cho API /explain', () => {
-  it('mỗi quy tắc có câu giải thích tiếng Việt riêng', () => {
+  it('mỗi quy tắc có câu giải thích riêng', () => {
     const done = explainRule({ seconds: 0, rule: 1 });
+    const backdated = explainRule({
+      seconds: 0,
+      rule: '1b',
+      backdate: { toMs: 0, doneAtMs: 0 },
+    });
     const explicit = explainRule({
       seconds: 30 * H,
       rule: 2,
@@ -293,9 +394,10 @@ describe('câu giải thích cho API /explain', () => {
     });
 
     expect(done).toContain('Rule 1');
+    expect(backdated).toContain('Rule 1b');
     expect(explicit).toContain('30');
     expect(derived).toContain('40');
     expect(derived).toContain('15');
-    expect(new Set([done, explicit, derived]).size).toBe(3);
+    expect(new Set([done, backdated, explicit, derived]).size).toBe(4);
   });
 });

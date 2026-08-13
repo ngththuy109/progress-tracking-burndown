@@ -89,6 +89,18 @@ người VN làm, người JP (khách hàng) review, hai phía nghỉ khác ngà
 
 Ba card này không có trong sơ đồ phụ thuộc bên dưới.
 
+### Bổ sung 2026-08 — Chất lượng dữ liệu (xong)
+
+Bối cảnh: khối lượng còn lại chỉ về 0 tại **thời điểm bấm đóng ticket** (Quy tắc 1,
+PRD §4.3.2), không phải ngày làm xong thật. Task đóng trễ mà không có worklog làm
+đường Thực tế trông như trễ — và engine không tự sửa được cho tập không có worklog.
+
+| ID | Tiêu đề | Effort | Model | Phụ thuộc | Vùng chính |
+|---|---|---|---|---|---|
+| **T-40** | [Cảnh báo task đóng nhưng chưa log giờ](./T-40-closed-no-worklog-dq.md) | medium | opus | T-13, T-14, T-27, T-33 | `apps/api`, `packages/db`, `packages/shared`, `apps/web/routes/ops` |
+
+Card này không có trong sơ đồ phụ thuộc bên dưới.
+
 ---
 
 ## 2. Sơ đồ phụ thuộc

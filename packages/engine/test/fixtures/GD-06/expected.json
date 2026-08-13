@@ -1,5 +1,5 @@
 {
-  "_how": "TÍNH TAY. Kế hoạch 02/03 → 06/03 = 5 ngày, 28800/5 = 5760s/ngày → Kế hoạch 23040, 17280, 11520, 5760, 0. Đường Thực tế đi theo trạng thái TẠI TỪNG MỐC: 02/03 đang làm, quy tắc 3 cho 28800 − 14400 = 14400; 03/03 đã Done nên quy tắc 1 cho 0; 04/03 bị mở lại nên quay về quy tắc 3 = 28800 − 14400 = 14400; 05/03 log thêm 7200 nên còn 7200; 06/03 Done lần nữa nên về 0. Ngày thực tế kết thúc: đã Done và CÓ worklog nên lấy ngày worklog MUỘN NHẤT = 05/03; lần Done cuối 06/03 chỉ là ngày bấm nút, không phải ngày làm việc cuối.",
+  "_how": "TÍNH TAY. Kế hoạch 02/03 → 06/03 = 5 ngày, 28800/5 = 5760s/ngày → Kế hoạch 23040, 17280, 11520, 5760, 0. Đường Thực tế: 02/03 đang làm, quy tắc 3 cho 28800 − 14400 = 14400; 03/03 đã Done nên quy tắc 1 cho 0; 04/03 bị mở lại nên quay về quy tắc 3 = 28800 − 14400 = 14400; 05/03 log thêm 2 giờ (w2) rồi ngừng — đây là lần làm CUỐI trước khi đóng HẲN 06/03 (sau 06/03 không mở lại nữa) và không ai sửa estimate sau đó, nên QUY TẮC 1b cho về 0 ngay từ 05/03 (ngày làm thật cuối) thay vì chờ ngày bấm Done 06/03; 06/03 Done nên vẫn 0. LƯU Ý 1b chỉ áp cho lần đóng DÍNH-LUÔN: lần đóng 03/03 là đóng NON (bị mở lại 04/03) nên 02/03 KHÔNG bị backdate, giữ quy tắc 3 = 14400. Ngày thực tế kết thúc: đã Done và CÓ worklog nên lấy ngày worklog MUỘN NHẤT = 05/03; lần Done cuối 06/03 chỉ là ngày bấm nút, không phải ngày làm việc cuối.",
   "workdays": [
     "2026-03-02",
     "2026-03-03",
@@ -110,7 +110,7 @@
       "snapshotDate": "2026-03-05",
       "snapshotAtUtc": "2026-03-05T16:59:59.999Z",
       "plannedRemainingS": 5760,
-      "actualRemainingS": 7200,
+      "actualRemainingS": 0,
       "totalScopeS": 28800,
       "totalSpentS": 21600,
       "scopeAddedS": 0,
@@ -121,7 +121,7 @@
       "perPhase": [
         {
           "phaseCode": "DESIGN",
-          "remainingS": 7200,
+          "remainingS": 0,
           "spentS": 21600,
           "originalS": 28800,
           "countTodo": 0,

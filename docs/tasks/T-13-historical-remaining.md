@@ -173,3 +173,19 @@ Hai dòng đầu và dòng cuối đều cho ra số 0 trong nhiều ca, nên r�
 `resolveOriginalEstimateAt` không chỉ tua các sự kiện **trước** mốc T. Nó còn đọc `fromValue` của sự kiện **đầu tiên sau** mốc T — vì đó chính là giá trị đang có tại thời điểm T.
 
 Nếu chỉ tua sự kiện trước T thì Sub-task tạo với OE = 40, sửa lên 60 vào ngày 15/03, sẽ không có sự kiện nào trước ngày 10/03 → phải dùng giá trị **hiện tại** là 60. Sai: ngày 10/03 nó đang là 40. Có test riêng, và một test nữa khẳng định phép trừ ở Quy tắc 3 dùng đúng 40.
+
+## Cập nhật 2026-08-13 — Quy tắc 1b: backdate khi đóng trễ (Phương án A)
+
+**Bối cảnh người dùng báo:** task đã làm xong nhưng nút Done bấm TRỄ hơn ngày làm thật (worklog cuối). Khối lượng còn lại chỉ về 0 ở Quy tắc 1 — tức đúng ngày bấm đóng — nên đường Thực tế treo phần dư suốt khoảng [làm xong → bấm đóng], biểu đồ đọc thành "task về trễ" dù việc đã xong.
+
+**Cách sửa:** thêm **Quy tắc 1b** giữa Quy tắc 1 và Quy tắc 2 (`resolveDoneBackdate`). Chưa Done tại `T_d` nhưng sẽ đóng HẲN ở tương lai (lần Done kế tiếp không bị mở lại nữa), có worklog trong lượt làm đó với worklog cuối `W ≤ T_d`, và không ai sửa estimate trong `(W, D]` → trả **0** từ ngày làm thật cuối. `rule` mới là `'1b'` (API `/explain` hiển thị riêng).
+
+**Bốn cân nhắc đã khoá bằng test** (7 test mới trong `remaining.test.ts`):
+- **Chỉ lần đóng DÍNH-LUÔN mới backdate.** Đóng non (bị mở lại sau đó) không backdate — phần dư của những ngày trước lần đóng non là có thật. Đây là lý do bảng ví dụ PRD §4.3.2 và ca reopen của GD-06 chỉ đổi tối thiểu (GD-15 không đổi).
+- **Phải CÓ worklog.** Không có bằng chứng thì rơi xuống Quy tắc 3 như cũ (C-10) — tập này được cảnh báo riêng ở Data quality (`CLOSED_NO_WORKLOG`, xem T-40).
+- **Còn worklog sau `T_d` → chưa xong tại `T_d`**, không backdate.
+- **Sửa estimate sau worklog cuối = phần dư cố ý** → không backdate, giữ Quy tắc 2. Chính điều kiện này khiến bảng PAY-121 (7 mốc) **không đổi một số nào**.
+
+**Golden bị ảnh hưởng:** chỉ **GD-06** (ca reopen) đổi đúng 1 mốc — 05/03 từ 7200 về 0 (lượt làm cuối đóng trễ 1 ngày). GD-15 và 18 golden còn lại không đổi. `_how` và README của GD-06 đã cập nhật kèm cách tính tay.
+
+**Cạm bẫy mới cho người sau:** đừng nới Quy tắc 1b sang cả lần đóng non — sẽ xoá mất phần dư của những ngày làm thật trước khi bị mở lại. Test `đóng NON ... thì KHÔNG backdate` tồn tại để chặn đúng việc đó.

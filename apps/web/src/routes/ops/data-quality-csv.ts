@@ -14,6 +14,7 @@ export const PROBLEM_LABEL: Record<DqProblem, string> = {
   MISSING_WBS_DATE: 'Missing planned dates',
   UNCLASSIFIED_PHASE: 'Unclassified phase',
   UNPARSED_TITLE: 'Title in wrong format',
+  CLOSED_NO_WORKLOG: 'Closed without logged work',
 };
 
 /** Escape theo RFC 4180: bọc nháy kép khi có dấu phẩy/nháy/xuống dòng. */
