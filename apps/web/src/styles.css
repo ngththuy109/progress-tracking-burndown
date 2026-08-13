@@ -58,6 +58,23 @@ code {
   padding: 1px 5px;
 }
 
+/* Mã ticket bấm được — mở thẳng ticket chi tiết trên Jira (tab mới), dùng ở mọi
+   màn đang in mã ticket. Cùng affordance với link "mở ticket" ở ô Signboard.
+   Giữ nguyên "chip mã" (nền xám của <code>), chỉ tô chữ theo màu nhấn + mũi tên ↗
+   để báo là link. Chưa cấu hình VITE_JIRA_BASE_URL thì <IssueLink> hạ về <code>
+   thô, không mang class này. */
+.issue-link {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.issue-link > code {
+  color: inherit;
+}
+.issue-link:hover > code {
+  text-decoration: underline;
+}
+
 .muted {
   color: var(--text-muted);
 }

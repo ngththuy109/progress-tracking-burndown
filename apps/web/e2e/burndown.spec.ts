@@ -231,7 +231,12 @@ test('ngày phát sinh việc hiện dấu mốc kèm Sub-task gây ra', async (
   const markers = page.getByRole('heading', { name: 'Chart markers' });
   await expect(markers).toBeVisible();
   await expect(page.getByText('30h of work was added')).toBeVisible();
-  await expect(page.getByText('PAY-13, PAY-14')).toBeVisible();
+  // Mỗi "thủ phạm" giờ là một mã ticket bấm được (mở sang Jira khi đã cấu hình
+  // site). Khớp theo TỪNG mã trong đúng dòng mốc, không phụ thuộc dấu phẩy nối
+  // hay mũi tên ↗ của link.
+  const causeRow = page.getByRole('listitem').filter({ hasText: '30h of work was added' });
+  await expect(causeRow).toContainText('PAY-13');
+  await expect(causeRow).toContainText('PAY-14');
 });
 
 test('kế hoạch bị lùi quá ngưỡng thì báo động ngay trên màn hình', async ({ page }) => {
