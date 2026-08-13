@@ -101,6 +101,14 @@ model JiraIssue {
 
   sbParseStatus String @default("UNPARSED") @map("sb_parse_status") @db.VarChar(24)
 
+  // ---- Cột PIC trên Signboard (Request participants) ----
+  // Gom "Request participants" của Jira theo TỪNG Sub-task, dạng mảng
+  // [{ accountId, displayName }]. Signboard gom theo Function + bỏ trùng lúc ĐỌC.
+  // Field Jira có thể CHỈ lưu accountId nên displayName tra thêm lúc đồng bộ
+  // (getUsersByAccountIds); null khi chưa tra được tên. NULL/[] = không có PIC.
+  // Chỉ Sub-task mới có; mã field khai ở config/jira-fields.yaml (tuỳ chọn).
+  sbRequestParticipants Json? @map("sb_request_participants")
+
   // ---- Data quality: "không cần sửa dữ liệu" (màn hình Monitoring) ----
   // true = người vận hành đã xác nhận ticket này CỐ Ý thiếu dữ liệu → loại khỏi
   // các số đo Data quality (cả tử số lẫn mẫu số). Ghi ai/lúc nào để truy vết.

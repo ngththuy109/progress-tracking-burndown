@@ -195,6 +195,31 @@ test('chọn một Phase thì thấy ma trận Function × loại task', async (
   await expect(page.getByRole('link', { name: 'Set sub-phase order' })).toHaveCount(0);
 });
 
+test('cột PIC hiện người phụ trách gom từ Request participants', async ({ page }) => {
+  await installApi(page, {
+    board: {
+      rows: [
+        {
+          functionKey: 'login',
+          functionName: 'Login',
+          pics: [
+            { accountId: 'u1', displayName: 'Nguyễn An' },
+            { accountId: 'u2', displayName: 'Trần Bình' },
+          ],
+          cells: [cell('COMPLETED', [ticket('S-1', 'COMPLETED')]), EMPTY, EMPTY],
+          subtotals: [cell('COMPLETED', [ticket('S-1', 'COMPLETED')])],
+          total: cell('COMPLETED', [ticket('S-1', 'COMPLETED')]),
+        },
+      ],
+      summary: { byStatus: { COMPLETED: 1 }, emptyCells: 2, totalCells: 3 },
+    },
+  });
+  await page.goto(PAGE);
+
+  await expect(page.getByRole('columnheader', { name: 'PIC' })).toBeVisible();
+  await expect(page.getByText('Nguyễn An, Trần Bình')).toBeVisible();
+});
+
 test('hai ticket cùng một ô thì hiện huy hiệu ≡2 và trạng thái xấu nhất', async ({ page }) => {
   await installApi(page);
   await page.goto(PAGE);

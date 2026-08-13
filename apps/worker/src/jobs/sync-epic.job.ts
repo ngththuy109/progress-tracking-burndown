@@ -8,6 +8,7 @@ import {
   type IssueRecord,
   type WorklogRecord,
 } from '../pipeline/persist-issues.js';
+import { resolveParticipantNames } from '../pipeline/resolve-participant-names.js';
 
 /**
  * Đồng bộ MỘT Epic đầu-cuối — PRD §4.2 giai đoạn 1–3.
@@ -172,6 +173,11 @@ export async function syncEpic(
 
     // --- GIAI ĐOẠN 3: phân tách tiêu đề rồi ghi xuống ---
     step = 'PERSIST';
+    // Tra tên hiển thị cho "Request participants" (cột PIC) TRƯỚC khi build vì
+    // `buildRecords` là hàm thuần. Chỉ tốn lời gọi khi field trả về accountId
+    // trống tên; lỗi tra tên KHÔNG làm hỏng đồng bộ, chỉ thành cảnh báo.
+    const participants = await resolveParticipantNames(deps.jira, tree.subtasks, deps.fields);
+
     const built = buildRecords({
       epicKey,
       tree,
@@ -179,6 +185,7 @@ export async function syncEpic(
       changelogByIssue: history.changelogByIssue,
       config: deps.config,
       fields: deps.fields,
+      participantNames: participants.names,
     });
 
     await deps.issues.upsertMany(built.issues);
@@ -250,7 +257,9 @@ export async function syncEpic(
       apiCalls: deps.jira.apiCallsMade,
       rateLimitHits: deps.jira.rateLimitHits,
       retroLogDetected,
-      warnings: built.warnings,
+      // Gộp cảnh báo tra tên PIC (nếu có) với cảnh báo phân tách tiêu đề — cùng
+      // đi ra log `sync.warning` ở wire.ts.
+      warnings: [...participants.warnings, ...built.warnings],
       errorMessage: null,
     };
   } catch (err) {
