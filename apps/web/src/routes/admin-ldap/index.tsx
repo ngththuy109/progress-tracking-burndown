@@ -15,8 +15,8 @@ import { Badge, EmptyState, ErrorState, LoadingState } from '../../components/ui
  *   3. Cảnh báo lối thoát `AUTH_FORCE_HEADER=1` ngay cạnh công tắc bật.
  */
 
-/** Hai cách xác định DN của user — khai đúng MỘT trong hai. */
-export type LdapBindMode = 'TEMPLATE' | 'SEARCH';
+/** Ba cách xác định user — khai ít nhất một bộ trường tương ứng. */
+export type LdapBindMode = 'TEMPLATE' | 'DIRECT_SEARCH' | 'SEARCH';
 
 /** `userFilter` không được null trong schema — mode direct-bind gửi mặc định này. */
 const DEFAULT_USER_FILTER = '(mail={username})';
@@ -43,11 +43,10 @@ const trimOrNull = (v: string): string | null => (v.trim() === '' ? null : v.tri
 /**
  * Ghép body cho cả PUT lẫn POST test.
  *
- * Theo đúng hợp đồng "exactly-one-of": các trường của CÁCH KHÔNG CHỌN gửi
- * `null` tường minh (kể cả `bindPassword` khi chuyển sang direct-bind — tài
- * khoản dịch vụ không còn được dùng thì không giữ mật khẩu của nó lại).
- * `bindPassword` ở mode search giữ ba trạng thái: không gửi = GIỮ; `null` =
- * XÓA; chuỗi = thay mới.
+ * Trường của CÁCH KHÔNG CHỌN gửi `null` tường minh (kể cả `bindPassword` khi
+ * KHÔNG dùng search-then-bind — tài khoản dịch vụ không còn thì không giữ mật
+ * khẩu của nó lại). `bindPassword` ở mode SEARCH giữ ba trạng thái: không gửi =
+ * GIỮ; `null` = XÓA; chuỗi = thay mới.
  */
 export function buildLdapBody(form: LdapFormState): UpdateLdapConfigRequest {
   const base = {
@@ -63,6 +62,19 @@ export function buildLdapBody(form: LdapFormState): UpdateLdapConfigRequest {
       userDnTemplate: trimOrNull(form.userDnTemplate),
       searchBase: null,
       userFilter: DEFAULT_USER_FILTER,
+      bindDn: null,
+      bindPassword: null,
+    };
+  }
+  if (form.bindMode === 'DIRECT_SEARCH') {
+    // AD direct-bind: template (bind bằng mật khẩu user) + search base/filter để
+    // TỰ TRA email trên chính kết nối đó. Không có tài khoản dịch vụ → bindDn/
+    // bindPassword đều null.
+    return {
+      ...base,
+      userDnTemplate: trimOrNull(form.userDnTemplate),
+      searchBase: trimOrNull(form.searchBase),
+      userFilter: form.userFilter.trim() === '' ? DEFAULT_USER_FILTER : form.userFilter.trim(),
       bindDn: null,
       bindPassword: null,
     };
@@ -94,7 +106,7 @@ export function ldapSaveHint(error: unknown): string | null {
     return 'Server thiếu biến môi trường ENCRYPTION_KEY nên không mã hóa được bind password. Đặt ENCRYPTION_KEY cho API, khởi động lại, rồi lưu lại.';
   }
   if (error.status === 400) {
-    return 'Khai đúng MỘT trong hai cách xác định user: Direct bind (template DN) HOẶC Search rồi bind (search base + filter) — không được cả hai, không được thiếu cả hai.';
+    return 'Chọn cách xác định user: Direct bind (template DN), Direct bind + tự tra email (template DN + search base, cho AD), hoặc Search rồi bind (search base + filter + tài khoản dịch vụ).';
   }
   return null;
 }
@@ -140,9 +152,14 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
 
   const [enabled, setEnabled] = useState(config.enabled);
   const [serverUrl, setServerUrl] = useState(config.serverUrl ?? '');
-  // Bản đã lưu có searchBase (mà không có template) → đang dùng search-bind.
+  // Suy mode từ bản đã lưu: CÓ CẢ template lẫn searchBase → AD direct-bind + tự
+  // tra email; chỉ searchBase → search-then-bind; còn lại → direct bind template.
   const [bindMode, setBindMode] = useState<LdapBindMode>(
-    config.searchBase !== null && config.userDnTemplate === null ? 'SEARCH' : 'TEMPLATE',
+    config.userDnTemplate !== null && config.searchBase !== null
+      ? 'DIRECT_SEARCH'
+      : config.searchBase !== null
+        ? 'SEARCH'
+        : 'TEMPLATE',
   );
   const [userDnTemplate, setUserDnTemplate] = useState(config.userDnTemplate ?? '');
   const [searchBase, setSearchBase] = useState(config.searchBase ?? '');
@@ -221,6 +238,20 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
             <input
               type="radio"
               name="ldap-bind-mode"
+              checked={bindMode === 'DIRECT_SEARCH'}
+              onChange={() => setBindMode('DIRECT_SEARCH')}
+              aria-label="Direct bind + tự tra email (Active Directory)"
+            />
+            <span>
+              <strong>Direct bind + tự tra email (Active Directory)</strong> — bind bằng CHÍNH
+              mật khẩu người dùng (vd <code>congty.vn\{'{username}'}</code>), rồi tra email bằng
+              đúng kết nối đó. Không cần tài khoản dịch vụ.
+            </span>
+          </label>
+          <label className="choice">
+            <input
+              type="radio"
+              name="ldap-bind-mode"
               checked={bindMode === 'SEARCH'}
               onChange={() => setBindMode('SEARCH')}
               aria-label="Search rồi bind (Active Directory)"
@@ -232,29 +263,41 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
           </label>
         </fieldset>
 
-        {bindMode === 'TEMPLATE' ? (
-          <>
-            <label className="field">
-              <span>
-                Template DN (chứa <code>{'{username}'}</code>)
-              </span>
-              <input
-                className="input input--wide input--code"
-                value={userDnTemplate}
-                placeholder="uid={username},ou=users,dc=congty,dc=vn"
-                aria-label="Template DN"
-                onChange={(e) => setUserDnTemplate(e.target.value)}
-              />
-            </label>
-          </>
-        ) : (
+        {(bindMode === 'TEMPLATE' || bindMode === 'DIRECT_SEARCH') && (
+          <label className="field">
+            <span>
+              Template DN (chứa <code>{'{username}'}</code>)
+            </span>
+            <input
+              className="input input--wide input--code"
+              value={userDnTemplate}
+              placeholder={
+                bindMode === 'DIRECT_SEARCH'
+                  ? 'congty.vn\\{username}'
+                  : 'uid={username},ou=users,dc=congty,dc=vn'
+              }
+              aria-label="Template DN"
+              onChange={(e) => setUserDnTemplate(e.target.value)}
+            />
+          </label>
+        )}
+        {bindMode === 'DIRECT_SEARCH' && (
+          <p className="field-hint">
+            App bind bằng chính mật khẩu người dùng theo mẫu trên (AD nhận{' '}
+            <code>{'DOMAIN\\{username}'}</code> hoặc UPN <code>{'{username}@congty.vn'}</code>),
+            rồi TỰ TRA email bằng đúng kết nối đó — không cần tài khoản dịch vụ. Khai Search base
+            + User filter bên dưới để tra email.
+          </p>
+        )}
+
+        {(bindMode === 'DIRECT_SEARCH' || bindMode === 'SEARCH') && (
           <>
             <label className="field">
               <span>Search base</span>
               <input
                 className="input input--wide input--code"
                 value={searchBase}
-                placeholder="ou=users,dc=congty,dc=vn"
+                placeholder="dc=congty,dc=vn"
                 aria-label="Search base"
                 onChange={(e) => setSearchBase(e.target.value)}
               />
@@ -271,6 +314,11 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
                 onChange={(e) => setUserFilter(e.target.value)}
               />
             </label>
+          </>
+        )}
+
+        {bindMode === 'SEARCH' && (
+          <>
             <label className="field">
               <span>Bind DN (tài khoản dịch vụ)</span>
               <input

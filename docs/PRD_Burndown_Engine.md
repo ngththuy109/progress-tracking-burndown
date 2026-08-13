@@ -2339,7 +2339,7 @@ CREATE INDEX idx_planshift_epic
 >
 > Signboard vì thế **tính lúc đọc**: một truy vấn trên `jira_issue` (đã có sẵn `function_key`, `task_type`, ngày plan/actual) rồi chạy cây quyết định ở mục 6.3 — thuần tính toán, không gọi Jira, không đọc lịch sử. Nhờ vậy Signboard rẻ hơn hẳn Burndown và không cần thêm bảng nào.
 
-> **Bảng phân quyền (bổ sung cho SSO, 2026-08-09 — xem [AUTH.md](./AUTH.md)).** Hai bảng dưới đây không có trong PRD gốc; thêm khi lắp xác thực SSO. Nguồn sự thật của role/projects — cổng SSO chỉ xác thực *danh tính*, còn *vai trò* tra ở đây.
+> **Bảng phân quyền (bổ sung 2026-08-09 — xem [AUTH.md](./AUTH.md)).** Hai bảng dưới đây không có trong PRD gốc; thêm khi lắp xác thực. Nguồn sự thật của role/projects — đăng nhập (LDAP) chỉ xác thực *danh tính*, còn *vai trò* tra ở đây.
 
 ```sql
 -- ============================================================
@@ -2836,7 +2836,7 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 | Xoay vòng token | 90 ngày/lần. Có runbook hướng dẫn. Cảnh báo trước hạn 14 ngày. |
 | Chuẩn bị cho tương lai | Bọc phần xác thực sau interface `CredentialProvider`, để sau này chuyển sang OAuth mà không phải sửa engine. |
 | Ghi log | **Cấm ghi token vào log.** Có bộ lọc tự động che (redact) header `Authorization`. |
-| Xác thực người dùng | SSO (OpenID Connect) qua một **auth proxy** đứng trước API; proxy đặt header danh tính `x-user-id` (email đã xác thực) và **xoá header `x-user-*` giả** từ client. IdP đã chốt: **Microsoft Entra ID**. Chi tiết: [AUTH.md](./AUTH.md); cấu hình cổng: `config/auth-proxy/`. |
+| Xác thực người dùng | App tự đăng nhập bằng **LDAP** (form username/password → bind LDAP → phiên `ptb_sess`); API tra vai trò ở bảng `app_user`, KHÔNG tin `role` từ bên ngoài. Chi tiết: [AUTH.md](./AUTH.md). |
 | Phân quyền người dùng | Vai trò `ADMIN` / `PM` / `VIEWER` **tra bảng `app_user`** (KHÔNG suy từ quyền Jira, KHÔNG tin `role` từ header). VIEWER xem tất cả; PM xem/thao tác project mình phụ trách (gán từ danh mục `project` — nhiều–nhiều); ADMIN toàn quyền. Kiểm ở tầng API. |
 | Quyền sửa cấu hình Phase | Chỉ role **Admin** (sửa bộ Mặc định) và **PM** (sửa bộ ghi đè của project mình phụ trách). Người dùng thường chỉ xem. Mọi lần lưu đều ghi `created_by` + ghi chú lý do. |
 | Quản lý phân quyền | Chỉ **ADMIN**: màn hình Users/Projects hoặc `pnpm auth:grant`. Admin đầu tiên mồi qua `AUTH_BOOTSTRAP_ADMINS`. Không cho tự hạ quyền chính mình. |

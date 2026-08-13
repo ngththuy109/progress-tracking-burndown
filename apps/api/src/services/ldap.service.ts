@@ -9,12 +9,18 @@ import type { LdapTestResponse } from '@app/shared';
  * vậy toàn bộ nhánh lỗi (sai mật khẩu, server chết, filter hỏng…) kiểm được
  * bằng vitest mà không cần một server LDAP nào.
  *
- * Hai chế độ xác định DN của user — cấu hình khai ĐÚNG MỘT trong hai:
- *   - Direct bind: `userDnTemplate` chứa {username} → thế username (đã escape
- *     theo luật DN) rồi bind thẳng bằng mật khẩu người dùng.
- *   - Search-then-bind: bind tài khoản dịch vụ → search `userFilter` (đã escape
- *     theo luật filter RFC 4515) trong `searchBase` → bind DN tìm được trên MỘT
- *     KẾT NỐI MỚI. Đây là cách chuẩn với Active Directory.
+ * Ba chế độ xác định user — SUY RA từ trường nào được khai:
+ *   - Direct bind (OpenLDAP): CHỈ `userDnTemplate` chứa {username} → thế
+ *     username (đã escape theo luật DN) rồi bind thẳng bằng mật khẩu người
+ *     dùng; đọc email bằng base-read trên chính DN vừa bind.
+ *   - Direct bind + tự tra email (Active Directory): `userDnTemplate` (vd
+ *     `congty.vn\{username}` hoặc `{username}@congty.vn`) + `searchBase` +
+ *     `userFilter`, KHÔNG có tài khoản dịch vụ. Bind bằng mật khẩu người dùng,
+ *     rồi tra email bằng subtree search TRÊN CHÍNH KẾT NỐI ĐÓ — vì DN kiểu
+ *     `DOMAIN\user`/UPN không đọc base được.
+ *   - Search-then-bind (Active Directory): bind tài khoản dịch vụ → search
+ *     `userFilter` (đã escape theo RFC 4515) trong `searchBase` → bind DN tìm
+ *     được trên MỘT KẾT NỐI MỚI.
  *
  * AN TOÀN QUAN TRỌNG NHẤT: mật khẩu RỖNG bị từ chối TRƯỚC khi chạm client.
  * LDAP coi bind với mật khẩu rỗng là ANONYMOUS BIND và trả "thành công" —
@@ -204,15 +210,15 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
   }
   const hasTemplate = config.userDnTemplate !== null && config.userDnTemplate.trim() !== '';
   const hasSearchBase = config.searchBase !== null && config.searchBase.trim() !== '';
-  if (hasTemplate === hasSearchBase) {
-    log?.('Cấu hình LDAP phải khai đúng MỘT trong hai: userDnTemplate hoặc searchBase.');
+  if (!hasTemplate && !hasSearchBase) {
+    log?.('Cấu hình LDAP phải khai userDnTemplate và/hoặc searchBase.');
     return { error: 'CONFIG_INVALID' };
   }
 
   const factoryArgs = { url: config.serverUrl, allowSelfSigned: config.allowSelfSigned };
 
   if (hasTemplate) {
-    // ---- Direct bind --------------------------------------------------------
+    // ---- Direct bind: bind bằng CHÍNH mật khẩu người dùng --------------------
     const userDn = config.userDnTemplate!.replaceAll('{username}', escapeLdapDnValue(username));
     const client = clientFactory(factoryArgs);
     try {
@@ -229,28 +235,51 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
         return { error: 'SERVER_UNREACHABLE' };
       }
 
-      // LUÔN đọc email từ entry sau khi bind thành công — danh tính trong hệ
-      // thống là email (khớp app_user), không phải username LDAP.
-      let entries: LdapEntry[];
+      // LUÔN đọc email sau khi bind — danh tính hệ thống là email (khớp
+      // app_user), không phải username LDAP. Đọc trên CHÍNH kết nối vừa xác
+      // thực nên KHÔNG cần tài khoản dịch vụ.
+      let entry: LdapEntry | undefined;
       try {
-        const res = await client.search(userDn, {
-          scope: 'base',
-          attributes: [config.emailAttribute],
-        });
-        entries = res.searchEntries;
+        if (hasSearchBase) {
+          // Active Directory: DN bind kiểu 'DOMAIN\user' (hoặc UPN) KHÔNG phải
+          // một DN đọc base được → tra email bằng subtree search theo userFilter,
+          // vẫn trên kết nối đã xác thực của user.
+          const filter = config.userFilter.replaceAll(
+            '{username}',
+            escapeLdapFilterValue(username),
+          );
+          const res = await client.search(config.searchBase!, {
+            scope: 'sub',
+            filter,
+            attributes: [config.emailAttribute],
+          });
+          // 0 (không thấy) và >1 (filter nhập nhằng) đều là "đăng nhập sai".
+          if (res.searchEntries.length !== 1) {
+            log?.(`Filter khớp ${res.searchEntries.length} entry cho một username — từ chối.`);
+            return { error: 'LOGIN_FAILED' };
+          }
+          entry = res.searchEntries[0];
+        } else {
+          // OpenLDAP: DN dựng từ template là DN thật → đọc base ngay trên nó.
+          const res = await client.search(userDn, {
+            scope: 'base',
+            attributes: [config.emailAttribute],
+          });
+          entry = res.searchEntries[0];
+        }
       } catch (err) {
         if (isLdapResultError(err)) {
-          log?.(`Đọc entry sau bind thất bại: ${errMessage(err)}`);
+          log?.(`Đọc email sau bind thất bại: ${errMessage(err)}`);
           return { error: 'LOGIN_FAILED' };
         }
-        log?.(`Mất kết nối LDAP khi đọc entry: ${errMessage(err)}`);
+        log?.(`Mất kết nối LDAP khi đọc email: ${errMessage(err)}`);
         return { error: 'SERVER_UNREACHABLE' };
       }
 
-      const email = firstAttributeValue(entries[0], config.emailAttribute);
+      const email = firstAttributeValue(entry, config.emailAttribute);
       if (email === null) {
         log?.(
-          `Entry ${userDn} không có attribute email "${config.emailAttribute}" — không cấp phiên được.`,
+          `Không đọc được attribute email "${config.emailAttribute}" sau khi bind ${userDn} — không cấp phiên được.`,
         );
         return { error: 'LOGIN_FAILED' };
       }
@@ -380,13 +409,16 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
   }
   const hasTemplate = config.userDnTemplate !== null && config.userDnTemplate.trim() !== '';
   const hasSearchBase = config.searchBase !== null && config.searchBase.trim() !== '';
-  if (hasTemplate === hasSearchBase) {
+  if (!hasTemplate && !hasSearchBase) {
     return fail(
       'BIND',
-      'Phải khai đúng MỘT trong hai: User DN template (direct bind) hoặc Search base (search-then-bind).',
+      'Phải khai User DN template (direct bind) hoặc Search base — hoặc cả hai (AD direct-bind + tự tra email).',
     );
   }
-  if (hasSearchBase) {
+  // CHỈ search-then-bind (không template) mới cần tài khoản dịch vụ. Direct bind
+  // + tự tra email (có CẢ template lẫn searchBase) bind bằng mật khẩu người dùng
+  // nên KHÔNG cần bindDn/bindPassword.
+  if (hasSearchBase && !hasTemplate) {
     const bindDn = config.bindDn?.trim() ?? '';
     const bindPassword = config.bindPassword ?? '';
     if (bindDn === '' || bindPassword === '') {
@@ -403,9 +435,10 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
   });
   try {
     if (hasTemplate) {
-      // ---- Direct bind: không có tài khoản dịch vụ để thử ------------------
-      // Chỉ kiểm KẾT NỐI bằng một lượt đọc root DSE nặc danh. Server từ chối
-      // đọc nặc danh (một mã kết quả LDAP) vẫn tính là NỐI ĐƯỢC — nó đã trả lời.
+      // ---- Direct bind: bind bằng mật khẩu người dùng lúc đăng nhập, ở đây
+      // KHÔNG có credential để thử. Chỉ kiểm KẾT NỐI bằng một lượt đọc root DSE
+      // nặc danh; server từ chối đọc nặc danh (một mã kết quả LDAP) vẫn tính là
+      // NỐI ĐƯỢC — nó đã trả lời.
       try {
         await client.search('', { scope: 'base', attributes: ['1.1'] });
       } catch (err) {
@@ -422,7 +455,9 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
       steps.push({
         step: 'SEARCH',
         ok: true,
-        detail: 'Bỏ qua — direct bind xác định DN bằng template, không cần search.',
+        detail: hasSearchBase
+          ? `Sẽ tra email bằng chính kết nối của user trong ${config.searchBase} — kiểm khi user đăng nhập thật.`
+          : 'Bỏ qua — direct bind xác định DN bằng template, không cần search.',
       });
       return { ok: true, steps };
     }

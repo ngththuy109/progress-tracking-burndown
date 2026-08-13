@@ -383,9 +383,8 @@ Worker chờ tối đa 30 giây cho job đang chạy. Quá hạn nó thoát vớ
 
 ### 2a. Bật đăng nhập LDAP (lần đầu)
 
-Chuyển từ chế độ header (cổng SSO) sang app tự đăng nhập bằng LDAP. Toàn bộ cấu
-hình nằm trên UI (bảng `auth_ldap_config`), không sửa file. Chi tiết mô hình: xem
-[AUTH.md §1](./AUTH.md).
+Bật app tự đăng nhập bằng LDAP. Toàn bộ cấu hình nằm trên UI (bảng
+`auth_ldap_config`), không sửa file. Chi tiết mô hình: xem [AUTH.md §1](./AUTH.md).
 
 Nếu dùng **search-then-bind** (có tài khoản dịch vụ), đặt khoá mã hoá bind password
 cho CẢ api lẫn worker trước — direct bind thì bỏ qua bước này:
@@ -398,9 +397,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 Sau đó, **vẫn đang ở chế độ header** (đăng nhập bằng cổng/dev như thường):
 
 1. Đăng nhập bằng tài khoản **ADMIN**, vào **Admin → LDAP**.
-2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn ĐÚNG MỘT cách xác định DN:
+2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn một cách xác định user:
    - **Direct bind (template DN)** — `Template DN` chứa `{username}`, ví dụ
      `uid={username},ou=users,dc=cty,dc=vn` (hợp OpenLDAP).
+   - **Direct bind + tự tra email (Active Directory)** — bind bằng CHÍNH mật khẩu
+     người dùng: `Template DN` kiểu `cty.com.vn\{username}` (hoặc UPN
+     `{username}@cty.com.vn`), rồi khai `Search base` + `User filter` (vd
+     `(cn={username})`) để app TỰ TRA email trên chính kết nối đó. KHÔNG cần tài
+     khoản dịch vụ (bỏ trống Bind DN/password).
    - **Search rồi bind (Active Directory)** — `Bind DN` + `Bind password` tài khoản
      dịch vụ, `Search base`, và `User filter` chứa `{username}` (ví dụ
      `(sAMAccountName={username})` cho Active Directory).
@@ -422,9 +426,10 @@ LDAP server vẫn có thể hỏng SAU khi bật (đổi mật khẩu tài kho�
 cấu trúc cây LDAP, server sập...). Khi không ai đăng nhập được nữa:
 
 ```bash
-# 1. Tạm quay về chế độ header (cổng/dev):
+# 1. Tạm quay về đường header (dev/khôi phục):
 AUTH_FORCE_HEADER=1   # đặt vào env của API rồi khởi động lại
-# 2. Vào Admin → LDAP bằng đường header như trước, sửa cấu hình, Test pass, Lưu.
+# 2. Vào Admin → LDAP với header danh tính x-user-id=<email admin> (đặt qua
+#    reverse proxy tạm, hoặc gọi API bằng curl -H). Sửa cấu hình, Test pass, Lưu.
 # 3. BỎ AUTH_FORCE_HEADER đi và khởi động lại lần nữa.
 ```
 

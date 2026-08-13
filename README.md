@@ -221,7 +221,7 @@ All under [`docs/`](./docs), in Vietnamese:
 | [`PRD_Burndown_Engine.md`](./docs/PRD_Burndown_Engine.md) | The full product spec — rules, edge cases, risks |
 | [`PHASE-MAPPING.md`](./docs/PHASE-MAPPING.md) | How a ticket gets its Phase, and when a settings change shows up on screens |
 | [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Package boundaries and why they exist |
-| [`AUTH.md`](./docs/AUTH.md) | Login modes (LDAP in-app / SSO gateway), the three roles, and how to grant access |
+| [`AUTH.md`](./docs/AUTH.md) | LDAP login, the three roles, and how to grant access |
 | [`ONBOARDING.md`](./docs/ONBOARDING.md) | A new developer, day one |
 | [`WEB-SERVER.md`](./docs/WEB-SERVER.md) | Building and serving the web app on a configurable port (default 8080) |
 | [`RUNBOOK.md`](./docs/RUNBOOK.md) | Whoever is on call, possibly at 2am |
