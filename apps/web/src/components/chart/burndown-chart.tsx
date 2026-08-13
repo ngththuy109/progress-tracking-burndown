@@ -379,6 +379,12 @@ export function BurndownChart({
       width={width}
       height={height}
       data={rows}
+      // Lề PHẢI rộng hơn mặc định: nhãn ngày cuối cùng nằm ngay mép phải vùng vẽ
+      // và căn GIỮA (`textAnchor="middle"` trong `dayAxisTick`), nên nửa bên phải
+      // của nó (`YYYY-MM-DD` ~32px/2) tràn khỏi SVG và bị cắt cụt ("2026-0…").
+      // Chừa ~nửa bề rộng một nhãn để ngày cuối hiện đủ. Lề trái/trên/dưới giữ
+      // đúng mặc định Recharts (5) — truyền cả bốn vì `margin` GHI ĐÈ trọn gói.
+      margin={{ top: 5, right: 40, bottom: 5, left: 5 }}
       onClick={(state: { activeLabel?: string | number }) => {
         const label = state.activeLabel;
         if (typeof label === 'string' && !unclickableDays.has(label) && onPointClick) onPointClick(label);
