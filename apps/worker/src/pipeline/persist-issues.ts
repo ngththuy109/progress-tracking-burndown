@@ -209,14 +209,19 @@ export function buildRecords(args: {
 
   const issues: IssueRecord[] = [];
   const phaseOfTask = new Map<string, string>();
+  // Title NGUYÊN VĂN của Task cha — tầng GROUP nguồn PARENT_TASK_TITLE bóc chiều
+  // riêng (VD giai đoạn) từ đây, KHÔNG đi qua kết quả parse Phase.
+  const titleOfTask = new Map<string, string>();
 
   if (tree.epic) {
     issues.push(baseRecord(tree.epic, ISSUE_TYPE.EPIC, epicKey, fields));
   }
 
   for (const t of tree.tasks) {
-    const parsed = taskParser.parse(stringField(t.fields['summary']));
+    const taskTitle = stringField(t.fields['summary']);
+    const parsed = taskParser.parse(taskTitle);
     phaseOfTask.set(t.key, parsed.phaseCode);
+    titleOfTask.set(t.key, taskTitle);
     warnings.push(...parsed.warnings);
 
     issues.push({
@@ -241,6 +246,7 @@ export function buildRecords(args: {
     // ĐÚNG bằng `parsed.phaseCode` hôm nay (Sub-task luôn kế thừa Phase của Task cha).
     const keys = groupResolver.resolve({
       parentPhase,
+      parentTaskTitle: (parentKey ? titleOfTask.get(parentKey) : undefined) ?? null,
       leafTitle: summary,
       leafLabels: labelsOf(s.fields),
     });

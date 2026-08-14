@@ -279,3 +279,89 @@ describe('buildRecords — Request participants (cột PIC)', () => {
     expect(bySub(built, 'PAY-101').sbRequestParticipants).toEqual([]);
   });
 });
+
+// ===========================================================================
+// Tầng GROUP nguồn PARENT_TASK_TITLE — giai đoạn bóc từ title Task cha
+// (kịch bản "[{epic}][{team}]TênPhase", team offshore_P1/P2 ánh xạ GĐ1/GĐ2).
+// ===========================================================================
+describe('buildRecords — tầng Giai đoạn từ title Task cha', () => {
+  const STAGE_CONFIG: EffectiveConfig = {
+    ...CONFIG,
+    tiers: [
+      {
+        tierOrder: 1,
+        code: 'GIAI_DOAN',
+        labelVi: 'Giai đoạn',
+        labelJa: null,
+        role: 'GROUP',
+        sourceType: 'PARENT_TASK_TITLE',
+        sourceConfig: null,
+        definitions: [],
+        rules: [
+          { keyword: 'offshore_P1', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 10 },
+          { keyword: 'offshore_P2', matchMode: 'CONTAINS', groupCode: 'GD2', matchPriority: 10 },
+          // Catch-all: mọi title đều chứa "[" — Task không mang GĐ rơi về GD1.
+          { keyword: '[', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 90 },
+        ],
+        titlePatterns: [],
+        displayOrder: 0,
+      },
+      {
+        tierOrder: 2,
+        code: 'PHASE',
+        labelVi: 'Phase',
+        labelJa: null,
+        role: 'PHASE',
+        sourceType: 'PARENT_TASK_TITLE',
+        sourceConfig: null,
+        definitions: [],
+        rules: [],
+        titlePatterns: [],
+        displayOrder: 1,
+      },
+    ],
+  };
+
+  function runStage(tasks: JiraIssue[], subtasks: JiraIssue[]) {
+    const tree: EpicTree = {
+      epic: mkIssue('1000', 'PAY-100', 'Cổng thanh toán'),
+      tasks,
+      subtasks,
+      liveKeys: new Set(['PAY-100', ...tasks.map((t) => t.key), ...subtasks.map((s) => s.key)]),
+    };
+    return buildRecords({
+      epicKey: 'PAY-100',
+      tree,
+      worklogsByIssue: new Map(),
+      changelogByIssue: new Map(),
+      config: STAGE_CONFIG,
+      fields: FIELDS,
+    });
+  }
+
+  it('lá thừa hưởng GĐ từ title Task cha — hai giai đoạn tách rõ, phaseCode không đổi', () => {
+    const built = runStage(
+      [
+        mkIssue('1001', 'PAY-101', '[PAY][offshore_P1]Development', 'PAY-100'),
+        mkIssue('1002', 'PAY-102', '[PAY][offshore_P2]Development', 'PAY-100'),
+      ],
+      [
+        mkIssue('2001', 'PAY-201', '[PAY][TeamA][Development][Login]_Create', 'PAY-101'),
+        mkIssue('2002', 'PAY-202', '[PAY][TeamA][Development][Login]_Create', 'PAY-102'),
+      ],
+    );
+    expect(bySub(built, 'PAY-201').groupPath).toEqual(['GD1', 'DEVELOPMENT']);
+    expect(bySub(built, 'PAY-201').phaseCode).toBe('DEVELOPMENT');
+    expect(bySub(built, 'PAY-202').groupPath).toEqual(['GD2', 'DEVELOPMENT']);
+    expect(bySub(built, 'PAY-202').phaseCode).toBe('DEVELOPMENT');
+  });
+
+  it('Task không mang GĐ (Epic 1 giai đoạn, title cũ) rơi catch-all về GD1', () => {
+    const built = runStage(
+      [mkIssue('1001', 'PAY-101', '[Phase] Development', 'PAY-100')],
+      [mkIssue('2001', 'PAY-201', '[PAY][TeamA][Development][Login]_Create', 'PAY-101')],
+    );
+    expect(bySub(built, 'PAY-201').groupPath).toEqual(['GD1', 'DEVELOPMENT']);
+    expect(bySub(built, 'PAY-201').phaseCode).toBe('DEVELOPMENT');
+  });
+});

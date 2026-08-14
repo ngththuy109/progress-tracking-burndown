@@ -29,8 +29,14 @@ export interface ResolvedGroupKeys {
 }
 
 export interface ResolveGroupKeysInput {
-  /** Phase của Task cha, đã tính sẵn ở persist-issues — nguồn cho tầng `PARENT_TASK_TITLE`. */
+  /** Phase của Task cha, đã tính sẵn ở persist-issues — nguồn cho tầng ✦PHASE/`PARENT_TASK_TITLE`. */
   readonly parentPhase: string;
+  /**
+   * Tiêu đề NGUYÊN VĂN của Task cha — nguồn cho tầng GROUP/`PARENT_TASK_TITLE` (tầng
+   * bóc một chiều KHÁC từ cùng title, VD `[PAY][offshore_P1]Design` → giai đoạn GD1).
+   * `null`/vắng (lá mồ côi, scope QUERY) ⇒ tầng đó ra UNCLASSIFIED.
+   */
+  readonly parentTaskTitle?: string | null;
   /** Tiêu đề CHÍNH lá — nguồn cho tầng `SELF_TITLE` / `SUBTASK_TITLE_TOKEN` (§2.4–2.5). */
   readonly leafTitle: string;
   /** Nhãn (labels) Jira của lá — nguồn cho tầng `LABEL`. */
@@ -52,6 +58,13 @@ export class GroupKeyResolver {
   private readonly phaseTierIndex: number;
   /** Parser dựng SẴN cho tầng `SELF_TITLE`; `null` cho tầng không cần parse tiêu đề lá. */
   private readonly selfParsers: readonly (TaskTitleParser | null)[];
+  /**
+   * Parser dựng SẴN cho tầng GROUP nguồn `PARENT_TASK_TITLE` — bóc một chiều KHÁC
+   * (giai đoạn, stream…) từ title Task cha bằng mẫu/luật RIÊNG của tầng. Tầng ✦PHASE
+   * cùng nguồn thì KHÔNG có parser ở đây: nó lấy thẳng `parentPhase` đã tính (bất
+   * biến byte-identical — phase_code phải đúng bằng kết quả của cấu hình Phase).
+   */
+  private readonly parentParsers: readonly (TaskTitleParser | null)[];
   /** Parser Sub-task dùng chung cho mọi tầng `SUBTASK_TITLE_TOKEN`; `null` nếu không có tầng nào. */
   private readonly subtaskParser: SubtaskTitleParser | null;
 
@@ -75,6 +88,12 @@ export class GroupKeyResolver {
         : null,
     );
 
+    this.parentParsers = tiers.map((t) =>
+      t.sourceType === 'PARENT_TASK_TITLE' && t.role !== 'PHASE'
+        ? new TaskTitleParser(tierAsEffectiveConfig(t, config), runner)
+        : null,
+    );
+
     // Chỉ dựng parser Sub-task khi thực sự có tầng token — tránh cảnh báo/chi phí thừa.
     this.subtaskParser = tiers.some((t) => t.sourceType === 'SUBTASK_TITLE_TOKEN')
       ? new SubtaskTitleParser(config, runner)
@@ -84,10 +103,18 @@ export class GroupKeyResolver {
   resolve(input: ResolveGroupKeysInput): ResolvedGroupKeys {
     const groupPath = this.tiers.map((t, i) => {
       switch (t.sourceType) {
-        // Tầng dựa tiêu đề Task cha = Phase của cha đã parse sẵn — KHÔNG parse lại, giữ
-        // byte-identical với mô hình 3 tầng hôm nay (persist-issues.phaseOfTask).
-        case 'PARENT_TASK_TITLE':
-          return input.parentPhase;
+        // Tầng ✦PHASE dựa tiêu đề Task cha = Phase của cha đã parse sẵn — KHÔNG parse
+        // lại, giữ byte-identical với mô hình 3 tầng hôm nay (persist-issues.phaseOfTask).
+        // Tầng GROUP cùng nguồn thì parse title cha bằng mẫu/luật RIÊNG của tầng — bóc
+        // một chiều khác từ cùng title (VD "[PAY][offshore_P1]Design" → giai đoạn GD1).
+        case 'PARENT_TASK_TITLE': {
+          const parser = this.parentParsers[i] ?? null;
+          if (parser === null) return input.parentPhase;
+          const title = input.parentTaskTitle?.trim() ?? '';
+          // Lá không có Task cha (mồ côi, scope QUERY) ⇒ không có gì để bóc. Không
+          // đoán bừa — UNCLASSIFIED hiện rõ trên biểu đồ.
+          return title === '' ? UNCLASSIFIED_PHASE : parser.parse(title).phaseCode;
+        }
         // Bóc khoá từ CHÍNH tiêu đề lá bằng đúng bộ máy parse Task (mẫu tiêu đề + luật
         // từ khoá của tầng). Dùng cho project 2 tầng / phẳng (§2.4–2.5).
         case 'SELF_TITLE':

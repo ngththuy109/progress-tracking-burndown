@@ -212,6 +212,108 @@ describe('tầng LABEL — bóc khoá từ nhãn Jira theo tiền tố', () => {
   });
 });
 
+describe('tầng GROUP nguồn PARENT_TASK_TITLE — bóc chiều RIÊNG từ title Task cha', () => {
+  /** Kịch bản "giai đoạn": title Task dạng `[{epic}][{team}]TênPhase`, team ánh xạ GĐ. */
+  const stageConfig = mkConfig({
+    tiers: [
+      {
+        tierOrder: 1,
+        code: 'GIAI_DOAN',
+        labelVi: 'Giai đoạn',
+        labelJa: null,
+        role: 'GROUP',
+        sourceType: 'PARENT_TASK_TITLE',
+        sourceConfig: null,
+        definitions: [],
+        rules: [
+          { keyword: 'offshore_P1', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 10 },
+          { keyword: 'offshore_P2', matchMode: 'CONTAINS', groupCode: 'GD2', matchPriority: 10 },
+          // Catch-all: mọi title có "[" — Epic 1 giai đoạn rơi hết về GD1.
+          { keyword: '[', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 90 },
+        ],
+        titlePatterns: [],
+        displayOrder: 0,
+      },
+      {
+        tierOrder: 2,
+        code: 'PHASE',
+        labelVi: 'Phase',
+        labelJa: null,
+        role: 'PHASE',
+        sourceType: 'PARENT_TASK_TITLE',
+        sourceConfig: null,
+        definitions: [],
+        // Tầng ✦PHASE có luật riêng CŨNG bị bỏ qua — phaseCode phải đúng bằng kết
+        // quả cấu hình Phase (parentPhase), nếu không Signboard/per_phase lệch nhau.
+        rules: [{ keyword: 'BẪY', matchMode: 'CONTAINS', groupCode: 'SAI', matchPriority: 1 }],
+        titlePatterns: [],
+        displayOrder: 1,
+      },
+    ],
+  });
+
+  it('ánh xạ team → GĐ từ title cha; tầng ✦PHASE vẫn lấy parentPhase', () => {
+    const resolver = new GroupKeyResolver(stageConfig);
+    expect(
+      resolver.resolve({
+        parentPhase: 'DESIGN',
+        parentTaskTitle: '[PAY][offshore_P1]Design',
+        leafTitle: '[PAY][TeamA][Design][Login]_Create',
+      }),
+    ).toEqual({ groupPath: ['GD1', 'DESIGN'], phaseCode: 'DESIGN' });
+    expect(
+      resolver.resolve({
+        parentPhase: 'DEV',
+        parentTaskTitle: '[PAY][offshore_P2]Development',
+        leafTitle: 'x',
+      }),
+    ).toEqual({ groupPath: ['GD2', 'DEV'], phaseCode: 'DEV' });
+  });
+
+  it('team không thuộc ánh xạ nào ⇒ rơi catch-all (Epic 1 giai đoạn về GD1, chạy như cũ)', () => {
+    const resolver = new GroupKeyResolver(stageConfig);
+    expect(
+      resolver.resolve({ parentPhase: 'DESIGN', parentTaskTitle: '[CRM][onsite]Design', leafTitle: 'x' }),
+    ).toEqual({ groupPath: ['GD1', 'DESIGN'], phaseCode: 'DESIGN' });
+  });
+
+  it('mẫu tiêu đề riêng của tầng bóc đúng ngoặc 2 rồi mới áp luật', () => {
+    const withPattern = mkConfig({
+      tiers: [
+        {
+          ...stageConfig.tiers![0]!,
+          titlePatterns: [{ patternText: '[{project}][{name}]{task}', sortOrder: 1 }],
+          rules: [
+            { keyword: 'offshore_P1', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 10 },
+          ],
+        },
+        stageConfig.tiers![1]!,
+      ],
+    });
+    const resolver = new GroupKeyResolver(withPattern);
+    expect(
+      resolver.resolve({ parentPhase: 'DESIGN', parentTaskTitle: '[PAY][offshore_P1]Design', leafTitle: 'x' })
+        .groupPath,
+    ).toEqual(['GD1', 'DESIGN']);
+    // Bóc trúng "offshore_P9" (không khớp luật, KHÔNG có fallback trên chuỗi đã bóc
+    // ra được vì extracted ăn trước) ⇒ UNCLASSIFIED — thấy được, không đoán bừa.
+    expect(
+      resolver.resolve({ parentPhase: 'DESIGN', parentTaskTitle: '[PAY][offshore_P9]Design', leafTitle: 'x' })
+        .groupPath[0],
+    ).toBe('UNCLASSIFIED');
+  });
+
+  it('lá không có Task cha (mồ côi / QUERY) ⇒ tầng GĐ UNCLASSIFIED', () => {
+    const resolver = new GroupKeyResolver(stageConfig);
+    expect(
+      resolver.resolve({ parentPhase: 'UNCLASSIFIED', leafTitle: 'x' }).groupPath[0],
+    ).toBe('UNCLASSIFIED');
+    expect(
+      resolver.resolve({ parentPhase: 'UNCLASSIFIED', parentTaskTitle: null, leafTitle: 'x' }).groupPath[0],
+    ).toBe('UNCLASSIFIED');
+  });
+});
+
 describe('nguồn khoá chưa hỗ trợ — fail-fast', () => {
   it('CUSTOM_FIELD (để v2) ném lỗi rõ ràng', () => {
     const config = mkConfig({
