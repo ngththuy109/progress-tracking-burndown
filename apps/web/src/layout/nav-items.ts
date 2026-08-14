@@ -5,6 +5,13 @@
  * màn hình mới sẽ có lúc quên một bên — mục hiện trên thanh bên nhưng bấm vào
  * ra trang trắng.
  */
+/** Hai nhóm điều hướng — đúng bố cục demo đã chốt (dynamic-tiers-demo.html). */
+export const NAV_GROUPS = [
+  { id: 'TRACK', title: 'Theo dõi tiến độ' },
+  { id: 'CONFIG', title: 'Cấu hình dự án' },
+] as const;
+export type NavGroupId = (typeof NAV_GROUPS)[number]['id'];
+
 export interface NavItem {
   readonly path: string;
   readonly label: string;
@@ -13,10 +20,17 @@ export interface NavItem {
   readonly summary: string;
   /** Card nào sẽ dựng màn hình thật. Hiện thẳng lên trang tạm. */
   readonly builtBy: string;
+  /** Nhóm trên thanh bên (demo đã chốt: ① Theo dõi tiến độ · ② Cấu hình dự án). */
+  readonly group: NavGroupId;
   /** Chỉ hiện trên thanh bên khi người dùng là ADMIN (API vẫn tự chặn). */
   readonly adminOnly?: boolean;
 }
 
+// Thứ tự TRONG mảng = thứ tự trên thanh bên, theo demo đã chốt:
+//   ① Epics → Burndown → Signboard → (Phase sub-tasks) → Monitoring
+//   ② Cấu trúc tầng → Phase settings → Signboard columns → Days off → (Projects) → Users
+// `Phase sub-tasks` và `Projects` không có trong demo (demo giản lược) — xếp vào
+// nhóm cùng bản chất: xem tiến độ / cấu hình-quản trị.
 export const NAV_ITEMS: readonly NavItem[] = [
   {
     path: '/epics',
@@ -24,6 +38,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '📋',
     summary: 'Add or remove Epics and check how each one is syncing.',
     builtBy: 'GĐ 4',
+    group: 'TRACK',
   },
   {
     path: '/burndown',
@@ -31,6 +46,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '📉',
     summary: 'Three views: whole Epic, a single Phase, or several Phases side by side.',
     builtBy: 'GĐ 4',
+    group: 'TRACK',
   },
   {
     path: '/signboard',
@@ -38,6 +54,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '🗂️',
     summary: 'Function × task type grid. Each cell shows one progress status.',
     builtBy: 'GĐ 4',
+    group: 'TRACK',
   },
   {
     path: '/phase-subtasks',
@@ -45,34 +62,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '🧾',
     summary: 'List the sub-tasks under each defined Phase for one Epic.',
     builtBy: 'Phase tickets',
-  },
-  {
-    path: '/config/tiers',
-    label: 'Cấu trúc tầng',
-    icon: '🏗️',
-    summary: 'Khai 1..N tầng nhóm logic cho dự án; đánh dấu đúng một tầng là Phase.',
-    builtBy: 'Dynamic tiers',
-  },
-  {
-    path: '/config/signboard',
-    label: 'Signboard columns',
-    icon: '🧩',
-    summary: 'Define which task types become columns on the Signboard.',
-    builtBy: 'T-32',
-  },
-  {
-    path: '/config/holidays',
-    label: 'Days off',
-    icon: '📅',
-    summary: 'Public holidays and make-up workdays for the Vietnam and Japan calendars.',
-    builtBy: 'T-36',
-  },
-  {
-    path: '/config/phase',
-    label: 'Phase settings',
-    icon: '⚙️',
-    summary: 'Edit title patterns and Phase matching rules. Preview before saving.',
-    builtBy: 'T-21',
+    group: 'TRACK',
   },
   {
     path: '/ops',
@@ -80,6 +70,39 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '🩺',
     summary: 'Nightly jobs, Jira rate limits, data quality, and plan drift.',
     builtBy: 'T-33',
+    group: 'TRACK',
+  },
+  {
+    path: '/config/tiers',
+    label: 'Cấu trúc tầng',
+    icon: '🏗️',
+    summary: 'Khai 1..N tầng nhóm logic cho dự án; đánh dấu đúng một tầng là Phase.',
+    builtBy: 'Dynamic tiers',
+    group: 'CONFIG',
+  },
+  {
+    path: '/config/phase',
+    label: 'Phase settings',
+    icon: '⚙️',
+    summary: 'Edit title patterns and Phase matching rules. Preview before saving.',
+    builtBy: 'T-21',
+    group: 'CONFIG',
+  },
+  {
+    path: '/config/signboard',
+    label: 'Signboard columns',
+    icon: '🧩',
+    summary: 'Define which task types become columns on the Signboard.',
+    builtBy: 'T-32',
+    group: 'CONFIG',
+  },
+  {
+    path: '/config/holidays',
+    label: 'Days off',
+    icon: '📅',
+    summary: 'Public holidays and make-up workdays for the Vietnam and Japan calendars.',
+    builtBy: 'T-36',
+    group: 'CONFIG',
   },
   {
     path: '/admin/projects',
@@ -87,6 +110,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '🗄️',
     summary: 'Register the project keys PMs can be assigned to.',
     builtBy: 'SSO',
+    group: 'CONFIG',
     adminOnly: true,
   },
   {
@@ -95,6 +119,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: '👤',
     summary: 'Grant Admin, PM, or Viewer access and scope PMs to their projects.',
     builtBy: 'SSO',
+    group: 'CONFIG',
     adminOnly: true,
   },
 ];

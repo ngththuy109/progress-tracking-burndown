@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { NAV_ITEMS } from './nav-items.js';
+import { NAV_GROUPS, NAV_ITEMS } from './nav-items.js';
 import { useMe } from '../api/use-me.js';
 import { Badge, type BadgeTone } from '../components/ui/index.js';
 
@@ -38,25 +38,38 @@ export function AppLayout() {
           <span className="sidebar__brand-text">Burndown Engine</span>
         </div>
 
+        {/* Hai nhóm có tiêu đề đánh số — đúng bố cục demo đã chốt. */}
         <nav aria-label="Main navigation">
-          <ul className="nav">
-            {visibleNav.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
-                  // `aria-current` là cách trình đọc màn hình biết đang ở mục
-                  // nào. Tô đậm bằng CSS chỉ người nhìn thấy mới biết.
-                  end={false}
-                >
-                  <span className="nav__icon" aria-hidden="true">
-                    {item.icon}
-                  </span>
-                  <span>{item.label}</span>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+          {NAV_GROUPS.map((group, gi) => (
+            <div className="nav__group" key={group.id}>
+              <div className="nav__group-title">
+                <span className="nav__group-num" aria-hidden="true">
+                  {gi + 1}
+                </span>
+                {group.title}
+              </div>
+              <ul className="nav">
+                {visibleNav
+                  .filter((item) => item.group === group.id)
+                  .map((item) => (
+                    <li key={item.path}>
+                      <NavLink
+                        to={item.path}
+                        className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+                        // `aria-current` là cách trình đọc màn hình biết đang ở mục
+                        // nào. Tô đậm bằng CSS chỉ người nhìn thấy mới biết.
+                        end={false}
+                      >
+                        <span className="nav__icon" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        <span>{item.label}</span>
+                      </NavLink>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
         </nav>
       </aside>
 

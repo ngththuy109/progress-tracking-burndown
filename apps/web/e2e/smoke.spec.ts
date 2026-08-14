@@ -12,14 +12,18 @@ import { expect, test, type Page } from '@playwright/test';
  * theo và vẫn xanh — nó sẽ không còn kiểm được gì nữa.
  */
 
+// Theo bố cục 2 nhóm của demo đã chốt: ① Theo dõi tiến độ · ② Cấu hình dự án
+// (mục adminOnly — Projects/Users — không hiện vì e2e không stub /api/me).
 const NAV_LABELS = [
   'Epics',
   'Burndown chart',
   'Signboard',
   'Phase sub-tasks',
-  'Signboard columns',
-  'Phase settings',
   'Monitoring',
+  'Cấu trúc tầng',
+  'Phase settings',
+  'Signboard columns',
+  'Days off',
 ];
 
 const VALID_CONFIG = {

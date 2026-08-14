@@ -120,6 +120,34 @@ code {
   font-size: 20px;
 }
 
+/* Nhóm điều hướng có tiêu đề đánh số — bố cục demo đã chốt (dynamic-tiers-demo). */
+.nav__group + .nav__group {
+  margin-top: 16px;
+}
+.nav__group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 7px 10px 5px;
+}
+.nav__group-num {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
 .nav {
   list-style: none;
   margin: 0;
