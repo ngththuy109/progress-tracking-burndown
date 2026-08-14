@@ -618,3 +618,56 @@ model Project {
 
   @@map("project")
 }
+
+// ============================================================================
+// Bảng 14: Cấu hình đăng nhập LDAP — MỘT DÒNG duy nhất (id = 1, CHECK ở SQL).
+//
+// App tự đăng nhập bằng LDAP (form username/password → bind vào LDAP server):
+// ADMIN cấu hình ngay trên UI, không phải sửa file config. `bind_password_enc`
+// mã hóa AES-256-GCM bằng APP_ENCRYPTION_KEY (cùng secret-box với Jira token),
+// KHÔNG BAO GIỜ trả ra API — chỉ trả cờ hasBindPassword.
+//
+// HAI CÁCH XÁC ĐỊNH DN của user (chọn một):
+//   - user_dn_template: bind THẲNG bằng DN dựng từ template, ví dụ
+//     'uid={username},ou=users,dc=congty,dc=vn' — nhanh, hợp OpenLDAP gọn.
+//   - search-then-bind: bind bằng tài khoản dịch vụ (bind_dn + password) →
+//     search user theo user_filter trong search_base → bind lại bằng DN tìm
+//     được + mật khẩu người dùng — cách chuẩn với Active Directory.
+//
+// `enabled = false` (mặc định) → giữ nguyên chế độ header cũ (cổng/proxy hoặc
+// dev header) nên hệ thống hiện có không đổi hành vi; bật lên thì header danh
+// tính bị BỎ QUA (chống giả mạo khi app lộ ra ngoài không qua cổng) — thoát
+// hiểm khi cấu hình sai: env AUTH_FORCE_HEADER=1 (xem RUNBOOK).
+// ============================================================================
+model AuthLdapConfig {
+  id Int @id @default(1)
+
+  enabled Boolean @default(false)
+
+  // ldap://host:389 hoặc ldaps://host:636
+  serverUrl String? @map("server_url")
+
+  // Tài khoản dịch vụ cho search-then-bind. NULL khi dùng user_dn_template.
+  bindDn          String? @map("bind_dn")
+  bindPasswordEnc String? @map("bind_password_enc")
+
+  // Direct bind — NULL = dùng search-then-bind.
+  userDnTemplate String? @map("user_dn_template")
+
+  searchBase String? @map("search_base")
+  // {username} trong filter được thay bằng giá trị người dùng nhập (đã escape).
+  userFilter String @default("(mail={username})") @map("user_filter")
+
+  // Attribute chứa email — danh tính app_user. AD hay dùng 'mail' hoặc 'userPrincipalName'.
+  emailAttribute String @default("mail") @map("email_attribute") @db.VarChar(64)
+
+  // true = chấp nhận chứng chỉ tự ký khi ldaps (mạng nội bộ). Mặc định PHẢI verify.
+  allowSelfSigned Boolean @default(false) @map("allow_self_signed")
+
+  sessionTtlHours Int @default(12) @map("session_ttl_hours") @db.SmallInt
+
+  updatedBy String?  @map("updated_by") @db.VarChar(254)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("auth_ldap_config")
+}

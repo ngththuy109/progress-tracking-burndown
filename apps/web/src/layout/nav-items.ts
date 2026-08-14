@@ -90,6 +90,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     builtBy: 'SSO',
     adminOnly: true,
   },
+  {
+    path: '/admin/ldap',
+    label: 'LDAP',
+    icon: '🔐',
+    summary: 'Configure in-app LDAP login: server, how to locate the user, and connection test.',
+    builtBy: 'LDAP',
+    adminOnly: true,
+  },
 ];
 
 /** Vào `/` thì chuyển tới đây. */

@@ -55,7 +55,7 @@ Năm biến bắt buộc. Thiếu cái nào thì worker báo **một lần** đ�
 
 > **Mã ticket bấm thẳng sang Jira — ở MỌI màn hình.** Bất kỳ chỗ nào hiện **mã ticket** (Epic, Sub-task, Parent, thủ phạm dời plan…) đều là **link** mở ticket chi tiết trên Jira ở tab mới. Riêng **ô Signboard** rê chuột vào còn hiện thẻ có thêm nút **copy** link. Link này mặc định dùng luôn `JIRA_BASE_URL` ở trên — **không cần khai lại**. Muốn trình duyệt trỏ sang site *khác* server thì đặt `VITE_JIRA_BASE_URL` (hiếm khi cần); đặt `VITE_JIRA_BASE_URL=""` để tắt link (chỉ hiện *mã* thô, ô Signboard lùi về copy được mã).
 
-> **Xác thực khi chạy local.** Ở môi trường triển khai, app dùng **SSO qua một cổng** đặt header danh tính `x-user-id` (xem [AUTH.md](./AUTH.md)). Ở local **không có cổng**: các API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic, sửa cấu hình, quản lý người dùng) cần header danh tính — thiếu là **401** (đặt mỗi `AUTH_BOOTSTRAP_ADMINS` chưa đủ: nó chỉ ánh xạ *danh tính → ADMIN*, không tự tạo danh tính). Dùng app qua **trình duyệt**: chạy `AUTH_BOOTSTRAP_ADMINS=you@cty.com VITE_DEV_USER=you@cty.com pnpm dev` — Vite dev proxy tự chèn `x-user-id` (đóng vai cổng ở local). Gọi bằng **`curl`**: thêm `-H 'x-user-id: you@cty.com'`. Chi tiết ở [AUTH.md §9](./AUTH.md). Các biến `AUTH_*` đều tùy chọn — mặc định người đã xác thực nhưng chưa cấp quyền là `VIEWER`.
+> **Xác thực khi chạy local.** Ở môi trường triển khai, app dùng **đăng nhập LDAP** (form username/password, cấu hình ở Admin → LDAP — xem [AUTH.md §1](./AUTH.md)). Chạy local (chưa dựng LDAP) thì dùng đường header dưới đây: các API *đọc* vẫn chạy, nhưng thao tác *ghi* (thêm Epic, sửa cấu hình, quản lý người dùng) cần header danh tính — thiếu là **401** (đặt mỗi `AUTH_BOOTSTRAP_ADMINS` chưa đủ: nó chỉ ánh xạ *danh tính → ADMIN*, không tự tạo danh tính). Dùng app qua **trình duyệt**: chạy `AUTH_BOOTSTRAP_ADMINS=you@cty.com VITE_DEV_USER=you@cty.com pnpm dev` — Vite dev proxy tự chèn `x-user-id` vào request `/api`. Gọi bằng **`curl`**: thêm `-H 'x-user-id: you@cty.com'`. Chi tiết ở [AUTH.md §9](./AUTH.md). Các biến `AUTH_*` đều tùy chọn — mặc định người đã xác thực nhưng chưa cấp quyền là `VIEWER`.
 
 ## 3. Dựng database
 
@@ -118,14 +118,13 @@ pnpm dev                 # chạy song song api + worker + web
 
 | Ứng dụng | Cổng | Ghi chú |
 |---|---|---|
-| Web | 5180 | **Cố ý không dùng 5173** — đó là cổng mặc định của Vite mà mọi dự án khác đều nhắm vào |
+| Web | 8080 | **Cố ý không dùng 5173** (cổng mặc định Vite mà mọi dự án khác đều nhắm vào); chung cổng với máy chủ đã build — chạy lần lượt, không cùng lúc |
 | API | 3000 | |
 | E2E | 5199 | Cổng riêng, để chạy test không phải tắt dev server |
 
 > **Mở dev server từ MÁY KHÁC (qua IP)?** Mặc định dev server nghe trên
 > `0.0.0.0`, nên máy khác / điện thoại cùng LAN / VM / container mở
-> `http://<IP-máy-này>:5180` là vào được — **cổng 5180, KHÔNG phải 8080** (8080 là
-> máy chủ đã build ở ghi chú dưới). Thu hẹp về chỉ máy này bằng
+> `http://<IP-máy-này>:8080` là vào được. Thu hẹp về chỉ máy này bằng
 > `WEB_DEV_HOST=127.0.0.1`. ⚠️ Nếu đang bật `VITE_DEV_USER` (chèn danh tính giả —
 > xem [AUTH.md §9](./AUTH.md)), mở ra `0.0.0.0` cũng mở lối **GHI** theo danh tính
 > đó cho cả mạng; mạng không tin cậy thì đặt `WEB_DEV_HOST=127.0.0.1`.

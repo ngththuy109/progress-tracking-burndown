@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { NAV_ITEMS } from './nav-items.js';
+import { useAuthMode, useLogout } from '../api/use-auth-mode.js';
 import { useMe } from '../api/use-me.js';
 import { Badge, type BadgeTone } from '../components/ui/index.js';
 
@@ -19,6 +20,8 @@ export function AppLayout() {
   const location = useLocation();
   const current = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path));
   const me = useMe();
+  const authMode = useAuthMode();
+  const logout = useLogout();
   const isAdmin = me.data?.role === 'ADMIN';
   // Mục adminOnly chỉ hiện với ADMIN. Vẫn giữ NAV_ITEMS đầy đủ cho `current` ở
   // trên để tiêu đề thanh trên đúng ngay cả khi mở thẳng URL /admin/users.
@@ -72,6 +75,18 @@ export function AppLayout() {
                 {me.data.userId}
               </span>
               <Badge tone={ROLE_TONE[me.data.role] ?? 'neutral'}>{me.data.role}</Badge>
+              {/* CHỈ ở mode LDAP mới có phiên trong app để mà đăng xuất; ở mode
+                  HEADER phiên do cổng/proxy giữ, nút này chỉ gây hiểu lầm. */}
+              {authMode.data?.mode === 'LDAP' && (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={logout.isPending}
+                  onClick={() => logout.mutate()}
+                >
+                  {logout.isPending ? 'Signing out…' : 'Sign out'}
+                </button>
+              )}
             </div>
           )}
         </header>

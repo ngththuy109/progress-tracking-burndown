@@ -1,6 +1,8 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import type { AuthModeResponse } from '@app/shared';
 import { ApiError } from './client.js';
-import { maybeRedirectToSignIn } from './auth-redirect.js';
+import { authModeKey } from './use-auth-mode.js';
+import { meKey } from './use-me.js';
 
 /**
  * Cấu hình TanStack Query dùng chung.
@@ -36,12 +38,34 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
   return false;
 }
 
+/**
+ * Phiên LDAP hết hạn GIỮA CHỪNG: một query/mutation bất kỳ trả 401.
+ *
+ * Cách đưa người dùng về màn hình đăng nhập: đặt cache của `/api/me` về `null`
+ * — đúng giá trị `useMe` trả khi chưa đăng nhập — và `AuthGate` (đang render
+ * theo cache đó) tự thay cả app bằng form đăng nhập. KHÔNG chuyển hướng cứng
+ * ở đây: URL hiện tại được giữ nguyên nên đăng nhập lại xong người dùng vẫn
+ * đứng đúng trang đang xem (form chỉ invalidate cache, không reload).
+ *
+ * Chỉ làm vậy khi mode = LDAP (đọc từ cache của `/api/auth/mode`): ở mode
+ * HEADER (dev/khôi phục), 401 để `ErrorState` hiện lỗi như thường.
+ */
+export function funnelExpiredLdapSession(client: QueryClient, error: unknown): void {
+  if (!(error instanceof ApiError) || error.status !== 401) return;
+  const mode = client.getQueryData<AuthModeResponse>(authModeKey);
+  if (mode?.mode !== 'LDAP') return;
+  client.setQueryData(meKey, null);
+}
+
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
-    // Một chỗ DUY NHẤT bắt lỗi 401 cho mọi query lẫn mutation: chưa đăng nhập
-    // thì đá qua trang đăng nhập của cổng SSO (nếu đã cấu hình VITE_SIGN_IN_PATH).
-    queryCache: new QueryCache({ onError: maybeRedirectToSignIn }),
-    mutationCache: new MutationCache({ onError: maybeRedirectToSignIn }),
+  // Một chỗ DUY NHẤT bắt lỗi 401 cho mọi query lẫn mutation: phiên LDAP hết hạn
+  // giữa chừng thì đổ về form đăng nhập trong app (xem `funnelExpiredLdapSession`).
+  const onError = (error: unknown): void => {
+    funnelExpiredLdapSession(client, error);
+  };
+  const client: QueryClient = new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: {
         staleTime: STALE_TIME_MS,
@@ -61,4 +85,5 @@ export function createQueryClient(): QueryClient {
       },
     },
   });
+  return client;
 }

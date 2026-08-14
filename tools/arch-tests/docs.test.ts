@@ -156,8 +156,8 @@ describe('ONBOARDING.md', () => {
     expect(onboarding).toContain('xanh hôm nay và đỏ tuần sau');
   });
 
-  it('nói đúng cổng dev là 5180, không phải cổng mặc định của Vite', () => {
-    expect(onboarding).toContain('5180');
+  it('nói đúng cổng dev là 8080 và cổng E2E 5199', () => {
+    expect(onboarding).toContain('8080');
     expect(onboarding).toContain('5199');
   });
 

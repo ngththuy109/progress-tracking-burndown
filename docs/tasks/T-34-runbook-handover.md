@@ -140,7 +140,7 @@ DevOps đọc runbook, tự xử lý được một cảnh báo P1 giả lập m
 | Runbook có **đủ 11 mục**, mỗi mã cảnh báo một tiêu đề riêng | Thêm ngưỡng thứ 12 mà quên viết mục xử lý |
 | **Mọi lệnh `pnpm` trong runbook có thật trong `package.json`** | Đổi tên script mà quên sửa runbook — người trực lúc 2 giờ sáng dán vào một lệnh không tồn tại |
 | UAT phủ **đủ 15 user story** | Bỏ sót một tính năng khỏi buổi nghiệm thu |
-| Onboarding nói đúng cổng dev (5180) và cổng E2E (5199) | Người mới mở nhầm 5173 và thấy app của dự án khác |
+| Onboarding nói đúng cổng dev (8080) và cổng E2E (5199) | Người mới mở nhầm 5173 và thấy app của dự án khác |
 
 Test đầu tiên đọc thẳng `ALERT_CODE` từ `@app/shared`, nên nó **không thể lệch** với mã nguồn.
 

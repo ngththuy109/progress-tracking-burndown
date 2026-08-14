@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from './client.js';
-import { createQueryClient, shouldRetry, STALE_TIME_MS } from './query-client.js';
+import {
+  createQueryClient,
+  funnelExpiredLdapSession,
+  shouldRetry,
+  STALE_TIME_MS,
+} from './query-client.js';
+import { authModeKey } from './use-auth-mode.js';
+import { meKey } from './use-me.js';
 
 const apiError = (status: number | null) =>
   new ApiError({ code: 'X', message: 'lỗi', status });
@@ -47,5 +54,37 @@ describe('createQueryClient', () => {
   it('staleTime là 30 giây', () => {
     expect(createQueryClient().getDefaultOptions().queries?.staleTime).toBe(STALE_TIME_MS);
     expect(STALE_TIME_MS).toBe(30_000);
+  });
+});
+
+describe('funnelExpiredLdapSession — 401 giữa phiên đổ về form đăng nhập', () => {
+  const ME = { userId: 'pm@example.com', role: 'PM' as const, projects: [] };
+
+  it('mode LDAP + 401 → cache /api/me về null (AuthGate tự hiện form)', () => {
+    const client = createQueryClient();
+    client.setQueryData(authModeKey, { mode: 'LDAP' });
+    client.setQueryData(meKey, ME);
+
+    funnelExpiredLdapSession(client, apiError(401));
+    expect(client.getQueryData(meKey)).toBeNull();
+  });
+
+  it('mode HEADER thì KHÔNG đụng vào cache — 401 đi đường cũ', () => {
+    const client = createQueryClient();
+    client.setQueryData(authModeKey, { mode: 'HEADER' });
+    client.setQueryData(meKey, ME);
+
+    funnelExpiredLdapSession(client, apiError(401));
+    expect(client.getQueryData(meKey)).toEqual(ME);
+  });
+
+  it('lỗi khác 401 (kể cả không phải ApiError) thì bỏ qua', () => {
+    const client = createQueryClient();
+    client.setQueryData(authModeKey, { mode: 'LDAP' });
+    client.setQueryData(meKey, ME);
+
+    funnelExpiredLdapSession(client, apiError(500));
+    funnelExpiredLdapSession(client, new Error('lạ'));
+    expect(client.getQueryData(meKey)).toEqual(ME);
   });
 });

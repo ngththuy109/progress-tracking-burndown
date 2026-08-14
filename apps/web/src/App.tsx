@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { createQueryClient } from './api/query-client.js';
+import { AuthGate } from './auth/auth-gate.js';
 import { ErrorBoundary } from './components/ui/index.js';
 import { AppRoutes } from './routes/app-routes.js';
 
@@ -27,7 +28,11 @@ export function App() {
         {({ reset }) => (
           <ErrorBoundary onReset={reset}>
             <BrowserRouter>
-              <AppRoutes />
+              {/* Chế độ LDAP + chưa đăng nhập → thay cả app bằng form đăng
+                  nhập tên/mật khẩu. Chế độ HEADER giữ nguyên hành vi cũ. */}
+              <AuthGate>
+                <AppRoutes />
+              </AuthGate>
             </BrowserRouter>
           </ErrorBoundary>
         )}

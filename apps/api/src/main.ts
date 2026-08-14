@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { Redis } from 'ioredis';
 import { Queue, type JobsOptions } from 'bullmq';
-import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
+import { assertMigrationsApplied, disconnectPrisma, getPrisma, open, parseEncryptionKey, seal } from '@app/db';
+import { Client as LdaptsClient } from 'ldapts';
 import {
   JiraClient,
   fieldMappingConfigSchema,
@@ -20,6 +21,10 @@ import {
 import { withTimeout, TimeoutError, type StatusIdMap } from '@app/shared';
 import { createServer, DEFAULT_PORT, type ServerDeps } from './server.js';
 import { authConfigFromEnv } from './adapters/principal.js';
+import { createLdapConfigStore } from './adapters/ldap-config.adapters.js';
+import { createRedisSessionStore } from './adapters/session.adapters.js';
+import type { LdapClientFactory } from './services/ldap.service.js';
+import type { TokenBox } from './routes/auth.routes.js';
 
 /**
  * Điểm vào tiến trình API.
@@ -163,6 +168,22 @@ function loadFieldMappingConfig(): FieldMappingConfig {
   return fieldMappingConfigSchema.parse(raw);
 }
 
+/**
+ * Hộp seal/open bí mật trong DB (bind password LDAP) — dựng từ
+ * APP_ENCRYPTION_KEY. `null` khi khóa CHƯA đặt (chưa cần mã hóa gì): route lưu
+ * bind password sẽ từ chối rõ ràng thay vì lưu thô. Khóa CÓ nhưng sai độ dài
+ * thì `parseEncryptionKey` ném ngay — fail-fast lúc boot (C-9).
+ */
+function createTokenBox(env: NodeJS.ProcessEnv): TokenBox | null {
+  const raw = env['APP_ENCRYPTION_KEY'];
+  if (!raw || raw.trim() === '') return null;
+  const key = parseEncryptionKey(raw);
+  return {
+    seal: (plaintext) => seal(plaintext, key),
+    open: (sealed) => open(sealed, key),
+  };
+}
+
 async function bootstrap(): Promise<void> {
   const env = readEnv(process.env);
   log({
@@ -216,6 +237,20 @@ async function bootstrap(): Promise<void> {
     defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });
 
+  // Client LDAP thật, dựng MỚI cho từng lượt bind/test. `allowSelfSigned` chỉ
+  // có nghĩa với ldaps:// — chứng chỉ tự ký thường gặp ở LDAP nội bộ; ldap://
+  // thường không TLS nên không có gì để nới lỏng. Timeout ngắn để một server
+  // LDAP treo không giữ request đăng nhập mãi.
+  const ldapClientFactory: LdapClientFactory = ({ url, allowSelfSigned }) =>
+    new LdaptsClient({
+      url,
+      connectTimeout: 5_000,
+      timeout: 10_000,
+      ...(allowSelfSigned && url.startsWith('ldaps://')
+        ? { tlsOptions: { rejectUnauthorized: false } }
+        : {}),
+    });
+
   const deps: ServerDeps = {
     prisma,
     redis,
@@ -224,9 +259,18 @@ async function bootstrap(): Promise<void> {
     backfillQueue,
     statusIdMap,
     cache: createConfigCache(redis),
-    // Danh tính do cổng SSO đặt vào header; vai trò tra `app_user`. Cấu hình
-    // qua AUTH_* (xem adapters/principal.ts và config/auth-proxy/).
+    // Danh tính qua header (local dev + van khôi phục AUTH_FORCE_HEADER); vai trò
+    // tra `app_user`. Cấu hình qua AUTH_* (xem adapters/principal.ts).
     auth: authConfigFromEnv(process.env),
+    // Đăng nhập LDAP in-app: phiên trên Redis (cookie `ptb_sess`), cấu hình ở
+    // bảng `auth_ldap_config`, bind password mã hoá bằng TokenBox dưới đây.
+    sessions: createRedisSessionStore(redis),
+    ldapConfigs: createLdapConfigStore(prisma),
+    ldapClientFactory,
+    // AUTH_FORCE_HEADER=1: van thoát hiểm khi LDAP bật nhầm cấu hình hỏng —
+    // ép quay về danh tính header mà không cần sửa database.
+    forceHeaderAuth: process.env['AUTH_FORCE_HEADER'] === '1',
+    tokenBox: createTokenBox(process.env),
   };
 
   const app = createServer(deps);
