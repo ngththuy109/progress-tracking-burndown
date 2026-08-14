@@ -7,6 +7,7 @@ import {
   getWorklogsByIds,
   isIssueDoesNotExistError,
   searchIssues,
+  JiraHttpError,
   type JiraChangelogEntry,
   type JiraClient,
   type JiraIssue,
@@ -217,7 +218,7 @@ export async function fetchHistory(
 
   const changelogTask = Promise.all(
     issueKeys.map(async (key) => {
-      changelogByIssue.set(key, await getIssueChangelog(client, key));
+      changelogByIssue.set(key, await historyOrEmptyOn404(() => getIssueChangelog(client, key)));
     }),
   );
 
@@ -225,7 +226,7 @@ export async function fetchHistory(
     ? fetchWorklogsIncrementally(client, args.issueIdToKey, args.since, worklogsByIssue)
     : Promise.all(
         issueKeys.map(async (key) => {
-          worklogsByIssue.set(key, await getIssueWorklogs(client, key));
+          worklogsByIssue.set(key, await historyOrEmptyOn404(() => getIssueWorklogs(client, key)));
         }),
       );
 
@@ -238,6 +239,25 @@ export async function fetchHistory(
   const [, , deletedWorklogIds] = await Promise.all([changelogTask, worklogTask, deletedTask]);
 
   return { worklogsByIssue, changelogByIssue, deletedWorklogIds };
+}
+
+/**
+ * Đọc lịch sử của MỘT issue, coi 404 là "issue vừa biến mất" → trả về rỗng.
+ *
+ * Một Task/Sub-task có thể bị xoá ĐÚNG vào lúc job đang chạy — giữa lần lấy cây
+ * và lần lấy lịch sử. Khi đó `/issue/{key}/changelog` và `/worklog` trả 404 (không
+ * thuộc diện thử lại). Nuốt đúng 404 ở đây để MỘT issue biến mất không làm đổ cả
+ * lượt đồng bộ Epic; `markRemoved` sẽ gỡ nó ở lượt kế tiếp khi nó rời khỏi kết
+ * quả tìm kiếm. 403 (thiếu quyền) và mọi lỗi khác vẫn ném lên như cũ — chúng KHÔNG
+ * phải "issue đã biến mất" nên không được nuốt.
+ */
+async function historyOrEmptyOn404<T>(fn: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof JiraHttpError && err.status === 404) return [];
+    throw err;
+  }
 }
 
 /**

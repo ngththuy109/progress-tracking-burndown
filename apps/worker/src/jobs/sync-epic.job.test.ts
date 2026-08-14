@@ -546,6 +546,61 @@ describe('Epic bị xoá trên Jira', () => {
   });
 });
 
+describe('Task/Sub-task bị xoá trên Jira', () => {
+  it('full resync một Epic có Sub-task đã bị xoá vẫn xong và xoá mềm đúng', async () => {
+    // Lần đầu: đủ cây, PAY-224 còn sống.
+    const issues = sampleTree();
+    await run({ issues }).result;
+    expect(store.issues.get('PAY-224')!.removedAt).toBeNull();
+
+    // PAY-224 bị xoá trên Jira. Nó vẫn nằm trong DB (removed_at chưa gắn) nên
+    // `knownIdToKey` vẫn trả về; full resync đọc `/changelog` VÀ `/worklog` theo
+    // từng issue → Jira trả 404 cho PAY-224. Trước khi sửa, 404 (không thử lại)
+    // làm đổ cả lượt ở FETCH_HISTORY, trước khi kịp gỡ PAY-224.
+    store.epicState.set('PAY-100', {
+      status: 'ACTIVE',
+      lastSyncedAt: new Date('2026-03-08T00:00:00.000Z'),
+      lastError: null,
+    });
+    const r = await run({ issues: issues.slice(0, -1) }, 'PAY-100', { ignoreWatermark: true }).result;
+
+    expect(r.status).toBe('SUCCESS');
+    expect(r.errorMessage).toBeNull();
+    // Xoá mềm: dòng vẫn còn, chỉ gắn removed_at (E-02).
+    expect(store.issues.get('PAY-224')!.removedAt).toEqual(NOW);
+    expect(store.epicState.get('PAY-100')!.status).not.toBe('ERROR');
+  });
+
+  it('Sub-task biến mất GIỮA CHỪNG (404 khi đọc lịch sử) được nuốt, lượt vẫn xong', async () => {
+    // PAY-224 vẫn có trong kết quả tìm kiếm (còn "sống" lúc lấy cây) nhưng bị xoá
+    // đúng trước khi lấy lịch sử → `/changelog`, `/worklog` trả 404. Không nuốt 404
+    // thì cả lượt đổ ở FETCH_HISTORY chỉ vì một Sub-task biến mất giữa chừng.
+    const r = await run({ issues: sampleTree(), history404Keys: ['PAY-224'] }).result;
+
+    expect(r.status).toBe('SUCCESS');
+    expect(r.errorMessage).toBeNull();
+    // PAY-224 vẫn nằm trong `liveKeys` nên KHÔNG bị gỡ trong lượt này; nó chỉ được
+    // gỡ ở lượt sau khi thật sự biến mất khỏi kết quả tìm kiếm.
+    expect(store.issues.get('PAY-224')!.removedAt).toBeNull();
+  });
+
+  it('KHÔNG gọi lịch sử cho issue đã gỡ (khỏi tốn lời gọi 404 vô ích)', async () => {
+    const issues = sampleTree();
+    await run({ issues }).result;
+
+    store.epicState.set('PAY-100', {
+      status: 'ACTIVE',
+      lastSyncedAt: new Date('2026-03-08T00:00:00.000Z'),
+      lastError: null,
+    });
+    const { jira, result } = run({ issues: issues.slice(0, -1) }, 'PAY-100', { ignoreWatermark: true });
+    await result;
+
+    // PAY-224 đã biến mất khỏi Jira → không có lời gọi lịch sử nào nhắm vào nó.
+    expect(jira.paths.some((p) => p.includes('PAY-224'))).toBe(false);
+  });
+});
+
 describe('log giờ lùi ngày', () => {
   it('worklog có started lùi 3 ngày so với created thì Epic bị đẩy vào dirty:epics', async () => {
     const worklogs = [

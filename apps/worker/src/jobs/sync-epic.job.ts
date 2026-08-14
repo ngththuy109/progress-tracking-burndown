@@ -225,10 +225,19 @@ export async function syncEpic(
     // Chỉ Task và Sub-task mới có worklog đáng kể; bản thân Epic thì không.
     const historyTargets = [...tree.tasks, ...tree.subtasks];
     const idToKey = new Map(historyTargets.map((i) => [i.id, i.key]));
-    // Issue có thể đã đồng bộ từ lần trước và lần này không đổi — vẫn cần
-    // `issueId` của chúng để nhận diện worklog lấy theo lô.
+    // Bổ sung issueId của issue đã đồng bộ từ lần trước để gắn đúng worklog lấy
+    // theo lô (chế độ tăng dần) — NHƯNG chỉ những issue CÒN SỐNG trên Jira
+    // (`liveKeys`).
+    //
+    // Task/Sub-task bị XOÁ trên Jira vẫn nằm trong DB với `removed_at` chưa gắn
+    // (chỉ được gắn ở `markRemoved` phía dưới), nên nó vẫn lọt vào `knownIdToKey`.
+    // Đọc lịch sử của nó theo key thì `/issue/{key}/changelog` và `/worklog` trả
+    // 404 — KHÔNG thuộc diện thử lại — và làm đổ cả lượt đồng bộ Epic ngay ở
+    // FETCH_HISTORY, trước khi kịp gỡ nó. Lọc theo `liveKeys` để không bao giờ gọi
+    // lịch sử cho issue đã biến mất (đồng thời khỏi tốn lời gọi 404 vô ích cho mọi
+    // issue đã gỡ từ lâu); `markRemoved` bên dưới vẫn gỡ nó bình thường.
     for (const [id, key] of await deps.issues.knownIdToKey(epicKey)) {
-      if (!idToKey.has(id)) idToKey.set(id, key);
+      if (!idToKey.has(id) && tree.liveKeys.has(key)) idToKey.set(id, key);
     }
 
     const history = await fetchHistory(deps.jira, { issueIdToKey: idToKey, since });

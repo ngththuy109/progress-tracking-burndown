@@ -67,6 +67,12 @@ export interface FakeJiraOptions {
   rateLimitFirstNCalls?: number;
   /** Mọi lời gọi đều hỏng — dùng cho ca "Jira lỗi liên tục". */
   failEverything?: boolean;
+  /**
+   * Ép `/issue/{key}/changelog` và `/worklog` trả 404 cho các key này DÙ issue vẫn
+   * có trong `issues` — mô phỏng issue bị xoá ĐÚNG lúc job chạy (giữa lấy cây và
+   * lấy lịch sử). Issue KHÔNG có trong `issues` thì luôn 404, khỏi cần liệt kê ở đây.
+   */
+  history404Keys?: string[];
 }
 
 export class FakeJira {
@@ -141,6 +147,7 @@ export class FakeJira {
     const worklogMatch = /^\/rest\/api\/3\/issue\/([^/]+)\/worklog$/.exec(u.pathname);
     if (worklogMatch) {
       const key = decodeURIComponent(worklogMatch[1]!);
+      if (this.isIssueGone(key)) return issueNotFound();
       const worklogs = (this.opts.worklogs ?? [])
         .filter((w) => w.issueKey === key)
         .map((w) => this.toJiraWorklog(w));
@@ -150,6 +157,7 @@ export class FakeJira {
     const changelogMatch = /^\/rest\/api\/3\/issue\/([^/]+)\/changelog$/.exec(u.pathname);
     if (changelogMatch) {
       const key = decodeURIComponent(changelogMatch[1]!);
+      if (this.isIssueGone(key)) return issueNotFound();
       const values = (this.opts.changelog ?? [])
         .filter((c) => c.issueKey === key)
         .map((c) => ({
@@ -187,6 +195,17 @@ export class FakeJira {
     }
 
     return json({ message: `Đường dẫn chưa hỗ trợ: ${u.pathname}` }, 404);
+  }
+
+  /**
+   * Issue KHÔNG còn trên Jira: đọc lịch sử theo key sẽ bị 404 (như Jira thật).
+   *
+   * Gồm cả issue vắng mặt trong `issues` (đã xoá) lẫn key bị ép 404 qua
+   * `history404Keys` (mô phỏng xoá đúng lúc job chạy).
+   */
+  private isIssueGone(key: string): boolean {
+    if ((this.opts.history404Keys ?? []).includes(key)) return true;
+    return !this.opts.issues.some((i) => i.key === key);
   }
 
   /** Bộ suy diễn JQL đủ dùng: `key = X`, `parent = X`, `parent IN (...)`, `updated >= "..."`. */
@@ -253,6 +272,14 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+/** 404 nguyên văn của Jira khi issue không tồn tại — dùng cho endpoint theo key. */
+function issueNotFound(): Response {
+  return json(
+    { errorMessages: ['Issue does not exist or you do not have permission to see it.'], errors: {} },
+    404,
+  );
 }
 
 /**
