@@ -23,6 +23,7 @@ export { SubtaskTitleParser } from './parse-subtask-title.js';
 export { groupPathOf, comparePaths } from './group-path.js';
 export {
   GroupKeyResolver,
+  previewTierKeys,
   type ResolvedGroupKeys,
   type ResolveGroupKeysInput,
 } from './resolve-group-keys.js';

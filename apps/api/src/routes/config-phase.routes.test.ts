@@ -163,6 +163,65 @@ describe('xem thử', () => {
   });
 });
 
+describe('xem thử cấu trúc tầng (tiers-preview)', () => {
+  /** Bản nháp 2 tầng: Giai đoạn (ánh xạ team offshore) đứng trên tầng ✦Phase. */
+  const STAGE_TIERS = [
+    {
+      tierOrder: 1,
+      code: 'GIAI_DOAN',
+      labelVi: 'Giai đoạn',
+      role: 'GROUP',
+      sourceType: 'PARENT_TASK_TITLE',
+      displayOrder: 0,
+      rules: [
+        { keyword: 'offshore_P1', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 10 },
+        { keyword: 'offshore_P2', matchMode: 'CONTAINS', groupCode: 'GD2', matchPriority: 10 },
+      ],
+    },
+    {
+      tierOrder: 2,
+      code: 'PHASE',
+      labelVi: 'Phase',
+      role: 'PHASE',
+      sourceType: 'PARENT_TASK_TITLE',
+      displayOrder: 1,
+    },
+  ];
+
+  const previewTiers = (taskTitle: string, tiers: unknown = STAGE_TIERS) => ({
+    method: 'POST' as const,
+    url: '/api/config/phase/tiers-preview',
+    payload: { taskTitle, tiers },
+  });
+
+  it('tầng GĐ bóc theo luật NHÁP; tầng ✦Phase theo cấu hình hiệu lực', async () => {
+    const res = await app.inject(previewTiers('[PAY][offshore_P1]Design'));
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ parentPhase: string; entries: { code: string; resolved: string | null }[] }>();
+    expect(body.parentPhase).toBe('DESIGN');
+    expect(body.entries.map((e) => [e.code, e.resolved])).toEqual([
+      ['GIAI_DOAN', 'GD1'],
+      ['PHASE', 'DESIGN'],
+    ]);
+  });
+
+  it('title không mang team ánh xạ ⇒ tầng GĐ UNCLASSIFIED (thấy được, không đoán)', async () => {
+    const body = (await app.inject(previewTiers('[Phase] Design'))).json<{ entries: { resolved: string | null }[] }>();
+    expect(body.entries[0]!.resolved).toBe('UNCLASSIFIED');
+    expect(body.entries[1]!.resolved).toBe('DESIGN');
+  });
+
+  it('thiếu taskTitle ⇒ 400 kèm issues, không phải 500', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/config/phase/tiers-preview',
+      payload: { tiers: STAGE_TIERS },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('BAD_REQUEST');
+  });
+});
+
 describe('lưu', () => {
   it('lưu thành công tạo version mới và trả về số Epic phải tính lại', async () => {
     const res = await app.inject({

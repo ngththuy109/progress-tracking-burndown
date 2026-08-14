@@ -3,8 +3,10 @@ import {
   fieldPath,
   previewRequestSchema,
   saveConfigRequestSchema,
+  tiersPreviewRequestSchema,
   type Principal,
 } from '@app/shared';
+import { previewTierKeys } from '@app/engine';
 import {
   ApiError,
   getEffective,
@@ -78,6 +80,17 @@ export function registerConfigPhaseRoutes(app: FastifyInstance, deps: ConfigPhas
       const parsed = previewRequestSchema.safeParse(req.body);
       if (!parsed.success) throw badRequest(parsed.error);
       return preview(deps, parsed.data);
+    }),
+  );
+
+  // Xem thử CẤU TRÚC TẦNG: dán một tiêu đề Task, xem từng tầng (bản nháp chưa lưu)
+  // bóc ra mã gì. Chạy trên cấu hình GLOBAL — màn Cấu trúc tầng là single-tenant.
+  app.post('/api/config/phase/tiers-preview', async (req, reply) =>
+    handle(reply, async () => {
+      const parsed = tiersPreviewRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw badRequest(parsed.error);
+      const effective = await getEffective(deps, null);
+      return previewTierKeys(effective, parsed.data.tiers, parsed.data.taskTitle);
     }),
   );
 

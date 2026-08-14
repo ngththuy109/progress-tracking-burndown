@@ -4,6 +4,7 @@ import {
   type EffectiveConfig,
   type GroupTier,
   type SubtaskParseResult,
+  type TierPreviewEntry,
 } from '@app/shared';
 import { TaskTitleParser } from './parse-task-title.js';
 import { SubtaskTitleParser } from './parse-subtask-title.js';
@@ -158,6 +159,43 @@ function tierAsEffectiveConfig(tier: GroupTier, base: EffectiveConfig): Effectiv
       matchPriority: r.matchPriority,
     })),
   };
+}
+
+/**
+ * Xem thử cấu trúc tầng cho MỘT tiêu đề Task (màn Cấu trúc tầng, chưa lưu).
+ *
+ * Chỉ chạy được những tầng bóc từ TIÊU ĐỀ TASK CHA — đúng dữ liệu người dùng dán
+ * vào. Tầng nguồn khác (`SELF_TITLE`, token, label, custom field) trả `resolved:
+ * null`: chúng cần dữ liệu của LÁ, đoán từ title Task là bịa. TOÀN PHẦN — không
+ * ném lỗi với nguồn chưa hỗ trợ (khác `GroupKeyResolver.resolve`, vốn fail-fast
+ * lúc ingest thật).
+ */
+export function previewTierKeys(
+  config: EffectiveConfig,
+  tiers: readonly GroupTier[],
+  taskTitle: string,
+  runner?: SafeRegexRunner,
+): { parentPhase: string; entries: TierPreviewEntry[] } {
+  // Phase theo cấu hình Phase đang hiệu lực — đúng đường persist-issues.phaseOfTask.
+  const parentPhase = new TaskTitleParser(config, runner).parse(taskTitle).phaseCode;
+
+  const entries = tiers
+    .slice()
+    .sort((a, b) => a.tierOrder - b.tierOrder)
+    .map((t): TierPreviewEntry => {
+      const resolved =
+        t.sourceType !== 'PARENT_TASK_TITLE'
+          ? null
+          : t.role === 'PHASE'
+            ? parentPhase
+            : taskTitle.trim() === ''
+              ? UNCLASSIFIED_PHASE
+              : new TaskTitleParser(tierAsEffectiveConfig(t, config), runner).parse(taskTitle)
+                  .phaseCode;
+      return { code: t.code, labelVi: t.labelVi, sourceType: t.sourceType, resolved };
+    });
+
+  return { parentPhase, entries };
 }
 
 /** Lấy khoá cho tầng `SUBTASK_TITLE_TOKEN`: parse tiêu đề lá rồi lấy token đã khai. */

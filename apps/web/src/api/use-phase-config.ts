@@ -9,13 +9,16 @@ import {
   effectiveConfigSchema,
   previewResponseSchema,
   saveConfigResponseSchema,
+  tiersPreviewResponseSchema,
   unmatchedResponseSchema,
   versionsResponseSchema,
   type ConfigPayload,
   type ConfigVersion,
   type EffectiveConfigResponse,
+  type GroupTier,
   type PreviewResponse,
   type SaveConfigResponse,
+  type TiersPreviewResponse,
   type UnmatchedLabel,
 } from '@app/shared';
 import { apiClient, type ApiClient } from './client.js';
@@ -126,6 +129,28 @@ export function useSaveConfig(
       // sách version và danh sách nhãn chưa nhận diện được đều đổi cùng lúc.
       void queryClient.invalidateQueries({ queryKey: phaseConfigKeys.all });
     },
+  });
+}
+
+export interface TiersPreviewVars {
+  readonly taskTitle: string;
+  readonly tiers: readonly GroupTier[];
+}
+
+/**
+ * Xem thử cấu trúc tầng: dán một tiêu đề Task → từng tầng (bản NHÁP đang sửa)
+ * bóc ra mã gì. Mutation chứ không phải query — thân mang cả state nháp.
+ */
+export function useTiersPreview(
+  client: ApiClient = apiClient,
+): UseMutationResult<TiersPreviewResponse, Error, TiersPreviewVars> {
+  return useMutation({
+    mutationFn: (vars: TiersPreviewVars) =>
+      client.post(
+        '/config/phase/tiers-preview',
+        { taskTitle: vars.taskTitle, tiers: [...vars.tiers] },
+        tiersPreviewResponseSchema,
+      ),
   });
 }
 

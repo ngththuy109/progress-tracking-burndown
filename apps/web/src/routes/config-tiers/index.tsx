@@ -7,7 +7,7 @@ import {
   type GroupTier,
   type GroupTierRule,
 } from '@app/shared';
-import { useEffectiveConfig, useSaveConfig } from '../../api/use-phase-config.js';
+import { useEffectiveConfig, useSaveConfig, useTiersPreview } from '../../api/use-phase-config.js';
 import { Badge, ErrorState, LoadingState } from '../../components/ui/index.js';
 import { indexIssues, issuesOf, NO_ISSUES } from '../config-phase/field-errors.js';
 import { DeleteButton, IssueList, MoveButtons } from '../config-phase/row-controls.js';
@@ -122,6 +122,8 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
 
       <IssueList issues={errors.at('tiers')} />
 
+      <TiersPreviewPanel tiers={state.tiers} />
+
       <section className="panel">
         <label className="field">
           <span>Ghi chú cho thay đổi này</span>
@@ -169,6 +171,87 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
         </button>
       </div>
     </>
+  );
+}
+
+/**
+ * Xem thử: dán MỘT tiêu đề Task → từng tầng của bản NHÁP đang sửa bóc ra mã gì.
+ *
+ * Kiểm ngay tại chỗ, không phải Lưu rồi Resync mới biết luật có ăn không. Chỉ chạy
+ * được tầng bóc từ tiêu đề Task cha; tầng nguồn khác báo "cần dữ liệu lá" thay vì
+ * đoán bừa.
+ */
+function TiersPreviewPanel({ tiers }: { readonly tiers: readonly GroupTier[] }) {
+  const [title, setTitle] = useState('');
+  const preview = useTiersPreview();
+
+  const run = (): void => {
+    if (title.trim() === '') return;
+    preview.mutate({ taskTitle: title.trim(), tiers });
+  };
+
+  const result = preview.data;
+  const path = result?.entries.map((e) => e.resolved ?? '…') ?? [];
+
+  return (
+    <section className="panel" aria-labelledby="tiers-preview-title">
+      <h2 className="panel__title" id="tiers-preview-title">
+        Xem thử
+      </h2>
+      <p className="panel__hint">
+        Dán một tiêu đề Task thật (VD <code>[PAY][offshore_P1]Design</code>) để xem từng tầng của
+        bản nháp bóc ra mã gì — kiểm luật ngay, không cần Lưu.
+      </p>
+      <div className="row">
+        <input
+          className="input input--wide"
+          value={title}
+          placeholder="[PAY][offshore_P1]Design"
+          aria-label="Tiêu đề Task để xem thử"
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') run();
+          }}
+        />
+        <button
+          type="button"
+          className="button"
+          disabled={title.trim() === '' || preview.isPending}
+          onClick={run}
+        >
+          {preview.isPending ? 'Đang bóc…' : 'Xem thử'}
+        </button>
+      </div>
+
+      {preview.isError && <ErrorState error={preview.error} title="Không xem thử được" />}
+
+      {result && (
+        <div className="stack" aria-live="polite">
+          <p>
+            <span className="muted">group_path dự kiến: </span>
+            <code>[{path.map((p) => `"${p}"`).join(', ')}]</code>
+          </p>
+          <ul className="rows">
+            {result.entries.map((e) => (
+              <li className="row" key={e.code}>
+                <Badge tone="muted">{e.labelVi || e.code}</Badge>
+                {e.resolved === null ? (
+                  <span className="muted">— nguồn "{e.sourceType}" cần dữ liệu lá, không bóc được từ tiêu đề Task</span>
+                ) : (
+                  <>
+                    <span className="muted">→</span>
+                    <code>{e.resolved}</code>
+                    {e.resolved === 'UNCLASSIFIED' && (
+                      <span className="muted">(không luật nào khớp — kiểm lại từ khoá)</span>
+                    )}
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

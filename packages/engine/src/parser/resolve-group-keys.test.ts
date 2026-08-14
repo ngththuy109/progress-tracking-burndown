@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ConfigPayload, EffectiveConfig, GroupTier } from '@app/shared';
-import { GroupKeyResolver } from './resolve-group-keys.js';
+import { GroupKeyResolver, previewTierKeys } from './resolve-group-keys.js';
 
 /**
  * `GroupKeyResolver` suy vectơ `group_path` của lá từ cấu hình tầng
@@ -311,6 +311,64 @@ describe('tầng GROUP nguồn PARENT_TASK_TITLE — bóc chiều RIÊNG từ ti
     expect(
       resolver.resolve({ parentPhase: 'UNCLASSIFIED', parentTaskTitle: null, leafTitle: 'x' }).groupPath[0],
     ).toBe('UNCLASSIFIED');
+  });
+});
+
+describe('previewTierKeys — xem thử cấu trúc tầng cho một tiêu đề Task', () => {
+  const config = mkConfig({
+    matchRules: [{ keyword: 'Design', matchMode: 'CONTAINS', phaseCode: 'DESIGN', matchPriority: 10 }],
+  });
+  const stageTier: GroupTier = {
+    tierOrder: 1,
+    code: 'GIAI_DOAN',
+    labelVi: 'Giai đoạn',
+    labelJa: null,
+    role: 'GROUP',
+    sourceType: 'PARENT_TASK_TITLE',
+    sourceConfig: null,
+    definitions: [],
+    rules: [
+      { keyword: 'offshore_P1', matchMode: 'CONTAINS', groupCode: 'GD1', matchPriority: 10 },
+      { keyword: 'offshore_P2', matchMode: 'CONTAINS', groupCode: 'GD2', matchPriority: 10 },
+    ],
+    titlePatterns: [],
+    displayOrder: 0,
+  };
+  const phaseTier: GroupTier = {
+    tierOrder: 2,
+    code: 'PHASE',
+    labelVi: 'Phase',
+    labelJa: null,
+    role: 'PHASE',
+    sourceType: 'PARENT_TASK_TITLE',
+    sourceConfig: null,
+    definitions: [],
+    rules: [],
+    titlePatterns: [],
+    displayOrder: 1,
+  };
+
+  it('tầng GĐ bóc theo luật riêng; tầng ✦PHASE theo cấu hình Phase hiệu lực', () => {
+    const out = previewTierKeys(config, [phaseTier, stageTier], '[PAY][offshore_P2]Design');
+    expect(out.parentPhase).toBe('DESIGN');
+    // Trả theo THỨ TỰ tầng dù khai lộn xộn.
+    expect(out.entries.map((e) => [e.code, e.resolved])).toEqual([
+      ['GIAI_DOAN', 'GD2'],
+      ['PHASE', 'DESIGN'],
+    ]);
+  });
+
+  it('tầng nguồn khác title-cha trả resolved=null (cần dữ liệu lá), KHÔNG ném lỗi', () => {
+    const labelTier: GroupTier = { ...stageTier, code: 'TEAM', labelVi: 'Team', sourceType: 'LABEL' };
+    const customTier: GroupTier = { ...stageTier, code: 'CF', labelVi: 'CF', sourceType: 'CUSTOM_FIELD' };
+    const out = previewTierKeys(config, [labelTier, { ...phaseTier }, { ...customTier, tierOrder: 3 }], 'x');
+    expect(out.entries.find((e) => e.code === 'TEAM')?.resolved).toBeNull();
+    expect(out.entries.find((e) => e.code === 'CF')?.resolved).toBeNull();
+  });
+
+  it('title không khớp luật tầng nào ⇒ UNCLASSIFIED hiện rõ', () => {
+    const out = previewTierKeys(config, [stageTier, phaseTier], '[CRM][onsite]Testing');
+    expect(out.entries[0]?.resolved).toBe('UNCLASSIFIED');
   });
 });
 

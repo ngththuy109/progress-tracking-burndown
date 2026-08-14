@@ -63,6 +63,35 @@ export type GroupTier = z.infer<typeof groupTierSchema>;
 /** Mã tầng Phase cố định — dùng khi sinh mirror từ phase config. */
 export const PHASE_TIER_CODE = 'PHASE' as const;
 
+// ---------------------------------------------------------------------------
+// Xem thử cấu trúc tầng: dán MỘT tiêu đề Task → từng tầng bóc ra mã gì
+// ---------------------------------------------------------------------------
+
+/** Thân `POST /api/config/phase/tiers-preview` — tiers là BẢN NHÁP đang sửa, chưa lưu. */
+export const tiersPreviewRequestSchema = z.object({
+  taskTitle: z.string().min(1, 'Enter a Task title to preview.'),
+  tiers: z.array(groupTierSchema),
+});
+
+/** Kết quả của MỘT tầng. `resolved: null` = nguồn không bóc được từ tiêu đề Task (cần dữ liệu lá). */
+export const tierPreviewEntrySchema = z.object({
+  code: z.string(),
+  labelVi: z.string(),
+  sourceType: z.enum(GROUP_SOURCE_TYPE),
+  resolved: z.string().nullable(),
+});
+
+export const tiersPreviewResponseSchema = z.object({
+  /** Phase theo cấu hình Phase đang hiệu lực — đúng thứ Sub-task sẽ kế thừa. */
+  parentPhase: z.string(),
+  /** Theo thứ tự tầng. */
+  entries: z.array(tierPreviewEntrySchema),
+});
+
+export type TiersPreviewRequest = z.infer<typeof tiersPreviewRequestSchema>;
+export type TierPreviewEntry = z.infer<typeof tierPreviewEntrySchema>;
+export type TiersPreviewResponse = z.infer<typeof tiersPreviewResponseSchema>;
+
 /**
  * Sinh MIRROR "một tầng Phase" từ phần cấu hình phase_* — cầu nối Vòng 1.
  *
