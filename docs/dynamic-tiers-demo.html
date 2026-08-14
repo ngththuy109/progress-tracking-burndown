@@ -277,6 +277,20 @@
   .gl-ex { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; font-size: 12.5px; }
   .gl-ex .row { display: flex; gap: 9px; align-items: baseline; }
   .gl-ex .tag { flex: none; }
+  /* Callout "đừng nhầm hai chữ tầng" — nhà Jira (cố định) vs thước gom nhóm (bạn chọn) */
+  .gl-myth { border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin: 6px 0 2px; }
+  .gl-myth-hd { font-weight: 680; font-size: 13px; margin-bottom: 10px; }
+  .gl-myth-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  @media (max-width: 540px) { .gl-myth-cols { grid-template-columns: 1fr; } }
+  .gl-myth-col { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; }
+  .gl-myth-cap { font-size: 11.5px; font-weight: 640; margin-bottom: 8px; }
+  .gl-myth-stack { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .gl-myth-stack span { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); text-align: center; }
+  .gl-myth-stack span.on { background: color-mix(in srgb, var(--t-phase) 22%, transparent); border-color: color-mix(in srgb, var(--t-phase) 48%, transparent); font-weight: 640; }
+  .gl-myth-stack span.add { background: transparent; border-style: dashed; color: var(--accent); }
+  .gl-myth-col p { margin: 0; font-size: 11.5px; color: var(--muted); }
+  .gl-myth-foot { margin: 11px 0 0; font-size: 12.5px; }
+  .gl-myth-foot b { font-weight: 640; }
   .note b { font-weight: 640; }
   .foot { margin-top: 26px; color: var(--faint); font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
   .foot code { color: var(--muted); }
@@ -602,6 +616,30 @@
     </div>
     <div class="modal-bd">
       <p class="gl-intro">Cấu hình trả lời 3 câu: <b>theo dõi cái gì</b>, <b>gom nhóm theo mấy tầng</b>, và <b>mỗi tầng lấy khoá từ đâu</b>. Làm lần lượt:</p>
+
+      <div class="gl-myth">
+        <div class="gl-myth-hd">⚠️ Đừng nhầm hai chữ “tầng”</div>
+        <div class="gl-myth-cols">
+          <div class="gl-myth-col">
+            <div class="gl-myth-cap">🏢 Nhà Jira — 3 tầng CỐ ĐỊNH</div>
+            <div class="gl-myth-stack">
+              <span>Epic</span>
+              <span>Task = [Phase]</span>
+              <span>Sub-task</span>
+            </div>
+            <p>Chiều sâu cây issue, Jira định sẵn. “<b>3 tầng</b>” trong tên preset chính là cái này.</p>
+          </div>
+          <div class="gl-myth-col">
+            <div class="gl-myth-cap">📏 Tầng nhóm — BẠN xếp (1..N)</div>
+            <div class="gl-myth-stack">
+              <span class="on">Phase ✦</span>
+              <span class="add">+ Thêm tầng…</span>
+            </div>
+            <p>Số “lát cắt” để cộng dồn số liệu. Preset “3 tầng” chỉ đặt <b>1</b> lát = Phase.</p>
+          </div>
+        </div>
+        <p class="gl-myth-foot">→ Muốn gom sâu hơn (Stream, Module…)? Bấm <b>“+ Thêm tầng”</b> — <b>không giới hạn</b> số lượng. Mỗi tầng tự khai <b>nguồn khoá</b> riêng (title cha · title lá · token · label); đánh dấu đúng <b>một</b> tầng là <b>Phase ✦</b>.</p>
+      </div>
 
       <div class="gl-step"><div class="gl-num">1</div><div><h4>Chọn phạm vi theo dõi (tracked scope)</h4><p>Có ticket cha → <code>CONTAINER</code> (dán key Epic/Task). Dự án phẳng, không cha → <code>QUERY</code> (viết JQL). Khai <code>loại issue lá</code> — tầng mang số liệu (est/worklog).</p></div></div>
 
