@@ -1,8 +1,9 @@
 # Thiết kế: Phân tầng linh động theo dự án (Dynamic Tiers)
 
-> **Trạng thái:** ĐÃ TRIỂN KHAI — Vòng 1–4 xong (xem lộ trình §9). Engine, config, ingest
-> (CONTAINER + QUERY), persist N tầng và drill-down UI đều đã có; 20 golden dataset giữ
-> byte-identical suốt các vòng (không đổi hành vi Epic 3 tầng đang chạy).
+> **Trạng thái:** ĐÃ TRIỂN KHAI — Vòng 1–5 xong (xem lộ trình §9). Engine, config, ingest
+> (CONTAINER + QUERY), persist N tầng, drill-down UI, và ca "Giai đoạn" (GĐ trong title Task
+> cha, Signboard lọc theo nhóm, Xem thử) đều đã có; 20 golden dataset giữ byte-identical
+> suốt các vòng (không đổi hành vi Epic 3 tầng đang chạy).
 > **Nguồn gốc:** yêu cầu "hệ thống vẫn single-tenant nhưng cho phép mỗi dự án cấu
 > hình từ **1 đến N tầng** thay vì cứng **3 tầng** (Epic → Phase → Sub-task) như
 > hiện tại".
@@ -349,9 +350,16 @@ thêm golden cho n=1 (phẳng) và n=3.
 | **2** | Engine tổng quát N tầng (`computeGroupRollups`/`buildTierSnapshotForDay`) + `GroupKeyResolver` ghi `group_path`. Test n=1/n=3 | ✅ Xong |
 | **3** | Config API mở tiers (3.1) + màn "Cấu trúc tầng" (3.2) + nguồn TOKEN/LABEL (3.3) + ingest CONTAINER/QUERY (3.4) + đăng ký scope QUERY (3.5) | ✅ Xong |
 | **4** | Persist N tầng `group_rollup`/`per_tier` (4.1) + Burndown drill-down API + UI (4.2) | ✅ Xong |
+| **5** | Ca "Giai đoạn" (một Epic chia 2+ GĐ, GĐ nằm trong title Task `[{epic}][{team}]TênPhase`): tầng GROUP nguồn `PARENT_TASK_TITLE` parse title cha bằng mẫu/luật RIÊNG của tầng (tầng ✦PHASE vẫn lấy `parentPhase` — byte-identical); Burndown drill tự bỏ qua cấp chỉ có một nút (Epic 1 GĐ nhìn như cũ); Signboard lọc theo nhóm tầng-1 (`?stage=`, chỉ hiện khi ≥2 nhóm); ô chọn CONTAINS/REGEX cho luật tầng; Xem thử `tiers-preview` (dán title Task → group_path) | ✅ Xong |
 
 Mỗi vòng: `pnpm typecheck && pnpm lint && pnpm test` xanh; 20 golden dataset byte-identical
 suốt các vòng làm bằng chứng "không đổi hành vi".
+
+> **Công thức cấu hình ca "Giai đoạn" (Vòng 5):** một bộ GLOBAL dùng cho MỌI Epic — tầng 1
+> `GIAI_DOAN` (GROUP, nguồn title Task cha) với luật ánh xạ `offshore_P1 → GD1`,
+> `offshore_P2 → GD2` + luật **catch-all** (`[` CONTAINS, hoặc REGEX `.`, ưu tiên 90) → `GD1`;
+> tầng 2 ✦PHASE giữ nguyên. Epic không có team ánh xạ rơi hết về `GD1` ⇒ một nhóm duy nhất
+> ⇒ Burndown/Signboard **tự ẩn** cấp GĐ — không Epic nào phải đổi tên ticket hay khai thêm gì.
 
 > **Còn để sau (không chặn):** đường Kế hoạch drill-down cho tầng ≠ Phase khi cần
 > (câu hỏi mở #6); `CUSTOM_FIELD` làm nguồn khoá (v2); tổng quát hoá ingest CONTAINER cho

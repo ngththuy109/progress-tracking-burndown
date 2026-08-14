@@ -661,6 +661,7 @@
         <div class="row"><span class="tag">3 tầng</span><span><code>CONTAINER(Epic)</code> · 1 tầng Phase (nguồn = title Task cha) · lá = Sub-task.</span></div>
         <div class="row"><span class="tag">2 tầng</span><span><code>CONTAINER(Task)</code> · 1 tầng Phase (nguồn = title của lá) · lá = Sub-task.</span></div>
         <div class="row"><span class="tag">Phẳng</span><span><code>QUERY(jql)</code> · 3 tầng Project/Phase/Sub-phase (đều bóc token từ title) · lá = Task.</span></div>
+        <div class="row"><span class="tag">2 giai đoạn</span><span>Title Task <code>[{epic}][{team}]TênPhase</code> · thêm tầng <b>Giai đoạn</b> trên Phase (nguồn = title Task cha) với luật ánh xạ <code>offshore_P1 → GĐ1</code>, <code>offshore_P2 → GĐ2</code> + <b>catch-all → GĐ1</b>. Epic không có team ánh xạ ⇒ một nhóm duy nhất ⇒ Burndown/Signboard <b>tự ẩn</b> cấp GĐ — cấu hình MỘT bộ dùng cho mọi Epic. Kiểm luật bằng ô <b>Xem thử</b> (dán title → group_path).</span></div>
       </div>
 
       <p class="hint" style="margin-top:16px">Chi tiết kỹ thuật &amp; quyết định thiết kế: <code>docs/DYNAMIC-TIERS-DESIGN.md</code>.</p>

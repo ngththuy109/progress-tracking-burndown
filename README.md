@@ -47,9 +47,9 @@ compares against the stored snapshot, and names the culprit — who edited the e
 |---|---|
 | **Epics** | Which Epics (or flat JQL scopes) are tracked, how each is syncing, and what data is missing |
 | **Burndown chart** | Whole Epic, a single Phase, or drill-down by tier, Planned vs Actual over time |
-| **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase |
+| **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase. Filterable by top-tier group (e.g. stage GĐ1/GĐ2) when the epic has more than one |
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
-| **Tier structure** | Define 1..N logical grouping tiers per project; mark exactly one as the Phase tier |
+| **Tier structure** | Define 1..N logical grouping tiers per project; mark exactly one as the Phase tier. Built-in preview: paste a Task title, see the resulting `group_path` before saving |
 | **Signboard columns** | Which task types become columns |
 | **Phase settings** | Title patterns and matching rules, with a preview before saving |
 | **Days off** | Public holidays and make-up workdays for the Vietnam and Japan calendars |

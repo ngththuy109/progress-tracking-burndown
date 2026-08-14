@@ -43,6 +43,9 @@
 | 14b | **Tầng** Đúng một tầng Phase | Bỏ đánh dấu Phase hoặc đánh dấu hai tầng rồi Lưu | Chặn lưu, báo rõ "phải đúng một tầng Phase" | ☐ |
 | 14c | **Tầng** Không đổi hành vi mặc định | Với Epic 3 tầng cũ, không đổi cấu hình | Burndown/Signboard/số liệu **y hệt trước** (config mặc định = 1 tầng Phase) | ☐ |
 | 14d | **Scope QUERY** Đăng ký project phẳng | Màn *Epics* → panel *Theo dõi project phẳng (JQL)* → đặt ID scope + JQL + project key → Thêm | Scope được thêm (không cần Epic trên Jira), đẩy backfill; sau đồng bộ có biểu đồ | ☐ |
+| 14e | **Giai đoạn** Ánh xạ team → GĐ từ cấu hình | *Cấu trúc tầng* → thêm tầng `GIAI_DOAN` trên Phase (nguồn *Tiêu đề Task cha*), luật `offshore_P1 → GD1`, `offshore_P2 → GD2` + catch-all → GD1; Lưu; Resync Toàn bộ một Epic có title Task `[{epic}][{team}]TênPhase` | Lá của Task `offshore_P1` mang GĐ1, `offshore_P2` mang GĐ2; Task không có team ánh xạ về GĐ1; đổi ánh xạ CHỈ bằng sửa luật, không đổi ticket | ☐ |
+| 14f | **Giai đoạn** Xem thử luật ngay tại màn | *Cấu trúc tầng* → khung **Xem thử** → dán một title Task thật → bấm *Xem thử* | Hiện `group_path` dự kiến và từng tầng bóc ra mã gì; title không khớp luật hiện `UNCLASSIFIED` kèm gợi ý; tầng nguồn lá báo "cần dữ liệu lá" | ☐ |
+| 14g | **Giai đoạn** Epic khác không bị ảnh hưởng | Sau khi lưu cấu hình 14e, mở Burndown + Signboard của một Epic **1 giai đoạn** (title cũ) | Giao diện y hệt trước: không thấy cấp GĐ trên drill, không thấy bộ lọc GĐ trên Signboard | ☐ |
 
 ## Biểu đồ Burndown
 
@@ -56,7 +59,7 @@
 | 20 | **US-06** Dấu mốc phát sinh việc | Xem khu *Chart markers* | Ngày có phát sinh việc ghi rõ thêm bao nhiêu giờ và Sub-task nào gây ra | ☐ |
 | 21 | **US-06** Kế hoạch bị dời | Nếu Epic từng bị dời mốc | Ghi rõ dời từ ngày nào sang ngày nào, mấy ngày làm việc, do Sub-task nào | ☐ |
 | 22 | **US-03** Nói rõ đường Kế hoạch trôi | Đọc chú thích dưới biểu đồ | Ghi rõ đường Kế hoạch được tính lại sau mỗi lần đồng bộ, **kể cả phần đã qua** | ☐ |
-| 23 | **Phân tầng** Drill-down theo tầng | Với Epic **đa tầng**, bấm tab *Theo tầng* | Tab chỉ hiện khi Epic đa tầng; đi từ gốc → tầng 1 → … bằng breadcrumb, mỗi mức vẽ con trực tiếp; Epic 1 tầng **không** thấy tab này | ☐ |
+| 23 | **Phân tầng** Drill-down theo tầng | Với Epic **đa tầng**, bấm tab *Theo tầng* | Tab chỉ hiện khi Epic đa tầng; đi từ gốc → tầng 1 → … bằng breadcrumb, mỗi mức vẽ con trực tiếp; Epic 1 tầng **không** thấy tab này; Epic đa tầng nhưng chỉ **một** nhóm tầng-1 (VD 1 giai đoạn) thì drill **bỏ qua** cấp đơn độc đó — vào thẳng danh sách Phase | ☐ |
 
 ## Bảng Signboard
 
@@ -64,6 +67,7 @@
 |---|---|---|---|---|
 | 23 | **US-13** Xem bảng | Mở Signboard của một Phase | Ma trận Function × loại task; mỗi ô có ngày kế hoạch và **chữ** nói trạng thái | ☐ |
 | 23a | **US-13** Chọn nhiều Phase / toàn bộ Epic | Bấm thêm một Phase nữa, hoặc nút **Whole epic** | Mỗi Phase hiện MỘT bảng riêng có tiêu đề; **Whole epic** mở mọi Phase; mỗi bảng giữ thanh tóm tắt và khu *Not on the board* của CHÍNH nó, không trộn số liệu | ☐ |
+| 23b | **Giai đoạn** Lọc bảng theo nhóm tầng-1 | Với Epic **≥2 giai đoạn**, mở Signboard | Thanh lọc mang tên tầng PM đặt (VD *Giai đoạn*) đứng TRÊN bộ chọn Phase; bấm một GĐ → số đếm Phase và lưới chỉ còn dữ liệu GĐ đó, khu *Not on the board* khớp theo; **All** trở về đầy đủ; Epic 1 GĐ **không** thấy thanh này | ☐ |
 | 24 | **US-13** Lọc theo trạng thái | Bấm một mục trên thanh tóm tắt | Các ô khác **mờ đi**, kèm dòng chữ nói rõ *"không phải mất"*. Bấm lần nữa thì bỏ lọc | ☐ |
 | 25 | **US-14** Ô gộp nhiều ticket | Tìm ô có huy hiệu `≡N` | Rê chuột thấy danh sách từng ticket kèm trạng thái riêng; ô mang trạng thái **xấu nhất** | ☐ |
 | 26 | **US-15** Phân biệt ô trống và thiếu ngày | So một ô `—` với một ô *No planned dates* | Hai thứ **khác hẳn nhau**: ô trống là không có việc đó, ô kia là có việc nhưng thiếu ngày | ☐ |

@@ -422,6 +422,10 @@ Lưu xong, các Epic bị ảnh hưởng được đánh dấu vào `dirty:epics
 > **Cấu trúc tầng (phân tầng linh động):** đổi ở màn **Cấu trúc tầng** (khai 1..N tầng, đánh
 > dấu đúng một tầng là Phase) lan truyền **y hệt** cơ chế trên (`dirty:epics` → backfill), vì
 > `tiers` nằm chung một `phase_config_set`. Đổi tầng làm `group_path` của lá được tính lại.
+> Trước khi Lưu, kiểm luật bằng khung **Xem thử** ngay trong màn (dán một tiêu đề Task →
+> xem từng tầng bóc ra mã gì) — đỡ một vòng Lưu + Resync chỉ để phát hiện luật gõ sai.
+> Ca "một Epic chia 2+ giai đoạn" cấu hình một lần dùng chung mọi Epic: xem công thức ở
+> [DYNAMIC-TIERS-DESIGN.md](./DYNAMIC-TIERS-DESIGN.md) §9 (Vòng 5).
 
 ### 6b. Theo dõi một "project phẳng" bằng JQL (scope QUERY)
 
