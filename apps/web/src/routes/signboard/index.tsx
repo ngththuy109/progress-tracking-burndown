@@ -42,12 +42,16 @@ const ALL_TOKEN = '__all__';
 export function SignboardScreen() {
   const [params, setParams] = useSearchParams();
   const epicKey = params.get('epic');
+  // Nhóm tầng-1 đang lọc (VD Giai đoạn GD1/GD2) — trong URL để link chia sẻ giữ
+  // nguyên khung nhìn. `null` = tất cả; Epic không có tầng nhóm thì bộ lọc tự ẩn.
+  const stage = params.get('stage');
 
   // Danh sách Phase có Sub-task — vừa là nguồn cho bộ chọn, vừa để giãn token
   // “toàn bộ Epic” (__all__) ra đúng những Phase đang có dữ liệu, và lấy nhãn
   // tiêu đề cho mỗi bảng. Gọi Ở ĐÂY (không nằm trong PhaseNav) để mọi phần dùng
   // CHUNG một nguồn. `enabled` theo epicKey nên gọi vô điều kiện vẫn an toàn.
-  const phasesQuery = useSignboardPhases(epicKey);
+  // Phase + số đếm theo `stage` đang lọc — đổi nhóm là danh sách đếm lại.
+  const phasesQuery = useSignboardPhases(epicKey, stage);
 
   if (epicKey === null || epicKey === '') {
     return (
@@ -68,18 +72,26 @@ export function SignboardScreen() {
 
   // Chọn Phase = ghi vào URL, nên chia sẻ link giữ nguyên lựa chọn và bấm là
   // đổi ngay, không tải lại trang. Chọn HẾT thì rút gọn về __all__ cho URL gọn
-  // và để nút “Whole epic” sáng lên.
+  // và để nút “Whole epic” sáng lên. LUÔN giữ `stage` đang lọc.
   const writeSelection = (codes: readonly string[]): void => {
+    const keepStage = stage === null ? {} : { stage };
     const ordered = orderByList(codes, allCodes);
     if (ordered.length === 0) {
-      setParams({ epic: epicKey });
+      setParams({ epic: epicKey, ...keepStage });
       return;
     }
     const isAll =
       allCodes.length > 0 &&
       ordered.length === allCodes.length &&
       allCodes.every((c) => ordered.includes(c));
-    setParams({ epic: epicKey, phases: isAll ? ALL_TOKEN : ordered.join(',') });
+    setParams({ epic: epicKey, phases: isAll ? ALL_TOKEN : ordered.join(','), ...keepStage });
+  };
+
+  // Đổi nhóm tầng-1: giữ nguyên lựa chọn Phase (mã Phase thường có ở cả hai nhóm;
+  // mã không còn dữ liệu trong nhóm mới sẽ hiện thành nút "mồ côi" để bỏ chọn).
+  const writeStage = (next: string | null): void => {
+    const keepPhases = rawPhases === null || rawPhases === '' ? {} : { phases: rawPhases };
+    setParams({ epic: epicKey, ...keepPhases, ...(next === null ? {} : { stage: next }) });
   };
 
   const togglePhase = (code: string): void => {
@@ -105,6 +117,15 @@ export function SignboardScreen() {
         </button>
       </div>
 
+      {/* Bộ lọc nhóm tầng-1 (VD Giai đoạn) — CHỈ hiện khi Epic có ≥ 2 nhóm. Epic
+          một giai đoạn / một tầng không thấy gì khác so với trước. */}
+      <StageNav
+        tierLabel={phasesQuery.data?.stageTierLabel ?? null}
+        stages={phasesQuery.data?.stages ?? []}
+        selected={stage}
+        onSelect={writeStage}
+      />
+
       {/* Thanh chọn Phase LUÔN hiện khi đã có Epic — chọn được nhiều Phase một
           lúc, hoặc “Whole epic” để mở tất cả chỉ bằng một cú bấm. */}
       <PhaseNav
@@ -127,9 +148,14 @@ export function SignboardScreen() {
         )
       ) : selection.codes.length === 1 ? (
         // Một Phase: dựng bảng trực tiếp, không thêm tiêu đề (giữ nguyên khung
-        // nhìn quen thuộc). `key` theo Phase để đổi Phase là dựng lại sạch — ô
-        // tìm kiếm và bộ lọc của Phase cũ không dính sang Phase mới.
-        <SignboardBoard key={selection.codes[0]} epicKey={epicKey} phaseCode={selection.codes[0]!} />
+        // nhìn quen thuộc). `key` theo Phase + nhóm để đổi là dựng lại sạch — ô
+        // tìm kiếm và bộ lọc của khung nhìn cũ không dính sang khung nhìn mới.
+        <SignboardBoard
+          key={`${selection.codes[0]}·${stage ?? ''}`}
+          epicKey={epicKey}
+          phaseCode={selection.codes[0]!}
+          stage={stage}
+        />
       ) : (
         // Nhiều Phase: mỗi Phase một bảng riêng, có tiêu đề để biết đang xem
         // bảng nào. `key` theo mã Phase nên thêm/bớt một Phase KHÔNG dựng lại
@@ -139,7 +165,7 @@ export function SignboardScreen() {
             <h2 className="signboard-phase__title">
               {labelOf(code)} <Badge tone="muted">{code}</Badge>
             </h2>
-            <SignboardBoard epicKey={epicKey} phaseCode={code} />
+            <SignboardBoard key={`${code}·${stage ?? ''}`} epicKey={epicKey} phaseCode={code} stage={stage} />
           </section>
         ))
       )}
@@ -194,6 +220,54 @@ function orderByList(codes: readonly string[], allCodes: readonly string[]): str
   const extras: string[] = [];
   for (const c of codes) if (!knownSet.has(c) && !extras.includes(c)) extras.push(c);
   return [...known, ...extras];
+}
+
+/**
+ * Bộ lọc nhóm TẦNG TRÊN CÙNG (VD "Giai đoạn" GD1/GD2) — đứng TRƯỚC bộ chọn Phase.
+ *
+ * Chỉ hiện khi Epic có ≥ 2 nhóm: Epic một giai đoạn (mọi lá cùng nhóm catch-all)
+ * hay Epic 1 tầng không thấy gì khác so với trước. Nhãn thanh lấy từ chính tên
+ * tầng PM đã đặt ở màn Cấu trúc tầng (VD "Giai đoạn"), không viết cứng.
+ */
+function StageNav({
+  tierLabel,
+  stages,
+  selected,
+  onSelect,
+}: {
+  readonly tierLabel: string | null;
+  readonly stages: readonly { code: string; label: string | null; subtaskCount: number }[];
+  readonly selected: string | null;
+  readonly onSelect: (stage: string | null) => void;
+}) {
+  if (stages.length < 2) return null;
+
+  return (
+    <div className="scope" role="group" aria-label={`Filter by ${tierLabel ?? 'group'}`}>
+      <span className="scope__label">{tierLabel ?? 'Group'}:</span>
+      <button
+        type="button"
+        className={`button${selected === null ? ' button--primary' : ''}`}
+        aria-pressed={selected === null}
+        title="Show every group"
+        onClick={() => onSelect(null)}
+      >
+        All
+      </button>
+      {stages.map((s) => (
+        <button
+          key={s.code}
+          type="button"
+          className={`button${selected === s.code ? ' button--primary' : ''}`}
+          aria-pressed={selected === s.code}
+          title={s.label === null ? s.code : `${s.label} (${s.code})`}
+          onClick={() => onSelect(s.code)}
+        >
+          {s.label ?? s.code} <Badge tone="muted">{s.subtaskCount}</Badge>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -291,12 +365,20 @@ function PhaseNav({
  * Bảng của MỘT Phase đã chọn — tách riêng để mọi hook của bảng nằm gọn một chỗ
  * và chỉ chạy khi thật sự có Phase.
  */
-function SignboardBoard({ epicKey, phaseCode }: { readonly epicKey: string; readonly phaseCode: string }) {
+function SignboardBoard({
+  epicKey,
+  phaseCode,
+  stage = null,
+}: {
+  readonly epicKey: string;
+  readonly phaseCode: string;
+  readonly stage?: string | null;
+}) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<SignboardStatus | null>(null);
 
-  const board = useSignboard(epicKey, phaseCode);
-  const unparsed = useUnparsedSubtasks(epicKey, phaseCode);
+  const board = useSignboard(epicKey, phaseCode, stage);
+  const unparsed = useUnparsedSubtasks(epicKey, phaseCode, stage);
   // Vi phạm plan-ngày nghỉ (T-37). Tải song song và KHÔNG chặn bảng: Signboard
   // vẫn dựng đầy đủ kể cả khi API kiểm tra lỗi — ⚠ chỉ là lớp cảnh báo thêm.
   const conflictQuery = usePlanConflicts(epicKey);

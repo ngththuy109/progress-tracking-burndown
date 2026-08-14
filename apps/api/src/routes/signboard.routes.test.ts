@@ -6,6 +6,7 @@ import {
   type SignboardPhase,
   type SignboardPhasesResponse,
   type SignboardResponse,
+  type SignboardStage,
   type SignboardSubtask,
   type UnparsedResponse,
   type WorkCalendar,
@@ -53,17 +54,26 @@ class FakeReads implements SignboardReadPort {
   columnList: ColumnSpec[] = COLUMNS;
   raw: Record<string, string | null> = {};
   phaseList: SignboardPhase[] = [];
+  stageInfo: { tierLabel: string | null; items: SignboardStage[] } = { tierLabel: null, items: [] };
   subPhaseMetaMap: Map<string, SubPhaseMetaEntry> = new Map();
   queries = 0;
+  /** `stage` mà route đã truyền xuống ở lần gọi gần nhất — để test khẳng định. */
+  lastPhasesStage: string | null | undefined;
+  lastSubtasksStage: string | null | undefined;
 
   async epicMeta() {
     return { projectKey: 'PAY', calendar: CALENDAR };
   }
-  async phases() {
+  async phases(_epicKey: string, _projectKey: string, stage: string | null) {
+    this.lastPhasesStage = stage;
     return this.phaseList;
   }
-  async subtasks() {
+  async stages() {
+    return this.stageInfo;
+  }
+  async subtasks(_epicKey: string, _phaseCode: string, stage: string | null) {
     this.queries += 1;
+    this.lastSubtasksStage = stage;
     return this.subtaskList;
   }
   async columns() {
@@ -611,6 +621,50 @@ describe('bộ chọn Phase', () => {
   it('thiếu thông tin người dùng nhận HTTP 401', async () => {
     principal = null;
     expect((await get(PHASES)).status).toBe(401);
+  });
+});
+
+describe('bộ lọc nhóm tầng-1 (Giai đoạn)', () => {
+  const PHASES = '/api/signboard/epic/PAY-1/phases';
+
+  it('/phases trả kèm danh sách nhóm + nhãn tầng từ cổng', async () => {
+    reads.stageInfo = {
+      tierLabel: 'Giai đoạn',
+      items: [
+        { code: 'GD1', label: 'Giai đoạn 1', subtaskCount: 9 },
+        { code: 'GD2', label: 'Giai đoạn 2', subtaskCount: 4 },
+      ],
+    };
+
+    const { status, body } = await get<SignboardPhasesResponse>(PHASES);
+
+    expect(status).toBe(200);
+    expect(body.stageTierLabel).toBe('Giai đoạn');
+    expect(body.stages.map((s) => s.code)).toEqual(['GD1', 'GD2']);
+  });
+
+  it('Epic 1 tầng: stages rỗng, stageTierLabel null — UI ẩn bộ lọc', async () => {
+    const { body } = await get<SignboardPhasesResponse>(PHASES);
+    expect(body.stages).toEqual([]);
+    expect(body.stageTierLabel).toBeNull();
+  });
+
+  it('?stage= được truyền xuống cổng cho cả /phases lẫn bảng; vắng thì null', async () => {
+    await get<SignboardPhasesResponse>(`${PHASES}?stage=GD2`);
+    expect(reads.lastPhasesStage).toBe('GD2');
+
+    await get<SignboardResponse>(`${BOARD}?stage=GD2`);
+    expect(reads.lastSubtasksStage).toBe('GD2');
+
+    await get<UnparsedResponse>(`${BOARD}/unparsed?stage=GD1`);
+    expect(reads.lastSubtasksStage).toBe('GD1');
+
+    await get<SignboardResponse>(BOARD);
+    expect(reads.lastSubtasksStage).toBeNull();
+
+    // Chuỗi rỗng / toàn khoảng trắng coi như không lọc.
+    await get<SignboardResponse>(`${BOARD}?stage=%20%20`);
+    expect(reads.lastSubtasksStage).toBeNull();
   });
 });
 

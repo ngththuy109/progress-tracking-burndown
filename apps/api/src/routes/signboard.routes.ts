@@ -6,6 +6,7 @@ import type {
   SignboardPhase,
   SignboardPhasesResponse,
   SignboardResponse,
+  SignboardStage,
   SignboardSubtask,
   UnparsedResponse,
   WorkCalendar,
@@ -33,9 +34,18 @@ export interface SignboardReadPort {
    * Chính là danh sách để PM chọn thay vì gõ tay — mỗi mục ở đây bảo đảm mở ra
    * bảng sẽ có dữ liệu.
    */
-  phases(epicKey: string, projectKey: string): Promise<readonly SignboardPhase[]>;
-  /** MỘT truy vấn lấy mọi Sub-task của `(epicKey, phaseCode)`. */
-  subtasks(epicKey: string, phaseCode: string): Promise<readonly SignboardSubtask[]>;
+  phases(epicKey: string, projectKey: string, stage: string | null): Promise<readonly SignboardPhase[]>;
+  /**
+   * Các nhóm ở TẦNG TRÊN CÙNG (VD Giai đoạn GD1/GD2) có lá trong Epic, kèm nhãn
+   * tầng. Chỉ đếm lá `group_path` sâu ≥ 2; Epic 1 tầng trả rỗng → UI ẩn bộ lọc.
+   */
+  stages(epicKey: string): Promise<{ tierLabel: string | null; items: readonly SignboardStage[] }>;
+  /**
+   * MỘT truy vấn lấy mọi Sub-task của `(epicKey, phaseCode)`. `stage` ≠ null thì
+   * chỉ lấy lá thuộc nhóm tầng-1 đó (lọc TRƯỚC khi dựng bảng — ô là kết quả gộp
+   * server-side nên không lọc sau được).
+   */
+  subtasks(epicKey: string, phaseCode: string, stage: string | null): Promise<readonly SignboardSubtask[]>;
   /** Cột đang hiệu lực, đã gộp kế thừa, sắp theo `display_order`. */
   columns(projectKey: string): Promise<readonly ColumnSpec[]>;
   /**
@@ -120,10 +130,23 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     return raw;
   }
 
+  /** `?stage=` — mã nhóm tầng-1 (Giai đoạn) để lọc. Vắng/rỗng = tất cả. */
+  function resolveStage(req: FastifyRequest): string | null {
+    const raw = (req.query as { stage?: string }).stage?.trim();
+    return raw === undefined || raw === '' ? null : raw;
+  }
+
   app.get('/api/signboard/epic/:epicKey/phases', async (req, reply) =>
     handle(reply, async (): Promise<SignboardPhasesResponse> => {
       const { epicKey, meta } = await epicContext(req);
-      return { epicKey, phases: await deps.reads.phases(epicKey, meta.projectKey) };
+      const stage = resolveStage(req);
+      // Danh sách nhóm tầng-1 KHÔNG lọc theo stage (nó chính là bộ lọc); danh sách
+      // Phase + số đếm thì lọc — chọn GĐ2 phải thấy đúng Phase của GĐ2.
+      const [phases, stages] = await Promise.all([
+        deps.reads.phases(epicKey, meta.projectKey, stage),
+        deps.reads.stages(epicKey),
+      ]);
+      return { epicKey, phases, stageTierLabel: stages.tierLabel, stages: stages.items };
     }),
   );
 
@@ -131,7 +154,7 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     handle(reply, async (): Promise<SignboardResponse> => {
       const { epicKey, phaseCode, meta } = await context(req);
       const [subtasks, columns, subPhaseMeta] = await Promise.all([
-        deps.reads.subtasks(epicKey, phaseCode),
+        deps.reads.subtasks(epicKey, phaseCode, resolveStage(req)),
         deps.reads.columns(meta.projectKey),
         deps.reads.subPhaseMeta(meta.projectKey, phaseCode),
       ]);
@@ -151,7 +174,8 @@ export function registerSignboardRoutes(app: FastifyInstance, deps: SignboardRou
     handle(reply, async (): Promise<UnparsedResponse> => {
       const { epicKey, phaseCode } = await context(req);
       const [subtasks, raw] = await Promise.all([
-        deps.reads.subtasks(epicKey, phaseCode),
+        // Cùng bộ lọc stage với bảng — khu "chưa lên bảng" phải khớp bảng đang xem.
+        deps.reads.subtasks(epicKey, phaseCode, resolveStage(req)),
         deps.reads.rawTaskTypes(epicKey, phaseCode),
       ]);
 

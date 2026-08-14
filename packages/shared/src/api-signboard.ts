@@ -181,10 +181,26 @@ export const signboardPhaseSchema = z.object({
   subtaskCount: z.number().int(),
 });
 
+/**
+ * Một nhóm ở TẦNG TRÊN CÙNG của cây phân tầng (VD "Giai đoạn" GD1/GD2) — nguồn cho
+ * bộ lọc đứng trước bộ chọn Phase. Chỉ đếm lá có `group_path` sâu ≥ 2 (lá 1 tầng
+ * không có chiều nhóm nào ngoài Phase).
+ */
+export const signboardStageSchema = z.object({
+  code: z.string(),
+  /** Nhãn từ định nghĩa tầng (group_tier_definition); `null` khi chưa khai. */
+  label: z.string().nullable(),
+  subtaskCount: z.number().int(),
+});
+
 export const signboardPhasesResponseSchema = z.object({
   epicKey: z.string(),
   /** Đã sắp theo `display_order` của cấu hình; Phase lạ xếp sau, theo mã. */
   phases: z.array(signboardPhaseSchema),
+  /** Nhãn của tầng trên cùng (group_tier.label_vi, VD "Giai đoạn"); `null` khi config 1 tầng. */
+  stageTierLabel: z.string().nullable().default(null),
+  /** Các nhóm tầng-1 CÓ lá trong Epic. UI chỉ hiện bộ lọc khi ≥ 2 nhóm. */
+  stages: z.array(signboardStageSchema).default([]),
 });
 
 /**
@@ -200,9 +216,17 @@ export interface SignboardPhase {
   readonly subtaskCount: number;
 }
 
+export interface SignboardStage {
+  readonly code: string;
+  readonly label: string | null;
+  readonly subtaskCount: number;
+}
+
 export interface SignboardPhasesResponse {
   readonly epicKey: string;
   readonly phases: readonly SignboardPhase[];
+  readonly stageTierLabel: string | null;
+  readonly stages: readonly SignboardStage[];
 }
 
 /** Ngưỡng banner cảnh báo tiêu đề chưa chuẩn — PRD E-27. */

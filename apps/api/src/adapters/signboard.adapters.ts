@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@app/db';
-import type { SignboardPhase, SignboardPic, SignboardSubtask } from '@app/shared';
+import type { SignboardPhase, SignboardPic, SignboardStage, SignboardSubtask } from '@app/shared';
 import { normalize, normalizePreservingCase } from '@app/engine';
 import type { SignboardReadPort } from '../routes/signboard.routes.js';
 import type { ColumnSpec, SubPhaseMetaEntry } from '../services/signboard.service.js';
@@ -74,18 +74,23 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
   return {
     epicMeta: (epicKey) => burndown.epicMeta(epicKey),
 
-    async phases(epicKey, projectKey): Promise<readonly SignboardPhase[]> {
+    async phases(epicKey, projectKey, stage): Promise<readonly SignboardPhase[]> {
       // Đếm Sub-task theo Phase, đọc THẲNG từ `jira_issue` — cùng nguồn với truy
       // vấn dựng bảng bên dưới. Bảo đảm mỗi Phase liệt kê ở đây mở ra là có ô;
       // dùng `phase_rollup` sẽ lệch khi job tính lại chưa chạy.
+      //
+      // Có `stage` thì đếm TRONG nhóm tầng-1 đó (cùng điều kiện với `subtasks` —
+      // bộ chọn Phase phải khớp bảng). `jsonb_array_length ≥ 2` chặn lá 1 tầng:
+      // với chúng group_path[0] chính là phase_code, so với mã GĐ là vô nghĩa.
       const counts = await prisma.$queryRawUnsafe<{ phase_code: string; subtask_count: number }[]>(
         `SELECT i.phase_code, COUNT(*)::int AS subtask_count
            FROM jira_issue i
           WHERE i.epic_key = $1
             AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL
             AND i.phase_code IS NOT NULL
+            ${stage === null ? '' : `AND jsonb_array_length(i.group_path) >= 2 AND i.group_path->>0 = $2`}
           GROUP BY i.phase_code`,
-        epicKey,
+        ...(stage === null ? [epicKey] : [epicKey, stage]),
       );
 
       // Nhãn + thứ tự hiển thị lấy từ cấu hình đang hiệu lực (bản project ghi đè
@@ -127,8 +132,63 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
       return phases;
     },
 
-    async subtasks(epicKey, phaseCode): Promise<readonly SignboardSubtask[]> {
+    async stages(epicKey): Promise<{ tierLabel: string | null; items: readonly SignboardStage[] }> {
+      // Nhóm tầng-1 CÓ lá trong Epic. Chỉ tính lá `group_path` sâu ≥ 2 — lá 1 tầng
+      // thì phần tử đầu là phase_code, không phải một chiều nhóm riêng. Epic 1 tầng
+      // (hoặc chưa resync sau khi đổi config) trả rỗng → UI ẩn bộ lọc, chạy như cũ.
+      const counts = await prisma.$queryRawUnsafe<{ code: string; subtask_count: number }[]>(
+        `SELECT i.group_path->>0 AS code, COUNT(*)::int AS subtask_count
+           FROM jira_issue i
+          WHERE i.epic_key = $1
+            AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL
+            AND jsonb_array_length(i.group_path) >= 2
+          GROUP BY 1`,
+        epicKey,
+      );
+      if (counts.length === 0) return { tierLabel: null, items: [] };
+
+      // Nhãn + thứ tự từ cấu hình tầng đang hiệu lực. Màn Cấu trúc tầng chạy trên
+      // GLOBAL (single-tenant) nên chỉ đọc GLOBAL — khớp nơi ghi.
+      const [tierRows, defs] = await Promise.all([
+        prisma.$queryRawUnsafe<{ label_vi: string }[]>(
+          `SELECT t.label_vi
+             FROM group_tier t
+             JOIN phase_config_set s ON s.id = t.config_set_id
+            WHERE s.is_active = true AND s.scope = 'GLOBAL' AND t.tier_order = 1`,
+        ),
+        prisma.$queryRawUnsafe<{ group_code: string; label_vi: string; display_order: number }[]>(
+          `SELECT d.group_code, d.label_vi, d.display_order
+             FROM group_tier_definition d
+             JOIN phase_config_set s ON s.id = d.config_set_id
+            WHERE s.is_active = true AND s.scope = 'GLOBAL' AND d.tier_order = 1
+            ORDER BY d.display_order`,
+        ),
+      ]);
+
+      const meta = new Map(defs.map((d) => [d.group_code, { label: d.label_vi, order: d.display_order }]));
+      const items: SignboardStage[] = counts.map((c) => ({
+        code: c.code,
+        label: meta.get(c.code)?.label ?? null,
+        subtaskCount: Number(c.subtask_count),
+      }));
+      // Nhóm có trong định nghĩa đứng trước theo display_order; nhóm lạ xếp sau
+      // theo mã — cùng luật sắp với danh sách Phase.
+      items.sort((a, b) => {
+        const oa = meta.get(a.code)?.order;
+        const ob = meta.get(b.code)?.order;
+        if (oa !== undefined && ob !== undefined) return oa - ob || a.code.localeCompare(b.code);
+        if (oa !== undefined) return -1;
+        if (ob !== undefined) return 1;
+        return a.code.localeCompare(b.code);
+      });
+
+      return { tierLabel: tierRows[0]?.label_vi ?? null, items };
+    },
+
+    async subtasks(epicKey, phaseCode, stage): Promise<readonly SignboardSubtask[]> {
       // Dùng index `(epic_key, phase_code, function_name, task_type)` của T-02.
+      // Lọc `stage` NGAY TRONG SQL: ô Signboard là kết quả gộp server-side nên
+      // phải lọc trước khi dựng bảng (cùng điều kiện với `phases`).
       const rows = await prisma.$queryRawUnsafe<SubtaskRow[]>(
         `SELECT i.issue_key, i.summary, i.function_key, i.function_name, i.sb_phase_raw,
                 i.task_type, i.sb_parse_status, i.wbs_start_date, i.wbs_end_date, i.status_category,
@@ -136,9 +196,9 @@ export function createSignboardReadPort(prisma: PrismaClient): SignboardReadPort
            FROM jira_issue i
            LEFT JOIN subtask_actual_dates a ON a.issue_key = i.issue_key
           WHERE i.epic_key = $1 AND i.phase_code = $2
-            AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL`,
-        epicKey,
-        phaseCode,
+            AND i.issue_type = 'SUBTASK' AND i.removed_at IS NULL
+            ${stage === null ? '' : `AND jsonb_array_length(i.group_path) >= 2 AND i.group_path->>0 = $3`}`,
+        ...(stage === null ? [epicKey, phaseCode] : [epicKey, phaseCode, stage]),
       );
 
       return rows.map((r) => ({

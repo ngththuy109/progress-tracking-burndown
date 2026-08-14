@@ -59,6 +59,9 @@ const doneCell: SignboardCell = {
 const PHASES: SignboardPhasesResponse = {
   epicKey: 'PAY-1',
   phases: [{ phaseCode: 'DESIGN', label: 'Thiết kế', subtaskCount: 2 }],
+  // Epic 1 tầng: không có nhóm tầng-1 nào → bộ lọc Giai đoạn phải ẨN.
+  stageTierLabel: null,
+  stages: [],
 };
 
 const BOARD: SignboardResponse = {
@@ -231,6 +234,8 @@ const PHASES_MULTI: SignboardPhasesResponse = {
     { phaseCode: 'DESIGN', label: 'Thiết kế', subtaskCount: 2 },
     { phaseCode: 'CODING', label: 'Lập trình', subtaskCount: 1 },
   ],
+  stageTierLabel: null,
+  stages: [],
 };
 
 const BOARD_CODING: SignboardResponse = {
@@ -328,5 +333,78 @@ describe('SignboardScreen — chọn nhiều Phase', () => {
     await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
     // Một Phase: không dựng tiêu đề Phase riêng (chỉ bảng trần như trước đây).
     expect(screen.queryByRole('heading', { name: /Thiết kế/ })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bộ lọc nhóm tầng-1 (Giai đoạn)
+// ---------------------------------------------------------------------------
+
+const PHASES_STAGED: SignboardPhasesResponse = {
+  epicKey: 'PAY-1',
+  phases: [{ phaseCode: 'DESIGN', label: 'Thiết kế', subtaskCount: 2 }],
+  stageTierLabel: 'Giai đoạn',
+  stages: [
+    { code: 'GD1', label: 'Giai đoạn 1', subtaskCount: 9 },
+    { code: 'GD2', label: 'Giai đoạn 2', subtaskCount: 4 },
+  ],
+};
+
+/** Stub nhận biết cả query string — ghi lại `stage` của từng lời gọi. */
+function stubStagedRouted(seen: { phasesStages: (string | null)[]; boardStages: (string | null)[] }): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const u = new URL(raw, 'http://test.local');
+      const stage = u.searchParams.get('stage');
+      const body = u.pathname.endsWith('/phases')
+        ? (seen.phasesStages.push(stage), PHASES_STAGED)
+        : u.pathname.endsWith('/unparsed')
+          ? UNPARSED
+          : u.pathname.endsWith('/plan-conflicts')
+            ? CONFLICTS
+            : u.pathname.endsWith('/phase/DESIGN')
+              ? (seen.boardStages.push(stage), BOARD)
+              : null;
+      if (body === null) return Promise.reject(new Error(`no mock for ${raw}`));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
+    }),
+  );
+}
+
+describe('SignboardScreen — bộ lọc Giai đoạn', () => {
+  it('Epic không có nhóm tầng-1 thì KHÔNG hiện bộ lọc (giữ nguyên UI cũ)', async () => {
+    stubFetchRouted(); // PHASES: stages rỗng
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+    expect(screen.queryByRole('group', { name: /Filter by/ })).toBeNull();
+  });
+
+  it('≥2 nhóm: hiện bộ lọc mang tên tầng; bấm một nhóm là mọi request kèm ?stage=', async () => {
+    const seen = { phasesStages: [] as (string | null)[], boardStages: [] as (string | null)[] };
+    stubStagedRouted(seen);
+    renderAt('/signboard?epic=PAY-1&phases=DESIGN');
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+
+    // Bộ lọc hiện, nhãn lấy từ tên tầng PM đặt; nút "All" đang sáng.
+    const bar = screen.getByRole('group', { name: 'Filter by Giai đoạn' });
+    expect(bar).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+    // Lời gọi đầu chưa lọc.
+    expect(seen.phasesStages).toContain(null);
+    expect(seen.boardStages).toContain(null);
+
+    // Bấm "Giai đoạn 2" → phases + bảng đều gọi lại với ?stage=GD2. Thanh chọn
+    // GIỮ NGUYÊN trong lúc tải (keepPreviousData) nên nút vẫn đó và sáng lên.
+    fireEvent.click(screen.getByRole('button', { name: /Giai đoạn 2/ }));
+    await waitFor(() => expect(seen.boardStages).toContain('GD2'));
+    expect(seen.phasesStages).toContain('GD2');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Giai đoạn 2/ }).getAttribute('aria-pressed')).toBe('true'),
+    );
   });
 });

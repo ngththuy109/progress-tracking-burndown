@@ -1,4 +1,4 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   signboardPhasesResponseSchema,
   signboardResponseSchema,
@@ -18,10 +18,15 @@ import { apiClient, type ApiClient } from './client.js';
  */
 
 export const signboardKeys = {
-  phases: (epicKey: string) => ['signboard', epicKey, 'phases'] as const,
-  board: (epicKey: string, phaseCode: string) => ['signboard', epicKey, phaseCode] as const,
-  unparsed: (epicKey: string, phaseCode: string) => ['signboard', epicKey, phaseCode, 'unparsed'] as const,
+  phases: (epicKey: string, stage: string | null) => ['signboard', epicKey, 'phases', stage ?? ''] as const,
+  board: (epicKey: string, phaseCode: string, stage: string | null) =>
+    ['signboard', epicKey, phaseCode, stage ?? ''] as const,
+  unparsed: (epicKey: string, phaseCode: string, stage: string | null) =>
+    ['signboard', epicKey, phaseCode, stage ?? '', 'unparsed'] as const,
 };
+
+/** `?stage=` chỉ gửi khi có chọn nhóm (buildUrl bỏ qua undefined). */
+const stageQuery = (stage: string | null) => ({ stage: stage ?? undefined });
 
 /**
  * Các Phase CÓ Sub-task trong Epic — nguồn cho bộ chọn Phase.
@@ -32,14 +37,19 @@ export const signboardKeys = {
  */
 export function useSignboardPhases(
   epicKey: string | null,
+  stage: string | null = null,
   client: ApiClient = apiClient,
 ): UseQueryResult<SignboardPhasesResponse, Error> {
   return useQuery({
-    queryKey: signboardKeys.phases(epicKey ?? ''),
+    queryKey: signboardKeys.phases(epicKey ?? '', stage),
     enabled: epicKey !== null && epicKey !== '',
+    // Đổi bộ lọc Giai đoạn = đổi query key. Giữ dữ liệu cũ trong lúc tải để thanh
+    // chọn nhóm/Phase không biến mất chớp nhoáng (mất luôn nút vừa bấm).
+    placeholderData: keepPreviousData,
     queryFn: ({ signal }) =>
       client.get(`/signboard/epic/${epicKey ?? ''}/phases`, signboardPhasesResponseSchema, {
         signal,
+        query: stageQuery(stage),
       }) as Promise<SignboardPhasesResponse>,
   });
 }
@@ -47,17 +57,18 @@ export function useSignboardPhases(
 export function useSignboard(
   epicKey: string | null,
   phaseCode: string | null,
+  stage: string | null = null,
   client: ApiClient = apiClient,
 ): UseQueryResult<SignboardResponse, Error> {
   return useQuery({
-    queryKey: signboardKeys.board(epicKey ?? '', phaseCode ?? ''),
+    queryKey: signboardKeys.board(epicKey ?? '', phaseCode ?? '', stage),
     enabled: epicKey !== null && phaseCode !== null && epicKey !== '' && phaseCode !== '',
     staleTime: 0,
     queryFn: ({ signal }) =>
       client.get(
         `/signboard/epic/${epicKey ?? ''}/phase/${phaseCode ?? ''}`,
         signboardResponseSchema,
-        { signal },
+        { signal, query: stageQuery(stage) },
       ) as Promise<SignboardResponse>,
   });
 }
@@ -65,16 +76,17 @@ export function useSignboard(
 export function useUnparsedSubtasks(
   epicKey: string | null,
   phaseCode: string | null,
+  stage: string | null = null,
   client: ApiClient = apiClient,
 ): UseQueryResult<UnparsedResponse, Error> {
   return useQuery({
-    queryKey: signboardKeys.unparsed(epicKey ?? '', phaseCode ?? ''),
+    queryKey: signboardKeys.unparsed(epicKey ?? '', phaseCode ?? '', stage),
     enabled: epicKey !== null && phaseCode !== null && epicKey !== '' && phaseCode !== '',
     queryFn: ({ signal }) =>
       client.get(
         `/signboard/epic/${epicKey ?? ''}/phase/${phaseCode ?? ''}/unparsed`,
         unparsedResponseSchema,
-        { signal },
+        { signal, query: stageQuery(stage) },
       ),
   });
 }
