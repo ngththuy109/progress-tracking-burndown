@@ -26,7 +26,7 @@ bằng **một lệnh**, và biết cách **đổi cổng** khi cần.
 |---|---|---|
 | Lệnh | `pnpm dev` (gồm cả API + worker) | `pnpm web:start` |
 | Công cụ | `vite` (dev, có HMR) | `vite preview` (phục vụ `dist/` tĩnh) |
-| Cổng | **5180** | **8080** (đổi qua `WEB_PORT`) |
+| Cổng | **8080** (chung với cột phải — chạy lần lượt) | **8080** (đổi qua `WEB_PORT`) |
 | Build trước? | Không — biên dịch nóng trong bộ nhớ | **Có** — chạy `vite build` ra `apps/web/dist/` |
 | Chèn danh tính giả cho DEV? | Có, nếu đặt `VITE_DEV_USER` | **KHÔNG bao giờ** (xem §5) |
 | Dùng khi nào | Đang code, cần sửa-là-thấy | Thử bản production, container, self-host |
@@ -211,7 +211,7 @@ Trình duyệt ──HTTPS──▶ nginx (cổng 443, TLS)
 
 | Ứng dụng | Cổng | Đặt ở đâu |
 |---|---|---|
-| Web — dev server | 5180 | `WEB_DEV_PORT` trong `apps/web/vite.config.ts` |
+| Web — dev server | 8080 | `WEB_DEV_PORT` trong `apps/web/vite.config.ts` (chung cổng với máy chủ đã build) |
 | Web — **máy chủ đã build** | **8080** | **`WEB_PORT`** (mặc định `WEB_PREVIEW_PORT`) |
 | API | 3000 | `PORT` (xem `apps/api/src/server.ts`) |
 | E2E (Playwright) | 5199 | `playwright.config.ts` |

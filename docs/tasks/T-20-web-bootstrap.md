@@ -155,7 +155,7 @@ Nguyên nhân: `reuseExistingServer: true` làm Playwright thấy cổng 5173 đ
 
 | Sửa | Chặn được gì |
 |---|---|
-| `pnpm dev` đổi sang cổng **5180** | Không đụng cổng mặc định mà mọi dự án đều nhắm vào |
+| `pnpm dev` đổi sang cổng **8080** | Không đụng cổng mặc định (5173) mà mọi dự án đều nhắm vào |
 | E2E dùng cổng **5199** riêng | Chạy E2E không phải tắt dev server đang mở |
 | `reuseExistingServer: false` | Playwright luôn tự bật máy chủ, không bao giờ mượn của người lạ |
 

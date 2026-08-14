@@ -12,19 +12,23 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /**
  * Cổng khi lập trình viên chạy `pnpm dev`.
  *
- * CỐ Ý không dùng 5173 — đó là cổng mặc định của Vite nên mọi dự án khác trên
- * máy đều nhắm vào nó. Trùng cổng là mở trình duyệt ra thấy app của dự án khác,
- * và mất khá lâu mới nhận ra.
+ * DÙNG CHUNG 8080 với máy chủ web đã build (`WEB_PREVIEW_PORT`): web app luôn ở
+ * `:8080` dù đang chạy dev server (HMR) hay bản build tĩnh — hai chế độ chạy LẦN
+ * LƯỢT chứ không song song, nên chung cổng cho dễ nhớ. Lỡ chạy cả hai cùng lúc
+ * thì `strictPort` báo lỗi ngay. CỐ Ý không dùng 5173 (cổng mặc định của Vite mà
+ * mọi dự án khác đều nhắm vào) — trùng nó là mở trình duyệt ra thấy app dự án
+ * khác, mất khá lâu mới nhận ra.
  */
-export const WEB_DEV_PORT = 5180;
+export const WEB_DEV_PORT = 8080;
 
 /**
  * Cổng của MÁY CHỦ WEB đã build — `vite preview` phục vụ bản tĩnh trong `dist/`
- * sau khi `vite build` (xem `docs/WEB-SERVER.md`). KHÁC `WEB_DEV_PORT`: đó là
- * dev server nóng (HMR), còn đây là bản build tĩnh để chạy/thử như production.
+ * sau khi `vite build` (xem `docs/WEB-SERVER.md`). GIỐNG `WEB_DEV_PORT` (8080):
+ * dev server nóng (HMR) và bản build tĩnh là hai cách phục vụ CÙNG một app, chạy
+ * lần lượt chứ không song song, nên dùng chung cổng cho dễ nhớ ("app luôn ở :8080").
  *
  * Mặc định 8080; đổi qua env `WEB_PORT`. CỐ Ý KHÔNG dùng chung biến `PORT` với
- * API (mặc định 3000 — xem `apps/api/src/server.ts`): hai tiến trình chạy song
+ * API (mặc định 3000 — xem `apps/api/src/server.ts`): API và web CÓ thể chạy song
  * song, xài chung một biến sẽ tranh cổng.
  */
 export const WEB_PREVIEW_PORT = 8080;
@@ -76,11 +80,11 @@ export function resolveAllowedHosts(
 }
 
 /**
- * Host mà DEV SERVER (`pnpm dev`, cổng 5180) lắng nghe.
+ * Host mà DEV SERVER (`pnpm dev`, cổng 8080) lắng nghe.
  *
  * TRƯỚC ĐÂY khối `server` KHÔNG đặt `host`, nên Vite lùi về mặc định CHỈ
  * `localhost`: máy khác (điện thoại cùng LAN, VM, container, một máy khác trong
- * mạng) mở `http://<IP-máy-này>:5180` là KHÔNG vào được — nhìn hệt như "chỉ
+ * mạng) mở `http://<IP-máy-này>:8080` là KHÔNG vào được — nhìn hệt như "chỉ
  * localhost mới truy cập được" dù `pnpm dev` vẫn chạy. Đúng con bug "không vào
  * được qua IP".
  *

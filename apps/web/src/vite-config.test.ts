@@ -67,7 +67,7 @@ describe('resolveWebPort', () => {
 });
 
 /**
- * `resolveDevHost` — host mà DEV SERVER (`pnpm dev`, cổng 5180) lắng nghe. Bug
+ * `resolveDevHost` — host mà DEV SERVER (`pnpm dev`, cổng 8080) lắng nghe. Bug
  * gốc: khối `server` không đặt `host` nên Vite chỉ nghe `localhost`, máy khác mở
  * bằng IP là không vào được. Mặc định phải MỞ (`0.0.0.0`) để hết bug — đồng bộ
  * với API và máy chủ preview; `WEB_DEV_HOST` để thu hẹp lại khi cần.

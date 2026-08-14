@@ -70,7 +70,7 @@ pnpm install:all              # one-shot: pnpm install + prisma generate (builds
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:migrate
 pnpm db:seed                  # (recommended) load the default Phase-matching config + Signboard columns + work calendars
-pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
+pnpm dev                      # API :3000 · web :8080 · worker (BullMQ consumer)
 ```
 
 > **Three ways to get the Default config, in priority order.** Migrations create the tables
@@ -88,9 +88,11 @@ pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consume
 > Methods 1 and 2 load the same set (6 Phases, 29 VI/JA/EN match rules, 5 Signboard columns).
 > Full detail in [`docs/ONBOARDING.md`](./docs/ONBOARDING.md).
 
-`pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
-**worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default
-5173 — deliberately, so it never collides with another project on the same machine. The API and
+`pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :8080) and the
+**worker** (BullMQ consumer) in parallel. The web dev server uses port **8080**, not Vite's default
+5173 — deliberately, so it never collides with another project on the same machine. The built-preview
+server (`pnpm web:start`) also defaults to 8080: dev and preview are two ways to serve the same app,
+run one at a time, never both at once. The API and
 worker each need PostgreSQL, Redis and reachable Jira credentials to start; missing any of them
 stops the process with a clear message rather than a half-running server.
 

@@ -118,14 +118,13 @@ pnpm dev                 # chạy song song api + worker + web
 
 | Ứng dụng | Cổng | Ghi chú |
 |---|---|---|
-| Web | 5180 | **Cố ý không dùng 5173** — đó là cổng mặc định của Vite mà mọi dự án khác đều nhắm vào |
+| Web | 8080 | **Cố ý không dùng 5173** (cổng mặc định Vite mà mọi dự án khác đều nhắm vào); chung cổng với máy chủ đã build — chạy lần lượt, không cùng lúc |
 | API | 3000 | |
 | E2E | 5199 | Cổng riêng, để chạy test không phải tắt dev server |
 
 > **Mở dev server từ MÁY KHÁC (qua IP)?** Mặc định dev server nghe trên
 > `0.0.0.0`, nên máy khác / điện thoại cùng LAN / VM / container mở
-> `http://<IP-máy-này>:5180` là vào được — **cổng 5180, KHÔNG phải 8080** (8080 là
-> máy chủ đã build ở ghi chú dưới). Thu hẹp về chỉ máy này bằng
+> `http://<IP-máy-này>:8080` là vào được. Thu hẹp về chỉ máy này bằng
 > `WEB_DEV_HOST=127.0.0.1`. ⚠️ Nếu đang bật `VITE_DEV_USER` (chèn danh tính giả —
 > xem [AUTH.md §9](./AUTH.md)), mở ra `0.0.0.0` cũng mở lối **GHI** theo danh tính
 > đó cho cả mạng; mạng không tin cậy thì đặt `WEB_DEV_HOST=127.0.0.1`.
