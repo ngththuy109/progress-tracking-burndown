@@ -6,7 +6,7 @@
 // thuần, không cần DOM → ép chạy môi trường `node`.
 import { describe, expect, it } from 'vitest';
 
-import { resolveAllowedHosts, resolveDevHost, resolveWebPort } from '../vite.config';
+import { buildProxy, resolveAllowedHosts, resolveDevHost, resolveWebPort } from '../vite.config';
 
 /**
  * `resolveAllowedHosts` quyết định máy chủ web đã build (`vite preview`) cho phép
@@ -82,5 +82,37 @@ describe('resolveDevHost', () => {
   it('thu hẹp về đúng host được đặt (vd 127.0.0.1 để CHỈ máy này)', () => {
     expect(resolveDevHost({ WEB_DEV_HOST: '127.0.0.1' })).toBe('127.0.0.1');
     expect(resolveDevHost({ WEB_DEV_HOST: '  192.168.1.5  ' })).toBe('192.168.1.5');
+  });
+});
+
+/**
+ * `buildProxy` — bảng proxy CHUNG cho dev server và preview. Bug gốc: proxy chỉ
+ * khai `/api`, nên `POST /auth/login` (đăng nhập LDAP, server phục vụ ở GỐC ngoài
+ * `/api`) bị Vite nuốt và trả 404 — form báo "Sign-in failed" DÙ mật khẩu đúng vì
+ * request chưa bao giờ tới API. `/auth` PHẢI được proxy sang API; và KHÔNG được
+ * mang shim danh tính dev (nó chính là endpoint đăng nhập).
+ */
+describe('buildProxy', () => {
+  const target = 'http://localhost:3000';
+
+  it('proxy CẢ /api LẪN /auth sang API — thiếu /auth thì login POST không bao giờ tới API', () => {
+    const proxy = buildProxy(target, null);
+    expect(Object.keys(proxy)).toEqual(expect.arrayContaining(['/api', '/auth']));
+    expect(proxy['/api']).toMatchObject({ target });
+    expect(proxy['/auth']).toMatchObject({ target });
+  });
+
+  it('KHÔNG chèn danh tính dev vào /auth — đó là endpoint đăng nhập, danh tính do LDAP quyết định', () => {
+    const identity = { header: 'x-user-id', user: 'dev@test.test' };
+    const proxy = buildProxy(target, identity);
+    // `/api` nhận shim danh tính (có `configure`); `/auth` thì KHÔNG.
+    expect(proxy['/api']).toHaveProperty('configure');
+    expect(proxy['/auth']).not.toHaveProperty('configure');
+  });
+
+  it('preview (identity=null): cả hai route đều KHÔNG chèn danh tính', () => {
+    const proxy = buildProxy(target, null);
+    expect(proxy['/api']).not.toHaveProperty('configure');
+    expect(proxy['/auth']).not.toHaveProperty('configure');
   });
 });

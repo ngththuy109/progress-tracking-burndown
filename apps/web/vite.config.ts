@@ -180,6 +180,31 @@ function apiProxy(
   };
 }
 
+/**
+ * Bảng proxy dùng CHUNG cho dev server (`pnpm dev`) và preview (bản build).
+ *
+ * PHẢI có `/auth` BÊN CẠNH `/api`: đăng nhập LDAP in-app đi qua
+ * `POST /auth/login` và `POST /auth/logout`, mà server phục vụ chúng ở GỐC —
+ * NGOÀI tiền tố `/api` (chúng là điểm vào của trình duyệt, không phải endpoint
+ * dữ liệu; xem `packages/shared/src/api-config.ts` và `src/api/use-auth-mode.ts`,
+ * nơi `authRootClient` gọi cùng gốc trang). Chỉ proxy `/api` thì Vite tự NUỐT
+ * `/auth/login` rồi trả **404** — form đăng nhập báo "Sign-in failed" DÙ mật khẩu
+ * đúng, vì login POST chưa bao giờ tới API (log API không hề có `POST /auth/login`).
+ *
+ * Danh tính dev CHỈ chèn vào `/api`; `/auth` luôn truyền `null` — đó chính là
+ * endpoint đăng nhập, danh tính do LDAP quyết định (username/password trong body),
+ * không phải header `x-user-id`.
+ */
+export function buildProxy(
+  apiTarget: string,
+  identity: { header: string; user: string } | null,
+): Record<string, ProxyOptions> {
+  return {
+    '/api': apiProxy(apiTarget, identity),
+    '/auth': apiProxy(apiTarget, null),
+  };
+}
+
 export default defineConfig(({ command, mode }) => {
   // Gộp `.env` ở GỐC repo với biến shell; shell THẮNG. '' = nạp MỌI biến (không
   // chỉ tiền tố `VITE_`) để `VITE_API_TARGET`/`VITE_DEV_USER` đọc được dù đặt ở
@@ -266,12 +291,11 @@ export default defineConfig(({ command, mode }) => {
       // một chỗ chẳng liên quan gì. `strictPort` biến nó thành lỗi ngay lập tức.
       strictPort: true,
 
-      proxy: {
-        // Nhờ proxy này mà frontend gọi `/api/...` cùng gốc — không dính CORS,
-        // và mã nguồn không cần biết API nằm ở cổng nào. Khi có `VITE_DEV_USER`,
-        // proxy còn đặt luôn header danh tính (đóng vai cổng SSO ở local).
-        '/api': apiProxy(apiTarget, identity),
-      },
+      // Proxy `/api` (VÀ `/auth` cho đăng nhập LDAP) sang API cùng gốc trang —
+      // không dính CORS, mã nguồn không cần biết API ở cổng nào. Khi có
+      // `VITE_DEV_USER`, riêng `/api` được chèn header danh tính (đóng vai cổng
+      // SSO ở local); `/auth` thì KHÔNG — xem `buildProxy`.
+      proxy: buildProxy(apiTarget, identity),
     },
 
     // Máy chủ web cho bản ĐÃ BUILD (`vite preview`, tức `pnpm web:start` /
@@ -295,12 +319,11 @@ export default defineConfig(({ command, mode }) => {
       // nếu không, hướng dẫn ghi 8080 mà thực tế lại chạy 8081, rất khó lần ra.
       strictPort: true,
 
-      proxy: {
-        // Proxy `/api` sang API y hệt dev, NHƯNG truyền `null` nên KHÔNG chèn
-        // danh tính — bản build phục vụ sau cổng SSO thật, thao tác GHI vẫn phải
-        // qua cổng đó. Đọc thì chạy ngay. (Chi tiết mô hình bảo mật: docs/AUTH.md.)
-        '/api': apiProxy(apiTarget, null),
-      },
+      // Như dev nhưng truyền `null` → KHÔNG chèn danh tính: bản build phục vụ sau
+      // cổng SSO thật, thao tác GHI vẫn phải qua cổng đó (đọc thì chạy ngay).
+      // `/auth` vẫn được proxy để đăng nhập LDAP chạy khi chạy thử bản build.
+      // (Chi tiết mô hình bảo mật: docs/AUTH.md.)
+      proxy: buildProxy(apiTarget, null),
     },
 
     build: {
