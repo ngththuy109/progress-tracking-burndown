@@ -555,7 +555,7 @@ describe('testConnection — tính đầy đủ của cấu hình (chưa chạm 
       });
       expect(res.ok).toBe(false);
       expect(res.steps[0]).toMatchObject({ step: 'BIND', ok: false });
-      expect(res.steps[0]!.detail).toContain('tài khoản dịch vụ');
+      expect(res.steps[0]!.detail).toContain('service account');
     }
   });
 });
@@ -571,7 +571,7 @@ describe('testConnection — direct bind', () => {
       ['SEARCH', true],
     ]);
     expect(res.steps[1]!.detail).toBe(
-      'direct bind — không dùng tài khoản dịch vụ, chỉ kiểm tra kết nối',
+      'direct bind — no service account used, connection check only',
     );
     // Kiểm kết nối bằng một lượt đọc root DSE nặc danh, không bind gì.
     expect(clients[0]!.searchCalls[0]!.base).toBe('');
@@ -592,7 +592,7 @@ describe('testConnection — direct bind', () => {
     expect(clients[0]!.bindCalls).toHaveLength(0);
     expect(clients[0]!.searchCalls[0]!.base).toBe('');
     // SEARCH nói rõ email sẽ được tra bằng kết nối của user khi đăng nhập thật.
-    expect(res.steps[2]!.detail).toContain('kết nối của user');
+    expect(res.steps[2]!.detail).toContain("user's own connection");
   });
 
   it('server từ chối đọc nặc danh (mã LDAP) vẫn tính là NỐI ĐƯỢC', async () => {

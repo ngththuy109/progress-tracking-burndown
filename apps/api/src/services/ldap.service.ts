@@ -405,14 +405,14 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
 
   // ---- Tính đầy đủ của cấu hình (chưa chạm mạng) ----------------------------
   if (config.serverUrl === null || config.serverUrl.trim() === '') {
-    return fail('CONNECT', 'Chưa khai Server URL (ldap:// hoặc ldaps://).');
+    return fail('CONNECT', 'Server URL is not set (ldap:// or ldaps://).');
   }
   const hasTemplate = config.userDnTemplate !== null && config.userDnTemplate.trim() !== '';
   const hasSearchBase = config.searchBase !== null && config.searchBase.trim() !== '';
   if (!hasTemplate && !hasSearchBase) {
     return fail(
       'BIND',
-      'Phải khai User DN template (direct bind) hoặc Search base — hoặc cả hai (AD direct-bind + tự tra email).',
+      'Provide a User DN template (direct bind) or a Search base — or both (AD direct-bind + email lookup).',
     );
   }
   // CHỈ search-then-bind (không template) mới cần tài khoản dịch vụ. Direct bind
@@ -424,7 +424,7 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
     if (bindDn === '' || bindPassword === '') {
       return fail(
         'BIND',
-        'Chế độ search-then-bind cần đủ Bind DN và bind password của tài khoản dịch vụ.',
+        'Search-then-bind mode needs both the Bind DN and the service account bind password.',
       );
     }
   }
@@ -443,21 +443,21 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
         await client.search('', { scope: 'base', attributes: ['1.1'] });
       } catch (err) {
         if (!isLdapResultError(err)) {
-          return fail('CONNECT', `Không kết nối được ${config.serverUrl}: ${errMessage(err)}`);
+          return fail('CONNECT', `Could not connect to ${config.serverUrl}: ${errMessage(err)}`);
         }
       }
-      steps.push({ step: 'CONNECT', ok: true, detail: `Đã kết nối ${config.serverUrl}.` });
+      steps.push({ step: 'CONNECT', ok: true, detail: `Connected to ${config.serverUrl}.` });
       steps.push({
         step: 'BIND',
         ok: true,
-        detail: 'direct bind — không dùng tài khoản dịch vụ, chỉ kiểm tra kết nối',
+        detail: 'direct bind — no service account used, connection check only',
       });
       steps.push({
         step: 'SEARCH',
         ok: true,
         detail: hasSearchBase
-          ? `Sẽ tra email bằng chính kết nối của user trong ${config.searchBase} — kiểm khi user đăng nhập thật.`
-          : 'Bỏ qua — direct bind xác định DN bằng template, không cần search.',
+          ? `Email will be looked up over the user's own connection in ${config.searchBase} — verified when a user actually signs in.`
+          : 'Skipped — direct bind derives the DN from the template, no search needed.',
       });
       return { ok: true, steps };
     }
@@ -467,13 +467,13 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
       await client.bind(config.bindDn!.trim(), config.bindPassword!);
     } catch (err) {
       if (isLdapResultError(err)) {
-        steps.push({ step: 'CONNECT', ok: true, detail: `Đã kết nối ${config.serverUrl}.` });
-        return fail('BIND', `Bind tài khoản dịch vụ bị từ chối: ${errMessage(err)}`);
+        steps.push({ step: 'CONNECT', ok: true, detail: `Connected to ${config.serverUrl}.` });
+        return fail('BIND', `Service account bind was rejected: ${errMessage(err)}`);
       }
-      return fail('CONNECT', `Không kết nối được ${config.serverUrl}: ${errMessage(err)}`);
+      return fail('CONNECT', `Could not connect to ${config.serverUrl}: ${errMessage(err)}`);
     }
-    steps.push({ step: 'CONNECT', ok: true, detail: `Đã kết nối ${config.serverUrl}.` });
-    steps.push({ step: 'BIND', ok: true, detail: 'Bind tài khoản dịch vụ thành công.' });
+    steps.push({ step: 'CONNECT', ok: true, detail: `Connected to ${config.serverUrl}.` });
+    steps.push({ step: 'BIND', ok: true, detail: 'Service account bind succeeded.' });
 
     try {
       const filter = config.userFilter.replaceAll(
@@ -490,14 +490,14 @@ export async function testConnection(deps: TestDeps): Promise<LdapTestResponse> 
       steps.push({
         step: 'SEARCH',
         ok: true,
-        detail: `Filter chạy được trong ${config.searchBase} (${res.searchEntries.length} kết quả cho username thử — 0 là bình thường).`,
+        detail: `Filter ran in ${config.searchBase} (${res.searchEntries.length} results for the probe username — 0 is normal).`,
       });
     } catch (err) {
       return fail(
         'SEARCH',
         isLdapResultError(err)
-          ? `Search base/filter bị từ chối: ${errMessage(err)}`
-          : `Mất kết nối khi search: ${errMessage(err)}`,
+          ? `Search base/filter was rejected: ${errMessage(err)}`
+          : `Lost connection during search: ${errMessage(err)}`,
       );
     }
     return { ok: true, steps };

@@ -400,18 +400,18 @@ Sau đó, **vẫn đang ở chế độ header** (đăng nhập bằng cổng/de
 2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn một cách xác định user:
    - **Direct bind (template DN)** — `Template DN` chứa `{username}`, ví dụ
      `uid={username},ou=users,dc=cty,dc=vn` (hợp OpenLDAP).
-   - **Direct bind + tự tra email (Active Directory)** — bind bằng CHÍNH mật khẩu
+   - **Direct bind + email lookup (Active Directory)** — bind bằng CHÍNH mật khẩu
      người dùng: `Template DN` kiểu `cty.com.vn\{username}` (hoặc UPN
      `{username}@cty.com.vn`), rồi khai `Search base` + `User filter` (vd
      `(cn={username})`) để app TỰ TRA email trên chính kết nối đó. KHÔNG cần tài
      khoản dịch vụ (bỏ trống Bind DN/password).
-   - **Search rồi bind (Active Directory)** — `Bind DN` + `Bind password` tài khoản
+   - **Search then bind (Active Directory)** — `Bind DN` + `Bind password` tài khoản
      dịch vụ, `Search base`, và `User filter` chứa `{username}` (ví dụ
      `(sAMAccountName={username})` cho Active Directory).
-3. Đặt `Thuộc tính email` (mặc định `mail`) — danh tính trong hệ thống là email đọc
+3. Đặt `Email attribute` (mặc định `mail`) — danh tính trong hệ thống là email đọc
    từ thuộc tính này, phải khớp `user_id` trong `app_user`.
 4. Bấm **Test** cho tới khi cả ba bước (CONNECT → BIND → SEARCH) đều xanh.
-5. Tick **Bật đăng nhập LDAP** rồi bấm **Lưu**. Server **từ chối bật** nếu Test
+5. Tick **Enable LDAP login** rồi bấm **Save**. Server **từ chối bật** nếu Test
    chưa pass — không thể tự khoá mình bằng cấu hình hỏng.
 
 > **Đừng tự khoá:** trước khi bật, bảo đảm CÓ ÍT NHẤT một ADMIN mà email khớp

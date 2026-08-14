@@ -84,7 +84,7 @@ export function AppLayout() {
                   disabled={logout.isPending}
                   onClick={() => logout.mutate()}
                 >
-                  {logout.isPending ? 'Đang đăng xuất…' : 'Đăng xuất'}
+                  {logout.isPending ? 'Signing out…' : 'Sign out'}
                 </button>
               )}
             </div>

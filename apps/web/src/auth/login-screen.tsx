@@ -19,13 +19,13 @@ import { useLogin } from '../api/use-auth-mode.js';
  */
 export function loginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 401) return 'Sai tên đăng nhập hoặc mật khẩu.';
-    if (error.status === 429) return 'Quá nhiều lần đăng nhập sai — thử lại sau ít phút.';
+    if (error.status === 401) return 'Incorrect username or password.';
+    if (error.status === 429) return 'Too many failed attempts — try again in a few minutes.';
     if (error.status === 502) {
-      return 'Không kết nối được máy chủ LDAP — liên hệ quản trị viên.';
+      return 'Could not reach the LDAP server — contact your administrator.';
     }
   }
-  return 'Đăng nhập thất bại. Thử lại; nếu vẫn hỏng, liên hệ quản trị viên.';
+  return 'Sign-in failed. Try again; if it keeps failing, contact your administrator.';
 }
 
 export interface LoginScreenProps {
@@ -56,10 +56,10 @@ export function LoginScreen({ client }: LoginScreenProps = {}) {
           <span>Burndown Engine</span>
         </div>
 
-        <p className="muted">Đăng nhập bằng tài khoản công ty (LDAP) để tiếp tục.</p>
+        <p className="muted">Sign in with your company account (LDAP) to continue.</p>
 
         <label className="field">
-          <span>Tên đăng nhập</span>
+          <span>Username</span>
           <input
             className="input input--wide"
             value={username}
@@ -71,7 +71,7 @@ export function LoginScreen({ client }: LoginScreenProps = {}) {
         </label>
 
         <label className="field">
-          <span>Mật khẩu</span>
+          <span>Password</span>
           <input
             className="input input--wide"
             type="password"
@@ -89,7 +89,7 @@ export function LoginScreen({ client }: LoginScreenProps = {}) {
 
         <div className="actions">
           <button type="submit" className="button button--primary" disabled={!canSubmit}>
-            {login.isPending ? 'Đang đăng nhập…' : 'Đăng nhập'}
+            {login.isPending ? 'Signing in…' : 'Sign in'}
           </button>
         </div>
       </form>

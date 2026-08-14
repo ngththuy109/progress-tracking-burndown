@@ -155,15 +155,15 @@ function toView(row: LdapConfigRow | null): LdapConfigView {
 }
 
 const ENCRYPTION_KEY_MISSING_SAVE =
-  'Chưa đặt APP_ENCRYPTION_KEY nên không thể lưu bind password một cách an toàn. ' +
-  'Sinh khóa bằng: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))" ' +
-  'rồi đặt vào biến môi trường APP_ENCRYPTION_KEY (cả api lẫn worker) và thử lại.';
+  'APP_ENCRYPTION_KEY is not set, so the bind password cannot be stored securely. ' +
+  'Generate a key with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))" ' +
+  'then set it in the APP_ENCRYPTION_KEY environment variable (for both api and worker) and try again.';
 
 const ENCRYPTION_KEY_MISSING_OPEN =
-  'Cấu hình LDAP có bind password đã mã hóa nhưng APP_ENCRYPTION_KEY chưa được đặt (hoặc sai khóa) ' +
-  'nên không giải mã được. Khôi phục khóa cũ hoặc nhập lại bind password rồi thử lại.';
+  'The LDAP configuration has an encrypted bind password but APP_ENCRYPTION_KEY is not set (or is the wrong key), ' +
+  'so it cannot be decrypted. Restore the old key or re-enter the bind password, then try again.';
 
-const LOGIN_FAILED_MESSAGE = 'Tên đăng nhập hoặc mật khẩu không đúng.';
+const LOGIN_FAILED_MESSAGE = 'Incorrect username or password.';
 
 /**
  * Bind password HIỆU LỰC cho một lượt test/lưu: chuỗi trong body thắng;
@@ -273,7 +273,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         throw new ApiError(
           404,
           'AUTH_MODE_HEADER',
-          'Đăng nhập trong ứng dụng đang tắt — hệ thống nhận danh tính từ cổng SSO.',
+          'In-app login is turned off — the system takes identity from the SSO gateway.',
         );
       }
 
@@ -283,13 +283,13 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         throw new ApiError(
           429,
           'TOO_MANY_ATTEMPTS',
-          'Quá nhiều lần đăng nhập sai. Đợi vài phút rồi thử lại.',
+          'Too many failed login attempts. Wait a few minutes and try again.',
         );
       }
 
       const parsed = loginRequestSchema.safeParse(req.body);
       if (!parsed.success) {
-        throw new ApiError(400, 'BAD_REQUEST', 'Cần đủ tên đăng nhập và mật khẩu.');
+        throw new ApiError(400, 'BAD_REQUEST', 'Both username and password are required.');
       }
 
       const config = effectiveConfigOfRow(cfg, deps.tokenBox);
@@ -314,13 +314,13 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
           throw new ApiError(
             502,
             'LDAP_UNREACHABLE',
-            'Không kết nối được máy chủ LDAP. Thử lại sau hoặc báo quản trị viên.',
+            'Could not reach the LDAP server. Try again later or contact your administrator.',
           );
         }
         throw new ApiError(
           500,
           'CONFIG_INVALID',
-          'Cấu hình đăng nhập trên máy chủ chưa đầy đủ. Báo quản trị viên kiểm tra cấu hình LDAP.',
+          'The login configuration on the server is incomplete. Ask an administrator to check the LDAP configuration.',
         );
       }
 
@@ -374,7 +374,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         throw new ApiError(
           400,
           'BAD_REQUEST',
-          `Cấu hình không hợp lệ: ${parsed.error.issues.map((i) => i.message).join('; ')}.`,
+          `Invalid configuration: ${parsed.error.issues.map((i) => i.message).join('; ')}.`,
         );
       }
       const data = parsed.data;
@@ -386,7 +386,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         throw new ApiError(
           400,
           'BAD_REQUEST',
-          'Phải khai cách xác định user: User DN template (direct bind) hoặc Search base (search-then-bind) — hoặc cả hai (AD direct-bind + tự tra email).',
+          'Specify how to locate the user: a User DN template (direct bind) or a Search base (search-then-bind) — or both (AD direct-bind + email lookup).',
         );
       }
 
@@ -422,9 +422,9 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
           throw new ApiError(
             400,
             'LDAP_TEST_FAILED',
-            `Không bật được LDAP vì bài test thất bại ở bước ${failed?.step ?? '?'}: ` +
-              `${failed?.detail ?? 'không rõ'} — bật LDAP hỏng là tự khóa mình ra ngoài. ` +
-              'Sửa cấu hình (hoặc lưu với enabled=false) rồi thử lại.',
+            `Could not enable LDAP because the test failed at step ${failed?.step ?? '?'}: ` +
+              `${failed?.detail ?? 'unknown'} — enabling a broken LDAP config locks you out. ` +
+              'Fix the configuration (or save with enabled=false) and try again.',
           );
         }
       }
@@ -459,7 +459,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         throw new ApiError(
           400,
           'BAD_REQUEST',
-          `Cấu hình không hợp lệ: ${parsed.error.issues.map((i) => i.message).join('; ')}.`,
+          `Invalid configuration: ${parsed.error.issues.map((i) => i.message).join('; ')}.`,
         );
       }
       const stored = await deps.configs.find();

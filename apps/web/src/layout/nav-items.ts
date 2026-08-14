@@ -94,7 +94,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     path: '/admin/ldap',
     label: 'LDAP',
     icon: '🔐',
-    summary: 'Cấu hình đăng nhập LDAP trong app: máy chủ, cách xác định user, test kết nối.',
+    summary: 'Configure in-app LDAP login: server, how to locate the user, and connection test.',
     builtBy: 'LDAP',
     adminOnly: true,
   },

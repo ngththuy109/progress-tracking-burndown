@@ -100,13 +100,13 @@ export function buildLdapBody(form: LdapFormState): UpdateLdapConfigRequest {
 export function ldapSaveHint(error: unknown): string | null {
   if (!(error instanceof ApiError)) return null;
   if (error.code === 'LDAP_TEST_FAILED') {
-    return 'Server từ chối BẬT LDAP vì bài test chưa pass — bấm "Test" bên dưới, sửa cấu hình tới khi mọi bước xanh rồi mới bật lại.';
+    return 'The server refused to ENABLE LDAP because the test has not passed — click "Test" below, fix the configuration until every step is green, then enable again.';
   }
   if (error.code === 'ENCRYPTION_KEY_MISSING') {
-    return 'Server thiếu biến môi trường ENCRYPTION_KEY nên không mã hóa được bind password. Đặt ENCRYPTION_KEY cho API, khởi động lại, rồi lưu lại.';
+    return 'The server is missing the ENCRYPTION_KEY environment variable, so it cannot encrypt the bind password. Set ENCRYPTION_KEY for the API, restart it, then save again.';
   }
   if (error.status === 400) {
-    return 'Chọn cách xác định user: Direct bind (template DN), Direct bind + tự tra email (template DN + search base, cho AD), hoặc Search rồi bind (search base + filter + tài khoản dịch vụ).';
+    return 'Pick how to locate the user: Direct bind (template DN), Direct bind + email lookup (template DN + search base, for AD), or Search then bind (search base + filter + service account).';
   }
   return null;
 }
@@ -114,13 +114,13 @@ export function ldapSaveHint(error: unknown): string | null {
 export function AdminLdapScreen() {
   const me = useMe();
 
-  if (me.isPending) return <LoadingState label="Đang tải…" rows={2} />;
+  if (me.isPending) return <LoadingState label="Loading…" rows={2} />;
   if (me.data && me.data.role !== 'ADMIN') {
     return (
       <EmptyState
         icon="🔒"
-        title="Chỉ dành cho quản trị viên"
-        description="Chỉ ADMIN cấu hình được đăng nhập LDAP. Liên hệ quản trị viên nếu bạn cần quyền."
+        title="Admins only"
+        description="Only Admins can configure LDAP login. Contact an administrator if you need access."
       />
     );
   }
@@ -130,12 +130,12 @@ export function AdminLdapScreen() {
 function LdapManager() {
   const query = useLdapConfig();
 
-  if (query.isPending) return <LoadingState label="Đang tải cấu hình LDAP…" rows={3} />;
+  if (query.isPending) return <LoadingState label="Loading LDAP configuration…" rows={3} />;
   if (query.isError) {
     return (
       <ErrorState
         error={query.error}
-        title="Không tải được cấu hình LDAP"
+        title="Could not load LDAP configuration"
         onRetry={() => void query.refetch()}
       />
     );
@@ -143,7 +143,7 @@ function LdapManager() {
 
   // `key` theo updatedAt: lưu xong (updatedAt đổi) là form dựng lại từ bản
   // server vừa trả — ô mật khẩu về rỗng, checkbox xóa về tắt.
-  return <LdapForm key={query.data.updatedAt ?? 'chưa-lưu'} config={query.data} />;
+  return <LdapForm key={query.data.updatedAt ?? 'unsaved'} config={query.data} />;
 }
 
 function LdapForm({ config }: { readonly config: LdapConfigView }) {
@@ -196,11 +196,12 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
     <div className="stack">
       <section className="panel" aria-labelledby="ldap-title">
         <h2 className="panel__title" id="ldap-title">
-          Đăng nhập LDAP
+          LDAP login
         </h2>
         <p className="panel__hint">
-          Khi bật, app tự đăng nhập bằng form tên/mật khẩu (xác thực qua LDAP) thay cho
-          header từ cổng/proxy. Cấu hình xong hãy bấm <strong>Test</strong> trước khi bật.
+          When enabled, the app signs users in with a username/password form (authenticated
+          through LDAP) instead of a header from a gateway/proxy. After configuring, click{' '}
+          <strong>Test</strong> before enabling.
         </p>
 
         <label className="field">
@@ -214,13 +215,13 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
           />
         </label>
         <p className="field-hint">
-          Dùng <code>ldaps://</code> (TLS) khi có thể; <code>ldap://</code> gửi mật khẩu
-          không mã hóa qua mạng.
+          Use <code>ldaps://</code> (TLS) whenever possible; <code>ldap://</code> sends the
+          password over the network unencrypted.
         </p>
 
         {/* --- Cách xác định user ------------------------------------------ */}
         <fieldset className="field">
-          <legend>Cách xác định user</legend>
+          <legend>How to locate the user</legend>
           <label className="choice">
             <input
               type="radio"
@@ -230,8 +231,8 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
               aria-label="Direct bind (template DN)"
             />
             <span>
-              <strong>Direct bind (template DN)</strong> — ghép DN từ tên đăng nhập rồi bind
-              thẳng. Phù hợp OpenLDAP có DN đều đặn.
+              <strong>Direct bind (template DN)</strong> — build the DN from the username and
+              bind directly. Fits OpenLDAP with regular DNs.
             </span>
           </label>
           <label className="choice">
@@ -240,12 +241,12 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
               name="ldap-bind-mode"
               checked={bindMode === 'DIRECT_SEARCH'}
               onChange={() => setBindMode('DIRECT_SEARCH')}
-              aria-label="Direct bind + tự tra email (Active Directory)"
+              aria-label="Direct bind + email lookup (Active Directory)"
             />
             <span>
-              <strong>Direct bind + tự tra email (Active Directory)</strong> — bind bằng CHÍNH
-              mật khẩu người dùng (vd <code>congty.vn\{'{username}'}</code>), rồi tra email bằng
-              đúng kết nối đó. Không cần tài khoản dịch vụ.
+              <strong>Direct bind + email lookup (Active Directory)</strong> — bind with the
+              user's OWN password (e.g. <code>congty.vn\{'{username}'}</code>), then look up the
+              email over that same connection. No service account needed.
             </span>
           </label>
           <label className="choice">
@@ -254,11 +255,11 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
               name="ldap-bind-mode"
               checked={bindMode === 'SEARCH'}
               onChange={() => setBindMode('SEARCH')}
-              aria-label="Search rồi bind (Active Directory)"
+              aria-label="Search then bind (Active Directory)"
             />
             <span>
-              <strong>Search rồi bind (Active Directory)</strong> — tài khoản dịch vụ tìm user
-              theo filter, rồi bind bằng DN tìm được. Cách chuẩn với AD.
+              <strong>Search then bind (Active Directory)</strong> — a service account finds
+              the user by filter, then binds with the DN found. The standard approach for AD.
             </span>
           </label>
         </fieldset>
@@ -266,7 +267,7 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
         {(bindMode === 'TEMPLATE' || bindMode === 'DIRECT_SEARCH') && (
           <label className="field">
             <span>
-              Template DN (chứa <code>{'{username}'}</code>)
+              Template DN (contains <code>{'{username}'}</code>)
             </span>
             <input
               className="input input--wide input--code"
@@ -283,10 +284,10 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
         )}
         {bindMode === 'DIRECT_SEARCH' && (
           <p className="field-hint">
-            App bind bằng chính mật khẩu người dùng theo mẫu trên (AD nhận{' '}
-            <code>{'DOMAIN\\{username}'}</code> hoặc UPN <code>{'{username}@congty.vn'}</code>),
-            rồi TỰ TRA email bằng đúng kết nối đó — không cần tài khoản dịch vụ. Khai Search base
-            + User filter bên dưới để tra email.
+            The app binds with the user's own password using the template above (AD accepts{' '}
+            <code>{'DOMAIN\\{username}'}</code> or the UPN <code>{'{username}@congty.vn'}</code>),
+            then looks up the email over that same connection — no service account needed. Fill
+            in Search base + User filter below to look up the email.
           </p>
         )}
 
@@ -304,7 +305,7 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
             </label>
             <label className="field">
               <span>
-                User filter (chứa <code>{'{username}'}</code>)
+                User filter (contains <code>{'{username}'}</code>)
               </span>
               <input
                 className="input input--wide input--code"
@@ -320,7 +321,7 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
         {bindMode === 'SEARCH' && (
           <>
             <label className="field">
-              <span>Bind DN (tài khoản dịch vụ)</span>
+              <span>Bind DN (service account)</span>
               <input
                 className="input input--wide input--code"
                 value={bindDn}
@@ -330,14 +331,14 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
               />
             </label>
             <label className="field">
-              <span>Bind password (chỉ ghi — không bao giờ hiển thị lại)</span>
+              <span>Bind password (write-only — never shown again)</span>
               <input
                 className="input input--wide"
                 type="password"
                 value={bindPassword}
                 disabled={clearBindPassword}
                 // Đã có mật khẩu thì nói rõ; để trống khi lưu nghĩa là GIỮ bản cũ.
-                placeholder={config.hasBindPassword ? '•••• (đã lưu)' : 'chưa có mật khẩu'}
+                placeholder={config.hasBindPassword ? '•••• (saved)' : 'no password set'}
                 aria-label="Bind password"
                 autoComplete="new-password"
                 onChange={(e) => setBindPassword(e.target.value)}
@@ -350,7 +351,7 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
                   checked={clearBindPassword}
                   onChange={(e) => setClearBindPassword(e.target.checked)}
                 />
-                Xóa bind password đã lưu
+                Clear saved bind password
               </label>
             )}
           </>
@@ -358,36 +359,36 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
 
         {/* --- Các thiết lập chung ----------------------------------------- */}
         <label className="field">
-          <span>Thuộc tính email</span>
+          <span>Email attribute</span>
           <input
             className="input input--code"
             value={emailAttribute}
             placeholder="mail"
-            aria-label="Thuộc tính email"
+            aria-label="Email attribute"
             onChange={(e) => setEmailAttribute(e.target.value)}
           />
         </label>
         <p className="field-hint">
-          Thuộc tính LDAP chứa email — email này là userId trong app (phải khớp danh sách
-          Users/thành viên). Active Directory: <code>mail</code> hoặc{' '}
+          The LDAP attribute holding the email — this email is the userId in the app (must match
+          the Users/members list). Active Directory: <code>mail</code> or{' '}
           <code>userPrincipalName</code>.
         </p>
 
         <label className="field">
-          <span>Thời hạn phiên (giờ, 1–168)</span>
+          <span>Session lifetime (hours, 1–168)</span>
           <input
             className="input input--number"
             type="number"
             min={1}
             max={168}
             value={ttlRaw}
-            aria-label="Thời hạn phiên (giờ)"
+            aria-label="Session lifetime (hours)"
             onChange={(e) => setTtlRaw(e.target.value)}
           />
         </label>
         {!ttlValid && (
           <p className="field-hint field-hint--warning">
-            Thời hạn phiên phải là số nguyên từ 1 đến 168 giờ (7 ngày).
+            Session lifetime must be an integer between 1 and 168 hours (7 days).
           </p>
         )}
 
@@ -397,30 +398,31 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
             checked={allowSelfSigned}
             onChange={(e) => setAllowSelfSigned(e.target.checked)}
           />
-          Chấp nhận chứng chỉ tự ký (self-signed)
+          Accept self-signed certificate
         </label>
         {allowSelfSigned && (
           <p className="field-hint field-hint--warning">
-            Bỏ kiểm tra chứng chỉ TLS — chỉ dùng khi máy chủ LDAP nằm trong mạng nội bộ tin
-            cậy. Ưu tiên cài chứng chỉ CA nội bộ cho API thay vì bật mục này.
+            Skips TLS certificate verification — use only when the LDAP server is on a trusted
+            internal network. Prefer installing the internal CA certificate for the API over
+            enabling this.
           </p>
         )}
 
         {/* --- Công tắc bật + lối thoát ------------------------------------- */}
         <label className="check">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          <strong>Bật đăng nhập LDAP</strong>
+          <strong>Enable LDAP login</strong>
         </label>
         {enabled && (
           <p className="notice notice--warning" role="alert">
-            Bật LDAP sẽ <strong>TẮT đăng nhập qua header/cổng</strong> — chỉ bật sau khi Test
-            pass. Nếu tự khóa mình ở ngoài: đặt <code>AUTH_FORCE_HEADER=1</code> rồi khởi
-            động lại API để quay về chế độ header.
+            Enabling LDAP will <strong>TURN OFF header/gateway login</strong> — only enable after
+            the Test passes. If you lock yourself out: set <code>AUTH_FORCE_HEADER=1</code> and
+            restart the API to return to header mode.
           </p>
         )}
 
         {update.isError && (
-          <ErrorState error={update.error} title="Không lưu được cấu hình LDAP" />
+          <ErrorState error={update.error} title="Could not save LDAP configuration" />
         )}
         {saveHint !== null && (
           <p className="notice notice--warning" role="alert">
@@ -429,14 +431,14 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
         )}
         {update.isSuccess && (
           <p className="notice notice--ok" role="status">
-            Đã lưu cấu hình LDAP.
+            LDAP configuration saved.
           </p>
         )}
 
         {(config.updatedBy !== null || config.updatedAt !== null) && (
           <p className="muted">
-            Cập nhật lần cuối{config.updatedBy !== null ? ` bởi ${config.updatedBy}` : ''}
-            {config.updatedAt !== null ? ` lúc ${config.updatedAt}` : ''}.
+            Last updated{config.updatedBy !== null ? ` by ${config.updatedBy}` : ''}
+            {config.updatedAt !== null ? ` at ${config.updatedAt}` : ''}.
           </p>
         )}
 
@@ -447,7 +449,7 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
             disabled={test.isPending || !ttlValid}
             onClick={() => test.mutate(body())}
           >
-            {test.isPending ? 'Đang test…' : '🔌 Test'}
+            {test.isPending ? 'Testing…' : '🔌 Test'}
           </button>
           <button
             type="button"
@@ -455,19 +457,19 @@ function LdapForm({ config }: { readonly config: LdapConfigView }) {
             disabled={update.isPending || !ttlValid}
             onClick={() => update.mutate(body())}
           >
-            {update.isPending ? 'Đang lưu…' : 'Lưu'}
+            {update.isPending ? 'Saving…' : 'Save'}
           </button>
         </div>
 
-        {test.isError && <ErrorState error={test.error} title="Không chạy được bài test LDAP" />}
+        {test.isError && <ErrorState error={test.error} title="Could not run the LDAP test" />}
         {test.isSuccess && (
           <>
             <p className={test.data.ok ? 'notice notice--ok' : 'notice notice--error'} role="status">
               {test.data.ok
-                ? 'Test pass — có thể bật đăng nhập LDAP.'
-                : 'Test CHƯA pass — sửa cấu hình theo chi tiết từng bước bên dưới.'}
+                ? 'Test passed — you can enable LDAP login.'
+                : 'Test did not pass — fix the configuration using the step details below.'}
             </p>
-            <ul className="rows" aria-label="Kết quả test LDAP">
+            <ul className="rows" aria-label="LDAP test result">
               {test.data.steps.map((step) => (
                 <li className="row" key={step.step}>
                   <Badge tone={step.ok ? 'success' : 'danger'}>{step.ok ? '✓' : '✗'}</Badge>

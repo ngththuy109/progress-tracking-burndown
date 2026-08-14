@@ -351,7 +351,7 @@ export const updateLdapConfigRequestSchema = z.object({
   serverUrl: z
     .string()
     .trim()
-    .regex(/^ldaps?:\/\/.+/, 'Server URL phải bắt đầu bằng ldap:// hoặc ldaps://')
+    .regex(/^ldaps?:\/\/.+/, 'Server URL must start with ldap:// or ldaps://')
     .nullable()
     .default(null),
   bindDn: z.string().trim().min(1).nullable().default(null),
@@ -360,7 +360,7 @@ export const updateLdapConfigRequestSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .refine((v) => v.includes('{username}'), 'Template phải chứa {username}')
+    .refine((v) => v.includes('{username}'), 'Template must contain {username}')
     .nullable()
     .default(null),
   searchBase: z.string().trim().min(1).nullable().default(null),
@@ -368,7 +368,7 @@ export const updateLdapConfigRequestSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .refine((v) => v.includes('{username}'), 'Filter phải chứa {username}')
+    .refine((v) => v.includes('{username}'), 'Filter must contain {username}')
     .default('(mail={username})'),
   emailAttribute: z.string().trim().min(1).default('mail'),
   allowSelfSigned: z.boolean().default(false),

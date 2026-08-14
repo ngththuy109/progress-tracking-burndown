@@ -76,9 +76,9 @@ describe('AuthGate — mode LDAP', () => {
     });
     renderGate();
 
-    expect(await screen.findByLabelText('Tên đăng nhập')).toBeTruthy();
-    expect(screen.getByLabelText('Mật khẩu')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Đăng nhập' })).toBeTruthy();
+    expect(await screen.findByLabelText('Username')).toBeTruthy();
+    expect(screen.getByLabelText('Password')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     expect(screen.queryByText('APP_OK')).toBeNull();
   });
 
@@ -98,9 +98,9 @@ describe('AuthGate — mode LDAP', () => {
     renderGate();
 
     const user = userEvent.setup();
-    await user.type(await screen.findByLabelText('Tên đăng nhập'), 'thuy.nguyen');
-    await user.type(screen.getByLabelText('Mật khẩu'), 's3cret!');
-    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    await user.type(await screen.findByLabelText('Username'), 'thuy.nguyen');
+    await user.type(screen.getByLabelText('Password'), 's3cret!');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     const login = calls.find((c) => c.url.startsWith('/auth/login'));
     expect(login?.method).toBe('POST');
@@ -122,12 +122,12 @@ describe('AuthGate — mode LDAP', () => {
     renderGate();
 
     const user = userEvent.setup();
-    await user.type(await screen.findByLabelText('Tên đăng nhập'), 'ai-do');
-    await user.type(screen.getByLabelText('Mật khẩu'), 'sai-roi');
-    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    await user.type(await screen.findByLabelText('Username'), 'ai-do');
+    await user.type(screen.getByLabelText('Password'), 'sai-roi');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toBe('Sai tên đăng nhập hoặc mật khẩu.');
+    expect(alert.textContent).toBe('Incorrect username or password.');
     // Vẫn đứng ở form để thử lại.
     expect(screen.queryByText('APP_OK')).toBeNull();
   });
@@ -146,7 +146,7 @@ describe('AuthGate — mode HEADER giữ nguyên hành vi cũ', () => {
     await waitFor(() =>
       expect(calls.some((c) => c.url.startsWith('/api/auth/mode'))).toBe(true),
     );
-    expect(screen.queryByLabelText('Tên đăng nhập')).toBeNull();
+    expect(screen.queryByLabelText('Username')).toBeNull();
     expect(screen.getByText('APP_OK')).toBeTruthy();
   });
 });
@@ -156,18 +156,18 @@ describe('loginErrorMessage', () => {
     new ApiError({ code, message: 'server nói gì đó', status });
 
   it('dịch đúng ba mã lỗi của /auth/login', () => {
-    expect(loginErrorMessage(err(401, 'LOGIN_FAILED'))).toBe('Sai tên đăng nhập hoặc mật khẩu.');
+    expect(loginErrorMessage(err(401, 'LOGIN_FAILED'))).toBe('Incorrect username or password.');
     expect(loginErrorMessage(err(429, 'TOO_MANY_ATTEMPTS'))).toBe(
-      'Quá nhiều lần đăng nhập sai — thử lại sau ít phút.',
+      'Too many failed attempts — try again in a few minutes.',
     );
     expect(loginErrorMessage(err(502, 'LDAP_UNREACHABLE'))).toBe(
-      'Không kết nối được máy chủ LDAP — liên hệ quản trị viên.',
+      'Could not reach the LDAP server — contact your administrator.',
     );
   });
 
   it('lỗi lạ (mất mạng, 500…) rơi về câu chung', () => {
-    expect(loginErrorMessage(err(null, 'NETWORK'))).toContain('Đăng nhập thất bại');
-    expect(loginErrorMessage(err(500))).toContain('Đăng nhập thất bại');
-    expect(loginErrorMessage(new Error('lạ'))).toContain('Đăng nhập thất bại');
+    expect(loginErrorMessage(err(null, 'NETWORK'))).toContain('Sign-in failed');
+    expect(loginErrorMessage(err(500))).toContain('Sign-in failed');
+    expect(loginErrorMessage(new Error('lạ'))).toContain('Sign-in failed');
   });
 });
