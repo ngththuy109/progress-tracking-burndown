@@ -35,6 +35,7 @@ export {
 export {
   withRetry,
   isRetryable,
+  isIssueDoesNotExistError,
   parseRetryAfter,
   backoffDelayMs,
   JiraHttpError,
