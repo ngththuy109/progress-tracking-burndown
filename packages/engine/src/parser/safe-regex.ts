@@ -7,8 +7,10 @@
  *
  * Ba lớp bảo vệ:
  *   1. Giới hạn độ dài 200 ký tự
- *   2. Chạy bằng `re2` — thuật toán tuyến tính, KHÔNG backtracking nên về bản
- *      chất không thể ReDoS
+ *   2. Chạy bằng `re2` (bộ máy RE2 của Google, nạp qua WebAssembly — xem
+ *      `loadRe2`) — thuật toán tuyến tính, KHÔNG backtracking nên về bản chất
+ *      không thể ReDoS. Bản WASM KHÔNG cần biên dịch native nên `pnpm install`
+ *      chạy được offline trên mọi máy, không cần toolchain C++.
  *   3. Đồng hồ tường 100ms cho mỗi chuỗi, phòng khi re2 không dùng được
  *
  * Quá thời gian → coi như KHÔNG KHỚP, ghi cảnh báo `REGEX_TIMEOUT`, **không làm
@@ -120,17 +122,25 @@ export class SafeRegexRunner {
 /**
  * Nạp `re2` MỘT LẦN lúc nạp module.
  *
- * Phải dùng `createRequire` chứ không gọi thẳng `require`: package này là ESM
+ * Dùng `re2-wasm` — bản RE2 của Google biên dịch sang WebAssembly. Khác với gói
+ * `re2` native, nó KHÔNG cần biên dịch addon C++ lúc `pnpm install` (không cần
+ * node-gyp/MSVC) và KHÔNG tải binary từ mạng — file `.wasm` nằm sẵn trong gói.
+ * Nhờ vậy máy chặn mạng / thiếu toolchain (Windows) vẫn cài và chạy được, không
+ * còn cảnh `pnpm install` chết ở bước build re2 rồi phải bỏ qua script.
+ *
+ * Vẫn phải dùng `createRequire` chứ không gọi thẳng `require`: package này là ESM
  * (`"type": "module"`), ở đó `require` KHÔNG TỒN TẠI. Gọi thẳng sẽ ném
  * ReferenceError, rơi vào `catch`, và im lặng lùi về `RegExp` gốc — nghĩa là
  * `re2` không bao giờ chạy dù đã cài. Đúng lỗi này từng xảy ra.
  *
- * Cũng không dùng được `await import('re2')`: `exec()` là hàm ĐỒNG BỘ.
+ * Cũng không dùng được `await import('re2-wasm')`: `exec()` là hàm ĐỒNG BỘ, mà
+ * `re2-wasm` cũng khởi tạo WASM ĐỒNG BỘ ngay lúc `require` nên hợp nhau.
  */
 function loadRe2(): (new (s: string, f?: string) => RegExp) | null {
   try {
     const req = createRequire(import.meta.url);
-    return req('re2') as new (s: string, f?: string) => RegExp;
+    const mod = req('re2-wasm') as { RE2: new (s: string, f?: string) => RegExp };
+    return mod.RE2;
   } catch {
     return null;
   }
@@ -154,7 +164,12 @@ export const REGEX_ENGINE: 're2' | 'native' = RE2 === null ? 'native' : 're2';
  * Đổi lại, nó KHÔNG hỗ trợ lookahead/lookbehind. Regex có `(?=...)` sẽ ném lỗi
  * biên dịch và bị bắt ở `compile()` — đó là hành vi mong muốn, T-06 đã chặn từ
  * lúc lưu cấu hình.
+ *
+ * `re2-wasm` CHỈ chạy ở chế độ unicode nên BẮT BUỘC có cờ `u` (thiếu là ném lỗi).
+ * `compile()` luôn truyền `'u'`; ở đây thêm một lớp bảo hiểm phòng khi có nơi gọi
+ * factory với cờ khác.
  */
 function defaultRegexFactory(src: string, flags: string): RegExp {
-  return RE2 === null ? new RegExp(src, flags) : new RE2(src, flags);
+  if (RE2 === null) return new RegExp(src, flags);
+  return new RE2(src, flags.includes('u') ? flags : flags + 'u');
 }

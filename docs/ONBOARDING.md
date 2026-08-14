@@ -22,9 +22,14 @@ pnpm install
 npx playwright install chromium     # trình duyệt cho test E2E, ~300MB
 ```
 
-> **Gọn hơn — một lệnh:** `pnpm install:all` = `pnpm install && pnpm db:generate` (link deps + build
-> re2 native + sinh Prisma Client). Trên **Claude Code on the web**, hook `.claude/hooks/session-start.sh`
-> tự chạy nó lúc mở phiên nên container clone mới đã sẵn sàng — không phải cài tay.
+> **Gọn hơn — chỉ cần `pnpm dev`:** trước khi bật server, hook `predev` chạy `tools/dev/preflight.mjs`
+> — lần đầu tự cài deps + sinh Prisma Client, các lần sau kiểm tra rồi vào thẳng server, **không cài
+> lại gì**. Đổi phụ thuộc thì lần chạy kế tiếp tự cài lại. Muốn chuẩn bị mà chưa chạy server: `pnpm
+> preflight` (hoặc bản hai bước tường minh `pnpm install:all` = `pnpm install && pnpm db:generate`).
+> `pnpm install` KHÔNG còn bước build native nào (re2 dùng bản WebAssembly `re2-wasm`) nên chạy được
+> cả khi máy chặn mạng / thiếu toolchain. Trên **Claude Code on the web**, hook
+> `.claude/hooks/session-start.sh` chạy đúng preflight đó lúc mở phiên nên container clone mới đã sẵn
+> sàng — không phải cài tay.
 >
 > **Đừng gộp `prisma generate` vào `postinstall`:** prisma generate tự chạy `pnpm add @prisma/client`
 > → lại kích hoạt `postinstall` → **đệ quy vô hạn**. Vì vậy setup là hai bước tuần tự.

@@ -66,7 +66,7 @@ Requires **Node ≥ 20.11** and **pnpm 9.15**. PostgreSQL and Redis are needed t
 but not to run the tests — see below.
 
 ```bash
-pnpm install:all              # one-shot: pnpm install + prisma generate (builds re2, generates Prisma Client)
+pnpm install:all              # one-shot: install deps + generate Prisma Client — no native build, works offline
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:migrate
 pnpm db:seed                  # (recommended) load the default Phase-matching config + Signboard columns + work calendars
@@ -102,12 +102,23 @@ stops the process with a clear message rather than a half-running server.
 > `node --watch src/*.ts` crashes with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on Node 22+/24. `tsx`
 > fully transpiles the TypeScript, so the dev entry points run on any supported Node.
 
-> **One-shot setup.** `pnpm install:all` runs `pnpm install` (which also builds the native
-> [`re2`](https://github.com/uhop/node-re2) engine — required by the ReDoS-safe regex layer, not
-> optional) and `pnpm db:generate` **in sequence**. On **Claude Code on the web**, a `SessionStart`
-> hook (`.claude/hooks/session-start.sh`) runs this automatically at session start, so a freshly
-> cloned container is ready to `pnpm dev` / `pnpm test` without manual setup — the container is then
-> cached, so later sessions start near-instantly.
+> **`pnpm dev` sets itself up — you only run it.** A `predev` hook runs
+> [`tools/dev/preflight.mjs`](./tools/dev/preflight.mjs) before the servers start. The first time it
+> installs dependencies and generates the Prisma Client; every run after that it just checks
+> (node_modules present, Prisma Client generated, `pnpm-lock.yaml` unchanged) and goes **straight to
+> the server with no install step**. Change a dependency and the next `pnpm dev` re-installs on its
+> own. Run the same preparation without starting anything with `pnpm preflight`; `pnpm install:all`
+> (`pnpm install && pnpm db:generate`) remains the explicit two-step form.
+>
+> **No native build, fully offline.** `pnpm install` has **no compile step to fail**: the ReDoS-safe
+> regex layer uses [`re2-wasm`](https://github.com/google/re2-wasm) — Google's RE2 engine compiled to
+> WebAssembly — instead of the native [`re2`](https://github.com/uhop/node-re2) addon, so there is no
+> node-gyp / MSVC / prebuilt-binary download that can break on a locked-down or toolchain-less machine
+> (Windows especially). It is the same RE2 engine, so the linear-time, backtracking-free ReDoS
+> guarantee is unchanged — see `packages/engine/src/parser/safe-regex.ts`. On **Claude Code on the
+> web**, a `SessionStart` hook (`.claude/hooks/session-start.sh`) runs the same preflight at session
+> start, so a freshly cloned container is ready without manual setup; the container is then cached, so
+> later sessions start near-instantly.
 >
 > Do **not** move `prisma generate` into a `postinstall` script: Prisma's generate internally runs
 > `pnpm add @prisma/client`, which re-triggers `postinstall` → `prisma generate` → … in an **infinite

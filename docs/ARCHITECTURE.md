@@ -205,7 +205,7 @@ Danh tính được phân giải một lần mỗi request trong một hook `onR
 | ORM | Prisma | Migration có versioning, rollback được |
 | Hàng đợi | BullMQ (trên Redis) | PRD §4.1 |
 | Ngày giờ | **luxon** | Bắt buộc, cấm tự cộng offset (PRD §9.4) |
-| Regex an toàn | **re2** | Cho regex do người dùng nhập (PRD E-20) |
+| Regex an toàn | **re2** (bản WebAssembly `re2-wasm`, không cần build native) | Cho regex do người dùng nhập (PRD E-20) |
 | Validate | zod | Dùng chung FE-BE qua `packages/shared` |
 | Test | Vitest + Testcontainers | PRD §8.1 |
 | E2E | Playwright | PRD §8.1 |
