@@ -16,6 +16,25 @@ export function childrenOf(
   );
 }
 
+/**
+ * Điểm BẮT ĐẦU drill: tự tụt qua những cấp chỉ có ĐÚNG MỘT nút (và nút đó còn con).
+ *
+ * Vì sao: config Giai đoạn là GLOBAL nên Epic 1 giai đoạn cũng mang tầng GĐ với đúng
+ * một nút (catch-all). Bắt người dùng bấm xuyên qua "GD1" duy nhất là vô nghĩa — bỏ
+ * qua cấp đó thì Epic 1 giai đoạn nhìn Y HỆT chế độ Phase hôm nay, Epic ≥2 giai đoạn
+ * mới thấy cấp GĐ. Dừng TRƯỚC nút lá đơn độc (vẫn phải vẽ được biểu đồ của nút đó).
+ */
+export function baseDrillPath(tierSeries: readonly TierSeries[]): string[] {
+  const base: string[] = [];
+  for (;;) {
+    const kids = childrenOf(tierSeries, base);
+    if (kids.length !== 1) return base;
+    const only = kids[0]!;
+    if (!hasChildren(tierSeries, only.groupPath)) return base;
+    base.push(only.groupPath[only.groupPath.length - 1]!);
+  }
+}
+
 /** Nút này còn con để drill sâu hơn không? (quyết định có hiện mũi tên ▸.) */
 export function hasChildren(
   tierSeries: readonly TierSeries[],

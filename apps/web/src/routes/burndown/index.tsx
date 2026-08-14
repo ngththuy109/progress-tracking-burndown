@@ -13,7 +13,7 @@ import {
   LoadingState,
   type Column,
 } from '../../components/ui/index.js';
-import { childrenOf, hasChildren } from './tier-drill.js';
+import { baseDrillPath, childrenOf, hasChildren } from './tier-drill.js';
 
 /**
  * Màn hình biểu đồ Burndown — PRD §5.1.
@@ -217,22 +217,31 @@ function TierDrillView({
   readonly markers: BurndownScreenMarkers;
   readonly onPointClick: (date: string) => void;
 }) {
-  const children = childrenOf(tierSeries, path);
+  // Neo drill tại `base`: Epic 1 giai đoạn (một nút GĐ duy nhất do catch-all) bỏ qua
+  // cấp GĐ và nhìn y hệt chế độ Phase hôm nay; Epic ≥2 GĐ mới thấy cấp GĐ. Path state
+  // ngắn hơn base (mới vào / bấm "Toàn Epic") thì hiểu là đang đứng ở base.
+  const base = baseDrillPath(tierSeries);
+  const effectivePath = path.length < base.length ? base : path;
+  const children = childrenOf(tierSeries, effectivePath);
 
   return (
     <div className="stack">
       <div className="scope" role="group" aria-label="Đường drill theo tầng">
         <button
           type="button"
-          className={`button${path.length === 0 ? ' button--primary' : ''}`}
+          className={`button${effectivePath.length === base.length ? ' button--primary' : ''}`}
           onClick={() => onPath([])}
         >
           Toàn Epic
         </button>
-        {path.map((code, i) => (
+        {effectivePath.slice(base.length).map((code, i) => (
           <span key={i}>
             <span className="muted"> / </span>
-            <button type="button" className="button" onClick={() => onPath(path.slice(0, i + 1))}>
+            <button
+              type="button"
+              className="button"
+              onClick={() => onPath(effectivePath.slice(0, base.length + i + 1))}
+            >
               {code}
             </button>
           </span>

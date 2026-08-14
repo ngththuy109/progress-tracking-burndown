@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { TierSeries } from '@app/shared';
-import { childrenOf, hasChildren } from './tier-drill.js';
+import { baseDrillPath, childrenOf, hasChildren } from './tier-drill.js';
 
 const node = (groupPath: string[]): TierSeries => ({
   key: JSON.stringify(groupPath),
@@ -43,5 +43,40 @@ describe('hasChildren', () => {
   });
   it('nút lá không con', () => {
     expect(hasChildren(TIERS, ['SA', 'DESIGN'])).toBe(false);
+  });
+});
+
+describe('baseDrillPath — tự bỏ qua cấp chỉ có một nút', () => {
+  it('≥2 nút tầng 1 (Epic 2 giai đoạn) ⇒ bắt đầu từ gốc, thấy cấp GĐ', () => {
+    expect(baseDrillPath(TIERS)).toEqual([]);
+  });
+
+  it('1 nút tầng 1 có con (Epic 1 giai đoạn, catch-all GD1) ⇒ nhảy thẳng vào nút đó', () => {
+    const oneStage = [
+      node(['GD1']),
+      node(['GD1', 'DESIGN']),
+      node(['GD1', 'DEV']),
+    ];
+    expect(baseDrillPath(oneStage)).toEqual(['GD1']);
+  });
+
+  it('tụt qua NHIỀU cấp đơn độc liên tiếp, dừng ở cấp có ≥2 nút', () => {
+    const deep = [
+      node(['GD1']),
+      node(['GD1', 'STREAM']),
+      node(['GD1', 'STREAM', 'DESIGN']),
+      node(['GD1', 'STREAM', 'DEV']),
+    ];
+    expect(baseDrillPath(deep)).toEqual(['GD1', 'STREAM']);
+  });
+
+  it('dừng TRƯỚC nút lá đơn độc — vẫn còn một nút để vẽ biểu đồ', () => {
+    const single = [node(['GD1']), node(['GD1', 'DESIGN'])];
+    expect(baseDrillPath(single)).toEqual(['GD1']);
+    expect(childrenOf(single, ['GD1']).map((s) => s.groupPath)).toEqual([['GD1', 'DESIGN']]);
+  });
+
+  it('chuỗi rỗng ⇒ gốc', () => {
+    expect(baseDrillPath([])).toEqual([]);
   });
 });
