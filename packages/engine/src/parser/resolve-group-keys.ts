@@ -192,7 +192,7 @@ export function previewTierKeys(
               ? UNCLASSIFIED_PHASE
               : new TaskTitleParser(tierAsEffectiveConfig(t, config), runner).parse(taskTitle)
                   .phaseCode;
-      return { code: t.code, labelVi: t.labelVi, sourceType: t.sourceType, resolved };
+      return { code: t.code, labelVi: t.labelVi, role: t.role, sourceType: t.sourceType, resolved };
     });
 
   return { parentPhase, entries };

@@ -83,14 +83,19 @@ export function registerConfigPhaseRoutes(app: FastifyInstance, deps: ConfigPhas
     }),
   );
 
-  // Xem thử CẤU TRÚC TẦNG: dán một tiêu đề Task, xem từng tầng (bản nháp chưa lưu)
-  // bóc ra mã gì. Chạy trên cấu hình GLOBAL — màn Cấu trúc tầng là single-tenant.
+  // Xem thử CẤU TRÚC TẦNG: dán các tiêu đề Task (mỗi dòng một ticket mẫu), xem từng
+  // tầng (bản nháp chưa lưu) bóc ra mã gì. GLOBAL — màn Cấu trúc tầng là single-tenant.
   app.post('/api/config/phase/tiers-preview', async (req, reply) =>
     handle(reply, async () => {
       const parsed = tiersPreviewRequestSchema.safeParse(req.body);
       if (!parsed.success) throw badRequest(parsed.error);
       const effective = await getEffective(deps, null);
-      return previewTierKeys(effective, parsed.data.tiers, parsed.data.taskTitle);
+      return {
+        results: parsed.data.taskTitles.map((taskTitle) => ({
+          taskTitle,
+          ...previewTierKeys(effective, parsed.data.tiers, taskTitle),
+        })),
+      };
     }),
   );
 

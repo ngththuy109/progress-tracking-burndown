@@ -39,12 +39,12 @@
 
 | # | User story | Thao tác | Đạt khi thấy | ☐ |
 |---|---|---|---|---|
-| 14a | **Tầng** Khai cấu trúc tầng | Mở *Cấu trúc tầng*, thêm/xoá/di chuyển tầng, chọn nguồn khoá | Sửa được danh sách tầng, giá trị/luật/mẫu của từng tầng; ba preset (3 tầng / 2 tầng / phẳng) dựng sẵn được | ☐ |
+| 14a | **Tầng** Khai cấu trúc tầng | Mở *Cấu trúc tầng*, thêm/xoá/di chuyển tầng, chọn nguồn khoá | Bố cục đúng demo đã chốt: header *Chọn kiểu cấu trúc phân tầng* (3 preset), thanh **Mở hướng dẫn cấu hình** (modal 7 bước), card *Bước 1 · Phạm vi theo dõi*, danh sách tầng dạng hàng gọn — bấm **Sửa ✎** mở trình sửa giá trị/luật/mẫu (tầng ✦Phase nguồn title-cha dẫn sang *Phase settings*) | ☐ |
 | 14b | **Tầng** Đúng một tầng Phase | Bỏ đánh dấu Phase hoặc đánh dấu hai tầng rồi Lưu | Chặn lưu, báo rõ "phải đúng một tầng Phase" | ☐ |
 | 14c | **Tầng** Không đổi hành vi mặc định | Với Epic 3 tầng cũ, không đổi cấu hình | Burndown/Signboard/số liệu **y hệt trước** (config mặc định = 1 tầng Phase) | ☐ |
 | 14d | **Scope QUERY** Đăng ký project phẳng | Màn *Epics* → panel *Theo dõi project phẳng (JQL)* → đặt ID scope + JQL + project key → Thêm | Scope được thêm (không cần Epic trên Jira), đẩy backfill; sau đồng bộ có biểu đồ | ☐ |
 | 14e | **Giai đoạn** Ánh xạ team → GĐ từ cấu hình | *Cấu trúc tầng* → thêm tầng `GIAI_DOAN` trên Phase (nguồn *Tiêu đề Task cha*), luật `offshore_P1 → GD1`, `offshore_P2 → GD2` + catch-all → GD1; Lưu; Resync Toàn bộ một Epic có title Task `[{epic}][{team}]TênPhase` | Lá của Task `offshore_P1` mang GĐ1, `offshore_P2` mang GĐ2; Task không có team ánh xạ về GĐ1; đổi ánh xạ CHỈ bằng sửa luật, không đổi ticket | ☐ |
-| 14f | **Giai đoạn** Xem thử luật ngay tại màn | *Cấu trúc tầng* → khung **Xem thử** → dán một title Task thật → bấm *Xem thử* | Hiện `group_path` dự kiến và từng tầng bóc ra mã gì; title không khớp luật hiện `UNCLASSIFIED` kèm gợi ý; tầng nguồn lá báo "cần dữ liệu lá" | ☐ |
+| 14f | **Giai đoạn** Xem thử luật ngay tại màn | *Cấu trúc tầng* → khung **Xem thử** (cột phải) → dán các title Task thật, mỗi dòng một ticket → bấm *Xem thử* | Bảng `tiêu đề → group_path` dạng chip theo tầng, phần tử tầng Phase có viền; title không khớp luật hiện `UNCLASSIFIED`; tầng nguồn lá hiện "…" (cần dữ liệu lá) | ☐ |
 | 14g | **Giai đoạn** Epic khác không bị ảnh hưởng | Sau khi lưu cấu hình 14e, mở Burndown + Signboard của một Epic **1 giai đoạn** (title cũ) | Giao diện y hệt trước: không thấy cấp GĐ trên drill, không thấy bộ lọc GĐ trên Signboard | ☐ |
 
 ## Biểu đồ Burndown

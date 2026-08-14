@@ -1067,3 +1067,300 @@ a.cell-card__key:hover {
   flex-direction: column;
   gap: 4px;
 }
+
+/* ============================================================================
+   Màn "Cấu trúc tầng" — bố cục theo demo đã chốt (docs/dynamic-tiers-demo.html)
+   ========================================================================== */
+
+.panel__eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 4px;
+}
+.panel__eyebrow--plain {
+  color: var(--text-muted);
+}
+
+/* Header "Chọn kiểu cấu trúc phân tầng": chữ trái, segment preset phải. */
+.cfg-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Thanh hướng dẫn (glbar của demo). */
+.glbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--tone-info-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius);
+  padding: 11px 15px;
+  font-size: 13px;
+}
+.glbar__open {
+  margin-left: auto;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius);
+  padding: 7px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.glbar__open:hover {
+  filter: brightness(1.06);
+}
+
+/* Modal hướng dẫn 7 bước. */
+.guide-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 18, 0.55);
+  z-index: 60;
+  padding: 22px;
+  overflow-y: auto;
+}
+.guide-modal {
+  max-width: 720px;
+  margin: 20px auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px -24px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.guide-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.guide-modal__body {
+  padding: 16px 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.guide-myth {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--tone-info-bg);
+  border-radius: var(--radius);
+  padding: 10px 13px;
+  font-size: 13px;
+}
+.guide-myth__head {
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.guide-myth p {
+  margin: 0;
+  color: var(--text-muted);
+}
+.guide-steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 13px;
+}
+.guide-steps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+.guide-tip {
+  border-left: 3px solid var(--tone-warning);
+  background: var(--tone-warning-bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 10px 13px;
+  font-size: 13px;
+  margin: 0;
+}
+
+/* Bố cục 2 cột: trái = Bước 1 + Bước 2; phải = Xem thử (sticky). */
+.tiers-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+  gap: var(--gap);
+  align-items: start;
+}
+.tiers-preview {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+@media (max-width: 1100px) {
+  .tiers-grid {
+    grid-template-columns: 1fr;
+  }
+  .tiers-preview {
+    position: static;
+  }
+}
+
+/* Bước 1 — bảng mô tả CONTAINER/QUERY. */
+.scope-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.scope-kv dt {
+  margin: 0;
+}
+.scope-kv dd {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/* Hàng tầng GỌN + connector nối các tầng (demo). */
+.tier-list {
+  gap: 0;
+}
+.tier-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+.tier-row + .tier-row {
+  margin-top: 14px;
+  position: relative;
+}
+.tier-row + .tier-row::before {
+  content: '';
+  position: absolute;
+  top: -15px;
+  left: 26px;
+  width: 2px;
+  height: 14px;
+  background: var(--border);
+}
+.tier-row__ord {
+  font-weight: 700;
+  font-size: 12px;
+  color: #fff;
+  background: var(--accent);
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.tier-row__src {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+.tier-row__defs {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.defchip {
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.tier-row__editor {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.input--sm {
+  width: auto;
+  font-size: 12.5px;
+  padding: 4px 8px;
+}
+
+/* Bảng Xem thử: chip vectơ khoá; phần tử tầng Phase có viền đậm hơn. */
+.tbl-scroll {
+  overflow-x: auto;
+}
+.tiers-preview__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+}
+.tiers-preview__table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tiers-preview__table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.tiers-preview__title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.gp-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.gp-path__pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gp-sep {
+  color: var(--text-muted);
+}
+.gp-node {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.gp-node--phase {
+  border-width: 2px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.gp-node--warn {
+  border-color: var(--tone-warning);
+  color: var(--tone-warning);
+  background: var(--tone-warning-bg);
+}

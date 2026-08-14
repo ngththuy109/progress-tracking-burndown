@@ -188,37 +188,47 @@ describe('xem thử cấu trúc tầng (tiers-preview)', () => {
     },
   ];
 
-  const previewTiers = (taskTitle: string, tiers: unknown = STAGE_TIERS) => ({
+  interface PreviewRow {
+    taskTitle: string;
+    parentPhase: string;
+    entries: { code: string; role: string; resolved: string | null }[];
+  }
+
+  const previewTiers = (taskTitles: readonly string[], tiers: unknown = STAGE_TIERS) => ({
     method: 'POST' as const,
     url: '/api/config/phase/tiers-preview',
-    payload: { taskTitle, tiers },
+    payload: { taskTitles, tiers },
   });
 
-  it('tầng GĐ bóc theo luật NHÁP; tầng ✦Phase theo cấu hình hiệu lực', async () => {
-    const res = await app.inject(previewTiers('[PAY][offshore_P1]Design'));
+  it('nhiều title một lượt: tầng GĐ theo luật NHÁP, tầng ✦Phase theo cấu hình hiệu lực', async () => {
+    const res = await app.inject(previewTiers(['[PAY][offshore_P1]Design', '[PAY][offshore_P2]Design']));
     expect(res.statusCode).toBe(200);
-    const body = res.json<{ parentPhase: string; entries: { code: string; resolved: string | null }[] }>();
-    expect(body.parentPhase).toBe('DESIGN');
-    expect(body.entries.map((e) => [e.code, e.resolved])).toEqual([
-      ['GIAI_DOAN', 'GD1'],
-      ['PHASE', 'DESIGN'],
+    const { results } = res.json<{ results: PreviewRow[] }>();
+    expect(results).toHaveLength(2);
+    expect(results[0]!.parentPhase).toBe('DESIGN');
+    expect(results[0]!.entries.map((e) => [e.code, e.role, e.resolved])).toEqual([
+      ['GIAI_DOAN', 'GROUP', 'GD1'],
+      ['PHASE', 'PHASE', 'DESIGN'],
     ]);
+    expect(results[1]!.entries[0]!.resolved).toBe('GD2');
   });
 
   it('title không mang team ánh xạ ⇒ tầng GĐ UNCLASSIFIED (thấy được, không đoán)', async () => {
-    const body = (await app.inject(previewTiers('[Phase] Design'))).json<{ entries: { resolved: string | null }[] }>();
-    expect(body.entries[0]!.resolved).toBe('UNCLASSIFIED');
-    expect(body.entries[1]!.resolved).toBe('DESIGN');
+    const { results } = (await app.inject(previewTiers(['[Phase] Design']))).json<{ results: PreviewRow[] }>();
+    expect(results[0]!.entries[0]!.resolved).toBe('UNCLASSIFIED');
+    expect(results[0]!.entries[1]!.resolved).toBe('DESIGN');
   });
 
-  it('thiếu taskTitle ⇒ 400 kèm issues, không phải 500', async () => {
-    const res = await app.inject({
+  it('thiếu taskTitles / danh sách rỗng ⇒ 400 kèm issues, không phải 500', async () => {
+    const missing = await app.inject({
       method: 'POST',
       url: '/api/config/phase/tiers-preview',
       payload: { tiers: STAGE_TIERS },
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe('BAD_REQUEST');
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error).toBe('BAD_REQUEST');
+
+    expect((await app.inject(previewTiers([]))).statusCode).toBe(400);
   });
 });
 

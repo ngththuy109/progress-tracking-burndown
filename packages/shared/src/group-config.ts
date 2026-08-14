@@ -67,9 +67,15 @@ export const PHASE_TIER_CODE = 'PHASE' as const;
 // Xem thử cấu trúc tầng: dán MỘT tiêu đề Task → từng tầng bóc ra mã gì
 // ---------------------------------------------------------------------------
 
-/** Thân `POST /api/config/phase/tiers-preview` — tiers là BẢN NHÁP đang sửa, chưa lưu. */
+/**
+ * Thân `POST /api/config/phase/tiers-preview` — tiers là BẢN NHÁP đang sửa, chưa lưu.
+ * Nhiều tiêu đề một lượt (mỗi dòng dán một ticket mẫu — bảng Xem thử của demo đã chốt).
+ */
 export const tiersPreviewRequestSchema = z.object({
-  taskTitle: z.string().min(1, 'Enter a Task title to preview.'),
+  taskTitles: z
+    .array(z.string().min(1, 'Task titles cannot be empty.'))
+    .min(1, 'Enter at least one Task title to preview.')
+    .max(50, 'Preview at most 50 titles at a time.'),
   tiers: z.array(groupTierSchema),
 });
 
@@ -77,19 +83,26 @@ export const tiersPreviewRequestSchema = z.object({
 export const tierPreviewEntrySchema = z.object({
   code: z.string(),
   labelVi: z.string(),
+  role: z.enum(GROUP_TIER_ROLE),
   sourceType: z.enum(GROUP_SOURCE_TYPE),
   resolved: z.string().nullable(),
 });
 
-export const tiersPreviewResponseSchema = z.object({
+/** Kết quả của MỘT tiêu đề: vectơ theo thứ tự tầng. */
+export const tiersPreviewRowSchema = z.object({
+  taskTitle: z.string(),
   /** Phase theo cấu hình Phase đang hiệu lực — đúng thứ Sub-task sẽ kế thừa. */
   parentPhase: z.string(),
-  /** Theo thứ tự tầng. */
   entries: z.array(tierPreviewEntrySchema),
+});
+
+export const tiersPreviewResponseSchema = z.object({
+  results: z.array(tiersPreviewRowSchema),
 });
 
 export type TiersPreviewRequest = z.infer<typeof tiersPreviewRequestSchema>;
 export type TierPreviewEntry = z.infer<typeof tierPreviewEntrySchema>;
+export type TiersPreviewRow = z.infer<typeof tiersPreviewRowSchema>;
 export type TiersPreviewResponse = z.infer<typeof tiersPreviewResponseSchema>;
 
 /**

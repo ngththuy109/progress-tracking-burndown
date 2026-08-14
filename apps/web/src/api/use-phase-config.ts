@@ -133,12 +133,13 @@ export function useSaveConfig(
 }
 
 export interface TiersPreviewVars {
-  readonly taskTitle: string;
+  /** Mỗi phần tử một tiêu đề Task (bảng ticket mẫu của demo — tối đa 50). */
+  readonly taskTitles: readonly string[];
   readonly tiers: readonly GroupTier[];
 }
 
 /**
- * Xem thử cấu trúc tầng: dán một tiêu đề Task → từng tầng (bản NHÁP đang sửa)
+ * Xem thử cấu trúc tầng: dán các tiêu đề Task → từng tầng (bản NHÁP đang sửa)
  * bóc ra mã gì. Mutation chứ không phải query — thân mang cả state nháp.
  */
 export function useTiersPreview(
@@ -148,7 +149,7 @@ export function useTiersPreview(
     mutationFn: (vars: TiersPreviewVars) =>
       client.post(
         '/config/phase/tiers-preview',
-        { taskTitle: vars.taskTitle, tiers: [...vars.tiers] },
+        { taskTitles: [...vars.taskTitles], tiers: [...vars.tiers] },
         tiersPreviewResponseSchema,
       ),
   });
