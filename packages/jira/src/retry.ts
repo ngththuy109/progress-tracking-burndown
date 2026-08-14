@@ -29,6 +29,28 @@ export class JiraHttpError extends Error {
   }
 }
 
+/**
+ * Nhận diện lỗi Jira "issue key không tồn tại" — issue đã BỊ XOÁ khỏi Jira.
+ *
+ * JQL tham chiếu một key đã bị xoá (`key = "X"`, `parent = "X"`, `key IN (...)`)
+ * bị Jira Cloud trả **HTTP 400**, KHÔNG phải 404, kèm câu nguyên văn:
+ *   "An issue with key 'X' does not exist for the field 'key'."
+ * (xem chú thích `getIssue` trong endpoints.ts). Vì truy vấn `search/jql` do hệ
+ * thống tự dựng nên LUÔN đúng cú pháp, một 400 mang đúng câu này gần như chắc
+ * chắn nghĩa là key đã biến mất — nơi gọi coi đó là "Epic đã bị xoá" thay vì đổ
+ * job với lỗi khó hiểu.
+ *
+ * Khớp CẢ "issue with key" LẪN "does not exist" để KHÔNG nhầm với 400 khác cũng
+ * chứa "does not exist" (ví dụ tên field cấu hình sai: "Field 'X' does not
+ * exist…"). Nhầm hai loại này sẽ xoá mềm nhầm toàn bộ Epic khi thực ra chỉ là
+ * lỗi cấu hình.
+ */
+export function isIssueDoesNotExistError(err: unknown): boolean {
+  if (!(err instanceof JiraHttpError) || err.status !== 400) return false;
+  const body = err.body.toLowerCase();
+  return body.includes('issue with key') && body.includes('does not exist');
+}
+
 /** Chỉ 429 và 5xx mới đáng thử lại. */
 export function isRetryable(status: number): boolean {
   return status === 429 || (status >= 500 && status < 600);

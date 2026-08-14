@@ -480,6 +480,72 @@ describe('xoá mềm', () => {
   });
 });
 
+describe('Epic bị xoá trên Jira', () => {
+  it('Resync một Epic đã bị xoá KHÔNG đổ lỗi mà xoá mềm toàn bộ issue', async () => {
+    // Lần đầu: Epic còn sống, lấy đủ cây về (1 Epic + 3 Task + 25 Sub-task).
+    const issues = sampleTree();
+    await run({ issues }).result;
+    const countBefore = store.issues.size;
+    expect(countBefore).toBe(29);
+    expect([...store.issues.values()].every((i) => i.removedAt === null)).toBe(true);
+
+    // Epic bị xoá trên Jira. Resync (Quick — có watermark): JQL `key = "PAY-100"`
+    // trả HTTP 400 "does not exist". Trước khi sửa, job đổ ở FETCH_TREE và Epic
+    // kẹt ở ERROR, Resync lại chỉ lặp lại đúng lỗi đó.
+    store.epicState.set('PAY-100', {
+      status: 'ACTIVE',
+      lastSyncedAt: new Date('2026-03-08T00:00:00.000Z'),
+      lastError: null,
+    });
+    const r = await run({ issues: [] }).result;
+
+    expect(r.status).toBe('SUCCESS');
+    expect(r.errorMessage).toBeNull();
+    // Mọi issue được đánh dấu đã gỡ, nhưng DÒNG VẪN CÒN (E-02 — không xoá cứng).
+    expect(r.removed).toBe(countBefore);
+    expect(store.issues.size).toBe(countBefore);
+    expect([...store.issues.values()].every((i) => i.removedAt !== null)).toBe(true);
+    // Nhật ký lần chạy là SUCCESS, và Epic KHÔNG bị đẩy sang ERROR.
+    expect(store.runs.at(-1)!.status).toBe('SUCCESS');
+    expect(store.epicState.get('PAY-100')!.status).not.toBe('ERROR');
+    // Có cảnh báo cho vận hành biết vì sao dữ liệu bị gỡ hàng loạt.
+    expect(r.warnings.some((w) => w.code === 'EPIC_DELETED_IN_JIRA')).toBe(true);
+  });
+
+  it('không gọi worklog/changelog khi Epic đã bị xoá (tránh 404 dây chuyền)', async () => {
+    await run({ issues: sampleTree() }).result;
+
+    store.epicState.set('PAY-100', {
+      status: 'ACTIVE',
+      lastSyncedAt: new Date('2026-03-08T00:00:00.000Z'),
+      lastError: null,
+    });
+    const { jira, result } = run({ issues: [] });
+    await result;
+
+    // Dừng ngay sau lần search đầu tiên: không đọc lịch sử của issue con đã biến
+    // mất (những lời gọi đó sẽ trả 404 và làm job đổ y như lỗi cũ).
+    expect(jira.searchCount).toBe(1);
+    expect(jira.paths.some((p) => p.includes('/worklog') || p.includes('/changelog'))).toBe(false);
+  });
+
+  it('Epic đã xoá đang ở BACKFILLING (sau ERROR) thì Resync đưa về ACTIVE', async () => {
+    await run({ issues: sampleTree() }).result;
+
+    // API chuyển ERROR → BACKFILLING trước khi đẩy job Resync; mô phỏng trạng thái
+    // đó rồi chạy full resync (nửa đầu của `{"full":true}`).
+    store.epicState.set('PAY-100', {
+      status: 'BACKFILLING',
+      lastSyncedAt: new Date('2026-03-08T00:00:00.000Z'),
+      lastError: 'FETCH_TREE trước đó lỗi',
+    });
+    const r = await run({ issues: [] }, 'PAY-100', { ignoreWatermark: true }).result;
+
+    expect(r.status).toBe('SUCCESS');
+    expect(store.epicState.get('PAY-100')!.status).toBe('ACTIVE');
+  });
+});
+
 describe('log giờ lùi ngày', () => {
   it('worklog có started lùi 3 ngày so với created thì Epic bị đẩy vào dirty:epics', async () => {
     const worklogs = [

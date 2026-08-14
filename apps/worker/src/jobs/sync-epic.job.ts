@@ -158,6 +158,68 @@ export async function syncEpic(
     // --- GIAI ĐOẠN 1: cây issue, đúng 2 lần gọi search ---
     const tree = await fetchEpicTree(deps.jira, { epicKey, fields: deps.fields, since });
 
+    // Epic đã bị XOÁ khỏi Jira (trước đây lấy về, sau đó bị xoá trên Jira).
+    //
+    // KHÔNG đọc lịch sử: mọi issue con cũng đã biến mất nên `/issue/{key}/worklog`
+    // và `/changelog` sẽ trả 404 và làm job đổ y như lỗi 400 lúc nãy. Thay vào đó
+    // đánh dấu TOÀN BỘ issue của Epic là đã gỡ (xoá mềm, PRD E-02): snapshot cũ
+    // giữ nguyên, từ hôm nay trở đi issue rời khỏi Burndown — `liveKeys` rỗng nên
+    // `markRemoved` quét sạch mọi issue chưa gỡ của Epic này.
+    //
+    // Coi đây là THÀNH CÔNG, không phải lỗi: nếu ném lỗi thì Epic kẹt vĩnh viễn ở
+    // ERROR và mỗi lần Resync lại vấp đúng lỗi đó (chính là sự cố đang sửa). PM
+    // vẫn có thể Bỏ theo dõi Epic sau đó nếu không cần giữ lịch sử nữa (RUNBOOK).
+    if (tree.epicGone) {
+      step = 'PERSIST';
+      const removed = await deps.issues.markRemoved(epicKey, tree.liveKeys, deps.now());
+
+      step = 'FINALIZE';
+      const finishedAt = deps.now();
+      await deps.syncRuns.finish({
+        id: runId,
+        status: 'SUCCESS',
+        finishedAt,
+        apiCalls: deps.jira.apiCallsMade,
+        rateLimitHits: deps.jira.rateLimitHits,
+        issuesRead: 0,
+        worklogsRead: 0,
+        errorMessage: null,
+        errorStep: null,
+        errorDetail: null,
+      });
+
+      await deps.epics.setSynced(epicKey, finishedAt);
+      // Gỡ Epic khỏi ERROR: lượt Resync này chính là thứ đưa nó ra khỏi trạng
+      // thái lỗi (API đã chuyển ERROR → BACKFILLING trước khi đẩy job).
+      if (state.status === 'BACKFILLING') {
+        await deps.epics.setStatus(epicKey, 'ACTIVE', null);
+      }
+
+      return {
+        epicKey,
+        status: 'SUCCESS',
+        issuesRead: 0,
+        worklogsRead: 0,
+        changelogRead: 0,
+        removed,
+        worklogsDeleted: 0,
+        apiCalls: deps.jira.apiCallsMade,
+        rateLimitHits: deps.jira.rateLimitHits,
+        retroLogDetected: false,
+        // Cảnh báo để vận hành biết VÌ SAO dữ liệu bị gỡ hàng loạt — cùng kênh
+        // `sync.warning` như PHASE_MISMATCH/FIELD_TRUNCATED ở wire.ts.
+        warnings: [
+          {
+            code: 'EPIC_DELETED_IN_JIRA',
+            message:
+              `Epic ${epicKey} không còn trên Jira (đã bị xoá). Đã đánh dấu ${removed} issue ` +
+              `là đã gỡ và GIỮ NGUYÊN lịch sử cũ. Bỏ theo dõi Epic này nếu không cần nữa.`,
+          },
+        ],
+        errorMessage: null,
+      };
+    }
+
     // --- GIAI ĐOẠN 2: worklog + changelog song song ---
     step = 'FETCH_HISTORY';
     // Chỉ Task và Sub-task mới có worklog đáng kể; bản thân Epic thì không.

@@ -116,6 +116,23 @@ export class FakeJira {
     if (u.pathname === '/rest/api/3/search/jql') {
       const body = JSON.parse(String(init?.body ?? '{}')) as { jql: string };
       this.jqls.push(body.jql);
+
+      // Jira Cloud VALIDATE mọi key trong mệnh đề `key`/`parent`: chỉ cần MỘT key
+      // được tham chiếu mà không tồn tại là cả truy vấn trả HTTP 400 "does not
+      // exist" (KHÔNG phải danh sách rỗng). Đây chính là hành vi khiến Resync một
+      // Epic đã bị xoá phát sinh lỗi — mô phỏng đúng để test tái hiện được.
+      const existing = new Set(this.opts.issues.map((i) => i.key));
+      const missing = referencedKeys(body.jql).find((k) => !existing.has(k));
+      if (missing !== undefined) {
+        return json(
+          {
+            errorMessages: [`An issue with key '${missing}' does not exist for the field 'key'.`],
+            errors: {},
+          },
+          400,
+        );
+      }
+
       const issues = this.resolveJql(body.jql).map((i) => this.toJiraIssue(i));
       // Enhanced search: một trang, không còn nextPageToken → searchIssues dừng.
       return json({ issues, isLast: true });
@@ -236,6 +253,22 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+/**
+ * Mọi issue key được THAM CHIẾU trong mệnh đề `key`/`parent` của một JQL:
+ * `key = "X"`, `parent = "X"`, `key IN (...)`, `parent IN (...)`.
+ *
+ * Đây là các toán hạng mà Jira Cloud kiểm sự tồn tại — dùng để mô phỏng lỗi 400
+ * "does not exist". Mốc `updated >= "..."` KHÔNG phải key nên không bị bắt.
+ */
+function referencedKeys(jql: string): string[] {
+  const out: string[] = [];
+  for (const m of jql.matchAll(/(?:key|parent)\s*=\s*"([^"]+)"/g)) out.push(m[1]!);
+  for (const m of jql.matchAll(/(?:key|parent)\s+IN\s*\(([^)]*)\)/gi)) {
+    for (const km of m[1]!.matchAll(/"([^"]+)"/g)) out.push(km[1]!);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

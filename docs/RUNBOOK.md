@@ -123,7 +123,7 @@ Bình thường `healthz` trả `{"status":"ok","components":{"postgres":"ok","r
 | Dấu hiệu trong `lastError` | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | `401` hoặc `403` | Token Jira hết hạn hoặc bị thu hồi | Đổi token — xem quy trình bên dưới |
-| `Epic không tồn tại` | Ai đó xoá hoặc đổi key Epic trên Jira | Bỏ theo dõi Epic đó |
+| `Epic không tồn tại` / log `EPIC_DELETED_IN_JIRA` | Epic đã bị xoá trên Jira | Resync (hoặc job đêm) tự **xoá mềm** toàn bộ issue và **giữ nguyên** lịch sử — không còn kẹt ở ERROR. Bỏ theo dõi Epic nếu không cần giữ nữa |
 | `timeout` / `ECONNRESET` | Jira chậm hoặc mạng chập chờn | Bấm **Run again** ở `/ops`; thường qua ngay |
 
 **Khi nào gọi Tech Lead:** chạy lại hai lần vẫn hỏng với cùng một lỗi.

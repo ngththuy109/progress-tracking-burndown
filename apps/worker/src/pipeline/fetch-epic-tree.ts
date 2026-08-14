@@ -5,6 +5,7 @@ import {
   getIssueWorklogs,
   getUpdatedWorklogIds,
   getWorklogsByIds,
+  isIssueDoesNotExistError,
   searchIssues,
   type JiraChangelogEntry,
   type JiraClient,
@@ -32,7 +33,24 @@ export interface EpicTree {
   readonly subtasks: readonly JiraIssue[];
   /** Key của MỌI issue Jira đang trả về — dùng để phát hiện issue đã biến mất. */
   readonly liveKeys: ReadonlySet<string>;
+  /**
+   * CHÍNH Epic đã bị XOÁ khỏi Jira (không còn key này trên Jira nữa).
+   *
+   * Khác hẳn "Epic còn sống nhưng rỗng Task": ở đây không có gì để đọc, và mọi
+   * cổng đọc theo key (worklog/changelog của issue con) cũng sẽ trả 404. Nơi gọi
+   * dựa vào cờ này để xoá mềm toàn bộ Epic thay vì đổ job (xem `syncEpic`).
+   */
+  readonly epicGone: boolean;
 }
+
+/** Cây rỗng cho Epic đã bị xoá khỏi Jira — `liveKeys` rỗng ⇒ xoá mềm mọi issue. */
+const GONE_TREE: EpicTree = {
+  epic: null,
+  tasks: [],
+  subtasks: [],
+  liveKeys: new Set<string>(),
+  epicGone: true,
+};
 
 /**
  * Định dạng mốc thời gian cho JQL: `"yyyy-MM-dd HH:mm"`.
@@ -96,13 +114,30 @@ export async function fetchEpicTree(
   ];
 
   // (1) Bản thân Epic + các Task con. KHÔNG lọc theo `updated` — xem chú thích.
-  const top = await searchIssues(client, {
-    jql: `key = ${quote(args.epicKey)} OR parent = ${quote(args.epicKey)}`,
-    fields: issueFields,
-  });
+  //
+  // Epic ĐÃ BỊ XOÁ khỏi Jira: JQL tra `key = "X"` bị trả HTTP 400 "does not
+  // exist" (KHÔNG phải 404 — xem `getIssue`). Bắt đúng lỗi đó và trả về cây rỗng
+  // `epicGone` để nơi gọi xoá mềm cả Epic, thay vì để job đổ với lỗi 400 khó hiểu
+  // và kẹt Epic ở trạng thái ERROR mãi mãi.
+  let top: readonly JiraIssue[];
+  try {
+    top = await searchIssues(client, {
+      jql: `key = ${quote(args.epicKey)} OR parent = ${quote(args.epicKey)}`,
+      fields: issueFields,
+    });
+  } catch (err) {
+    if (isIssueDoesNotExistError(err)) return GONE_TREE;
+    throw err;
+  }
 
   const epic = top.find((i) => i.key === args.epicKey) ?? null;
   const tasks = top.filter((i) => i.key !== args.epicKey);
+
+  // Lưới an toàn cho biến thể IM LẶNG: một số cấu hình/tình huống Jira trả DANH
+  // SÁCH RỖNG thay vì 400 khi key không còn (ví dụ tài khoản đồng bộ mất quyền
+  // đọc). Không có cả Epic lẫn Task nghĩa là không còn gì để đồng bộ — cũng coi
+  // như Epic đã biến mất, tránh bước đọc lịch sử theo key rồi vấp 404.
+  if (epic === null && tasks.length === 0) return GONE_TREE;
 
   // (2) Sub-task, CÓ lọc theo `updated` khi đồng bộ tăng dần.
   const taskKeys = tasks.map((t) => t.key);
@@ -142,6 +177,7 @@ export async function fetchEpicTree(
     tasks,
     subtasks,
     liveKeys: new Set([...top.map((i) => i.key), ...liveSubtaskKeys]),
+    epicGone: false,
   };
 }
 
