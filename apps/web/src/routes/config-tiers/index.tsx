@@ -5,6 +5,7 @@ import {
   type EffectiveConfig,
   type GroupSourceType,
   type GroupTier,
+  type GroupTierRule,
 } from '@app/shared';
 import { useEffectiveConfig, useSaveConfig } from '../../api/use-phase-config.js';
 import { Badge, ErrorState, LoadingState } from '../../components/ui/index.js';
@@ -395,6 +396,22 @@ function TierRules({
               aria-label={`Từ khoá luật ${j + 1} của tầng ${index + 1}`}
               onChange={(e) => dispatch({ type: 'UPDATE_RULE', tier: index, index: j, patch: { keyword: e.target.value } })}
             />
+            <select
+              className="input"
+              value={r.matchMode}
+              aria-label={`Chế độ khớp luật ${j + 1} của tầng ${index + 1}`}
+              onChange={(e) =>
+                dispatch({
+                  type: 'UPDATE_RULE',
+                  tier: index,
+                  index: j,
+                  patch: { matchMode: e.target.value as GroupTierRule['matchMode'] },
+                })
+              }
+            >
+              <option value="CONTAINS">Chứa</option>
+              <option value="REGEX">Regex</option>
+            </select>
             <span className="muted">→</span>
             <input
               className="input input--code"

@@ -68,6 +68,14 @@ describe('tierReducer — con của tầng (definitions/rules/patterns)', () => 
     s = tierReducer(s, { type: 'UPDATE_RULE', tier: 0, index: 0, patch: { keyword: 'design', groupCode: 'DESIGN', matchPriority: 10 } });
     expect(s.tiers[0]!.rules[0]).toMatchObject({ keyword: 'design', groupCode: 'DESIGN', matchPriority: 10 });
   });
+
+  it('UPDATE_RULE đổi được matchMode (mặc định CONTAINS → REGEX, siết ^…$)', () => {
+    let s = load([phaseTier()]);
+    s = tierReducer(s, { type: 'ADD_RULE', tier: 0 });
+    expect(s.tiers[0]!.rules[0]!.matchMode).toBe('CONTAINS');
+    s = tierReducer(s, { type: 'UPDATE_RULE', tier: 0, index: 0, patch: { keyword: '^offshore_P1$', matchMode: 'REGEX' } });
+    expect(s.tiers[0]!.rules[0]).toMatchObject({ keyword: '^offshore_P1$', matchMode: 'REGEX' });
+  });
 });
 
 describe('trạng thái nháp', () => {
