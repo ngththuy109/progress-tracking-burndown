@@ -105,7 +105,7 @@ PM tự nhập mẫu tiêu đề và regex (PRD §2.2, E-20). Coi đây là **d�
 
 | Quy ước | Chi tiết |
 |---|---|
-| Thư viện | **`re2`**, không dùng regex gốc của JavaScript |
+| Thư viện | **`re2`** (bản WebAssembly `re2-wasm` — cùng bộ máy RE2, không cần build native), không dùng regex gốc của JavaScript |
 | Giới hạn độ dài | ≤ 200 ký tự |
 | Timeout | 100ms cho mỗi chuỗi |
 | Khi quá timeout | Coi như **không khớp**, ghi cảnh báo `REGEX_TIMEOUT`, **không làm sập job** |
