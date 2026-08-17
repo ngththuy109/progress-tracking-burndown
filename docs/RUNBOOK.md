@@ -274,6 +274,13 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Xử lý.** PM nhờ đội điền ước lượng trên Jira. Hệ thống không tự đoán (rủi ro **R-02**).
 
+> **Giao việc cho đúng người.** Ở khu *Data quality* bấm **Show ticket details**:
+> bảng có cột **PIC** (lấy từ "Request participants" của Jira, cùng nguồn với cột
+> PIC trên Signboard) và ô lọc **PIC**. Chọn một người là ra đúng phần việc của
+> người đó, file CSV tải về cũng chỉ còn đúng những dòng đang nhìn thấy. Nhóm
+> **No PIC yet** là ticket chưa gán ai — không lọc riêng thì nó không nằm trong
+> danh sách của ai cả và không bao giờ được sửa.
+
 ---
 
 ## [P3] `MISSING_WBS_DATE` — Nhiều Sub-task thiếu ngày kế hoạch
@@ -282,7 +289,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Ảnh hưởng.** Không so được sớm/trễ cho phần đó; ô Signboard hiện `No planned dates` (rủi ro **R-08**).
 
-**Xử lý.** Mở màn hình Epic, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể, gửi cho đội.
+**Xử lý.** Mở màn hình **Monitoring** → khu *Data quality* → bảng *Planned dates*, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể (kèm câu JQL và file CSV), gửi cho đội. Màn *Epics* cũng gắn link `⚠ Check data quality` trên đúng những Epic đang có lỗi dữ liệu — đó là đường đi nhanh nhất sang đây.
 
 ---
 
@@ -517,8 +524,8 @@ psql "$DATABASE_URL" -f tools/db/fix-epic-calendar.sql
 
 Liên quan: cột Signboard nào do phía JP làm (JMReview…) thì đặt **Side = JP**
 ở màn **Signboard columns** — báo cáo "plan rơi vào ngày nghỉ" (màn Phase
-sub-tasks và cột *On days off* ở màn Epics) dựa vào cờ đó để biết soi bằng
-lịch nào.
+sub-tasks và cột *On days off* trong khu *Data quality* của màn Monitoring)
+dựa vào cờ đó để biết soi bằng lịch nào.
 
 ---
 

@@ -8,6 +8,7 @@ const ISSUE: DataQualityIssue = {
   epicDisplayName: 'Payment',
   summary: '[PAY][BE][DEV][Login]_Create',
   problems: ['MISSING_ESTIMATE', 'MISSING_WBS_DATE'],
+  pics: [{ accountId: 'a1', displayName: 'Nguyễn An' }],
   exempt: false,
   exemptBy: null,
 };
@@ -17,10 +18,31 @@ describe('buildDataQualityCsv — file gửi cho đội sửa dữ liệu', () =
     const csv = buildDataQualityCsv([ISSUE]);
     expect(csv.startsWith('\uFEFF')).toBe(true); // BOM cho Excel
     const lines = csv.replace('\uFEFF', '').trim().split('\r\n');
-    expect(lines[0]).toContain('Epic,Epic name,Ticket,Summary,Problems');
+    expect(lines[0]).toContain('Epic,Epic name,Ticket,Summary,PIC,Problems');
     expect(lines[1]).toContain('PAY-101');
     expect(lines[1]).toContain('Missing estimate; Missing planned dates');
     expect(lines[1]).toContain('no');
+  });
+
+  it('cột PIC nói AI phải sửa — nhiều người thì nối bằng "; " để Excel không tách cột', () => {
+    const csv = buildDataQualityCsv([
+      {
+        ...ISSUE,
+        pics: [
+          { accountId: 'a1', displayName: 'Nguyễn An' },
+          { accountId: 'b2', displayName: null },
+        ],
+      },
+    ]);
+
+    expect(csv).toContain(',Nguyễn An; b2,');
+  });
+
+  it('ticket chưa gán ai thì ô PIC để TRỐNG, không bịa tên', () => {
+    const csv = buildDataQualityCsv([{ ...ISSUE, pics: [] }]);
+    const line = csv.replace('\uFEFF', '').trim().split('\r\n')[1] ?? '';
+
+    expect(line).toContain('_Create,,Missing estimate');
   });
 
   it('summary chứa dấu phẩy/nháy kép được escape đúng RFC 4180', () => {

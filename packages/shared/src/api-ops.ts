@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { signboardPicSchema } from './api-signboard.js';
 
 /**
  * Hợp đồng của `GET /api/ops/health` — dashboard giám sát (T-33).
@@ -125,6 +126,18 @@ export const dataQualityIssueSchema = z.object({
   epicDisplayName: z.string(),
   summary: z.string(),
   problems: z.array(z.enum(DQ_PROBLEMS)),
+  /**
+   * Người phụ trách (PIC) của CHÍNH Sub-task này — "Request participants" của
+   * Jira, cùng nguồn với cột PIC trên Signboard.
+   *
+   * Không có PIC thì không biết nhờ AI sửa dữ liệu: danh sách lỗi trở thành việc
+   * của "cả đội", tức là của không ai. Rỗng khi Jira chưa khai field đó hoặc
+   * ticket chưa gán ai.
+   *
+   * `.default([])` để web MỚI vẫn đọc được phản hồi từ API CŨ trong lúc deploy —
+   * khi đó cột PIC trống thay vì cả bảng gãy validate.
+   */
+  pics: z.array(signboardPicSchema).default([]),
   /** true = người vận hành đã xác nhận "không cần sửa dữ liệu". */
   exempt: z.boolean(),
   exemptBy: z.string().nullable(),
