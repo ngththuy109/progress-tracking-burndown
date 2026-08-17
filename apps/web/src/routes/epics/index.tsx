@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import type { TrackedEpicSummary } from '@app/shared';
 import { useEpicList, usePatchEpic } from '../../api/use-epics.js';
 import { useCalendars } from '../../api/use-calendars.js';
+import { useOpsHealth } from '../../api/use-ops.js';
+import { usePlanConflictSummary } from '../../api/use-plan-conflicts.js';
 import {
   Badge,
   DataTable,
@@ -14,6 +16,7 @@ import {
 } from '../../components/ui/index.js';
 import { IssueLink } from '../../components/issue-link/index.js';
 import { AddEpicsPanel } from './add-epics-panel.js';
+import { dataProblemsTitle, epicDataProblems } from './data-quality-hint.js';
 import { RemoveEpicDialog } from './remove-epic-dialog.js';
 import { ResyncDialog } from './resync-dialog.js';
 
@@ -73,6 +76,15 @@ export function lastSyncedLabel(epic: Epic): string {
 
 export function EpicListScreen() {
   const query = useEpicList();
+  // Hai nguồn CHỈ để biết Epic nào cần sang khu Data quality mà sửa dữ liệu.
+  // Cả hai đều KHÔNG chặn màn hình: hỏng thì chỉ mất phần chỉ đường, danh sách
+  // Epic vẫn dùng được như thường.
+  //
+  // `useOpsHealth(false)` — không tự làm mới ở đây (màn Epics không phải màn
+  // trực) và dùng chung khoá truy vấn với màn Monitoring, nên bấm sang đó là có
+  // sẵn số liệu, không gọi lại.
+  const health = useOpsHealth(false);
+  const conflictSummary = usePlanConflictSummary();
   const calendars = useCalendars();
   const patch = usePatchEpic();
   const [removing, setRemoving] = useState<Epic | null>(null);
@@ -90,6 +102,17 @@ export function EpicListScreen() {
   }
 
   const epics = query.data;
+  const metricsByEpic = new Map(
+    (health.data?.data.byEpic ?? []).map((e) => [e.epicKey, e.metrics]),
+  );
+  const conflictCounts = new Map(
+    (conflictSummary.data?.counts ?? []).map((c) => [c.epicKey, c.total]),
+  );
+  const problemsOf = (epicKey: string): readonly string[] =>
+    epicDataProblems({
+      metrics: metricsByEpic.get(epicKey),
+      planConflictCount: conflictCounts.get(epicKey) ?? 0,
+    });
 
   const columns: readonly Column<Epic>[] = [
     {
@@ -171,6 +194,23 @@ export function EpicListScreen() {
       sortKey: (e) => e.dataHealth.subtaskCount,
     },
     {
+      // Chỉ đường sang khu Data quality — CHỈ khi Epic đó thật sự có dữ liệu
+      // cần sửa. Epic sạch không hiện gì: một lời nhắc hiện thường trực trên
+      // mọi dòng là tiếng ồn, và tiếng ồn làm người ta bỏ qua cả cảnh báo thật.
+      key: 'dataQuality',
+      header: 'Data quality',
+      render: (e) => {
+        const reasons = problemsOf(e.epicKey);
+        if (reasons.length === 0) return null;
+        return (
+          <Link className="button" to="/ops" title={dataProblemsTitle(reasons)}>
+            ⚠ Check data quality
+          </Link>
+        );
+      },
+      sortKey: (e) => problemsOf(e.epicKey).length,
+    },
+    {
       key: 'actions',
       header: '',
       align: 'right',
@@ -237,13 +277,15 @@ export function EpicListScreen() {
             />
           }
         />
-        {/* Hai cột "Missing dates" và "On days off" đã chuyển sang khu Data
-            quality của màn Monitoring. Nói ra ở đây, không để người quen dùng
-            đi tìm trong im lặng rồi tưởng tính năng bị mất. */}
-        <p className="panel__hint">
-          Sub-tasks missing planned dates and planned dates on days off now live in{' '}
-          <Link to="/ops">Monitoring → Data quality</Link>.
-        </p>
+        {/* Không đọc được số liệu chất lượng dữ liệu thì NÓI RA. Cột trống lúc
+            đó trông y hệt "mọi Epic đều sạch" — đúng kiểu im lặng mà C-10 cấm. */}
+        {(health.isError || conflictSummary.isError) && (
+          <p className="panel__hint">
+            Could not check data quality right now, so the{' '}
+            <strong>Data quality</strong> column may be missing warnings. Open{' '}
+            <Link to="/ops">Monitoring</Link> to see why.
+          </p>
+        )}
       </section>
 
       <AddEpicsPanel />

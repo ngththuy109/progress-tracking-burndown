@@ -39,10 +39,25 @@ interface ApiCalls {
   readonly resynced: unknown[];
 }
 
-async function installApi(
-  page: Page,
-  options: { epics?: unknown[]; validateResults?: unknown[] } = {},
-): Promise<ApiCalls> {
+/** Số đo Data quality của một Epic — nguồn của cột "Data quality". */
+const dqMetric = (value: number | null, level: string) => ({
+  name: 'missingWbsDate',
+  label: 'Sub-task thiếu ngày kế hoạch',
+  value,
+  threshold: 10,
+  unit: '%',
+  level,
+});
+
+interface InstallOptions {
+  epics?: unknown[];
+  validateResults?: unknown[];
+  /** Số đo Data quality theo Epic. Mặc định: mọi Epic đều sạch. */
+  dataByEpic?: unknown[];
+  planConflictCounts?: { epicKey: string; total: number }[];
+}
+
+async function installApi(page: Page, options: InstallOptions = {}): Promise<ApiCalls> {
   const calls: ApiCalls = { validated: [], added: [], patched: [], deleted: [], resynced: [] };
   const json = (body: unknown, status = 200) => ({
     status,
@@ -55,6 +70,34 @@ async function installApi(
     async (route) => {
       const path = new URL(route.request().url()).pathname;
       const method = route.request().method();
+
+      if (path.endsWith('/ops/health')) {
+        await route.fulfill(
+          json({
+            collectedAt: '2026-03-10T02:15:00Z',
+            jobs: { metrics: [], recentRuns: [], erroredEpics: [] },
+            jira: { metrics: [] },
+            data: {
+              metrics: [],
+              byEpic: options.dataByEpic ?? [
+                {
+                  epicKey: 'PAY-1',
+                  displayName: 'Thanh toán',
+                  total: 12,
+                  metrics: [dqMetric(0, 'OK')],
+                },
+              ],
+            },
+            planDrift: { rows: [] },
+          }),
+        );
+        return;
+      }
+
+      if (path.endsWith('/plan-conflicts/summary')) {
+        await route.fulfill(json({ counts: options.planConflictCounts ?? [] }));
+        return;
+      }
 
       if (path.endsWith('/epics/validate')) {
         const body = route.request().postDataJSON() as { keys: string[] };
@@ -311,21 +354,40 @@ test('bỏ theo dõi BẮT gõ lại mã Epic trước khi cho bấm', async ({ 
   await expect.poll(() => calls.deleted).toEqual([{ purge: true, confirmKey: 'PAY-1' }]);
 });
 
-test('lỗi ngày kế hoạch KHÔNG còn ở bảng Epic, và màn hình chỉ đường sang Monitoring', async ({ page }) => {
-  // Hai cột đó đã chuyển sang khu Data quality của màn Monitoring. Người quen
-  // dùng phải được chỉ đường, không thì họ tưởng tính năng bị mất.
+test('Epic có dữ liệu cần sửa thì chỉ đường sang khu Data quality', async ({ page }) => {
+  // Chi tiết lỗi nằm ở màn Monitoring; ở đây chỉ cần biết Epic NÀO phải sang.
   await installApi(page, {
-    epics: [EPIC({ dataHealth: { ...EPIC().dataHealth, missingWbsDateCount: 3 } })],
+    dataByEpic: [
+      { epicKey: 'PAY-1', displayName: 'Thanh toán', total: 12, metrics: [dqMetric(12, 'WARN')] },
+    ],
   });
   await page.goto('/epics');
 
   await expect(page.getByRole('columnheader', { name: 'Missing dates' })).toHaveCount(0);
   await expect(page.getByRole('columnheader', { name: 'On days off' })).toHaveCount(0);
 
-  const pointer = page.getByRole('link', { name: 'Monitoring → Data quality' });
-  await expect(pointer).toBeVisible();
+  const pointer = page.getByRole('link', { name: '⚠ Check data quality' });
+  await expect(pointer).toHaveAttribute('title', /Sub-task thiếu ngày kế hoạch: 12%/);
   await pointer.click();
   await expect(page).toHaveURL(/\/ops$/);
+});
+
+test('Epic sạch thì KHÔNG hiện lời nhắc nào — hết việc thì im lặng', async ({ page }) => {
+  await installApi(page);
+  await page.goto('/epics');
+
+  await expect(page.getByRole('columnheader', { name: 'Data quality' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '⚠ Check data quality' })).toHaveCount(0);
+});
+
+test('plan rơi vào ngày nghỉ cũng đủ để nhắc sang Data quality', async ({ page }) => {
+  await installApi(page, { planConflictCounts: [{ epicKey: 'PAY-1', total: 2 }] });
+  await page.goto('/epics');
+
+  await expect(page.getByRole('link', { name: '⚠ Check data quality' })).toHaveAttribute(
+    'title',
+    /2 planned start\/end dates on a day off/,
+  );
 });
 
 test('chưa theo dõi Epic nào thì hướng dẫn bước tiếp theo, không để trang trắng', async ({ page }) => {

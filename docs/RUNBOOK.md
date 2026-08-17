@@ -282,7 +282,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Ảnh hưởng.** Không so được sớm/trễ cho phần đó; ô Signboard hiện `No planned dates` (rủi ro **R-08**).
 
-**Xử lý.** Mở màn hình **Monitoring** → khu *Data quality* → bảng *Planned dates*, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể (kèm câu JQL và file CSV), gửi cho đội.
+**Xử lý.** Mở màn hình **Monitoring** → khu *Data quality* → bảng *Planned dates*, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể (kèm câu JQL và file CSV), gửi cho đội. Màn *Epics* cũng gắn link `⚠ Check data quality` trên đúng những Epic đang có lỗi dữ liệu — đó là đường đi nhanh nhất sang đây.
 
 ---
 
