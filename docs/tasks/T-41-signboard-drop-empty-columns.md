@@ -92,6 +92,7 @@ Từ [CONVENTIONS.md](./CONVENTIONS.md):
 - `totalCells = số hàng × số cột lá CÒN LẠI sau khi rút cột rỗng`
 - Web: `vẽ đúng cột của TỪNG nhóm, ô vẫn khớp cột dù nhóm sau ít cột hơn`
 - Web: `không cột nào còn task thì nói rõ, không vẽ bảng rỗng`
+- Web: `bảng của Phase này KHÔNG mượn cột của Phase kia` (chọn nhiều Phase)
 
 ## Định nghĩa "xong"
 Mở một Phase mà cả Phase chỉ có Sub-task khâu `Create`: bảng hiện đúng MỘT cột
@@ -125,6 +126,14 @@ từng nhóm từ T-35; đã thêm test web dựng nhóm lệch cột để ch�
 Sub-phase mà mọi Sub-task đều mang loại task chưa khai cột thì không còn cột nào
 để dựng → bỏ luôn cả nhóm thay vì để header cụt. Những Sub-task đó vẫn nằm đủ ở
 khu "chưa lên được bảng" (§6.8) nên không mất dấu.
+
+### Chọn nhiều Phase: tự động đúng, đã chốt bằng test
+Chọn nhiều Phase (kể cả "Whole epic") không phải ca riêng: mỗi Phase là MỘT
+`SignboardBoard` với `useSignboard(epic, phaseCode)` riêng, khoá cache riêng
+`['signboard', epic, phaseCode]`, gọi riêng `/phase/:phaseCode` — không có
+endpoint nào gộp nhiều Phase. Vậy nên mỗi bảng rút cột theo đúng dữ liệu của
+Phase mình: Phase A còn `Create` + `Review` trong khi Phase B chỉ còn `Review`.
+Đã thêm test web chốt việc bảng này KHÔNG mượn cột của bảng kia.
 
 ### Test cũ mã hoá hành vi cũ
 8 test cũ giả định "cột luôn là toàn bộ cấu hình" (ví dụ: một Sub-task `Create`

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -434,5 +434,109 @@ describe('SignboardScreen — nhóm Sub-phase lệch số cột', () => {
 
     await waitFor(() => expect(screen.getByText(/No task-type column has any sub-task/)).toBeTruthy());
     expect(screen.queryByRole('table')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chọn NHIỀU Phase: mỗi bảng rút cột theo dữ liệu của CHÍNH nó
+// ---------------------------------------------------------------------------
+
+/** DESIGN còn hai cột: Create + Review. */
+const BOARD_DESIGN_WIDE: SignboardResponse = {
+  ...BOARD,
+  columnGroups: [
+    {
+      subPhaseKey: '',
+      subPhaseLabel: 'Design',
+      taskColumns: [
+        { taskCode: 'CREATE', label: 'Create' },
+        { taskCode: 'REVIEW', label: 'Review' },
+      ],
+    },
+  ],
+  columns: [
+    { taskCode: 'CREATE', label: 'Create', subPhaseKey: '' },
+    { taskCode: 'REVIEW', label: 'Review', subPhaseKey: '' },
+  ],
+  rows: [
+    {
+      functionKey: 'login',
+      functionName: 'Login',
+      pics: [],
+      cells: [lateCell, doneCell],
+      subtotals: [lateCell],
+      total: lateCell,
+    },
+  ],
+  summary: { byStatus: { DELAY_END: 1, COMPLETED: 1 }, emptyCells: 0, totalCells: 2 },
+};
+
+/** CODING chỉ có việc ở khâu Review → cột Create của nó bị rút. */
+const BOARD_CODING_NARROW: SignboardResponse = {
+  ...BOARD,
+  phaseCode: 'CODING',
+  columnGroups: [
+    { subPhaseKey: '', subPhaseLabel: 'Coding', taskColumns: [{ taskCode: 'REVIEW', label: 'Review' }] },
+  ],
+  columns: [{ taskCode: 'REVIEW', label: 'Review', subPhaseKey: '' }],
+  rows: [
+    {
+      functionKey: 'report',
+      functionName: 'Report',
+      pics: [],
+      cells: [doneCell],
+      subtotals: [doneCell],
+      total: doneCell,
+    },
+  ],
+  summary: { byStatus: { COMPLETED: 1 }, emptyCells: 0, totalCells: 1 },
+};
+
+function stubTwoBoards(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const body = url.endsWith('/phases')
+        ? PHASES_MULTI
+        : url.endsWith('/unparsed')
+          ? UNPARSED
+          : url.endsWith('/plan-conflicts')
+            ? CONFLICTS
+            : url.endsWith('/phase/DESIGN')
+              ? BOARD_DESIGN_WIDE
+              : url.endsWith('/phase/CODING')
+                ? BOARD_CODING_NARROW
+                : null;
+      if (body === null) return Promise.reject(new Error(`no mock for ${url}`));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }),
+  );
+}
+
+describe('SignboardScreen — nhiều Phase, mỗi bảng rút cột riêng', () => {
+  it('bảng của Phase này KHÔNG mượn cột của Phase kia', async () => {
+    // Mỗi Phase là MỘT lần gọi API riêng nên việc rút cột rỗng diễn ra độc lập:
+    // DESIGN có việc ở cả Create lẫn Review, CODING chỉ có Review → bảng CODING
+    // không được hiện cột Create chỉ vì bảng bên cạnh có.
+    stubTwoBoards();
+    renderAt('/signboard?epic=PAY-1&phases=DESIGN,CODING');
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+    expect(screen.getByText('Report')).toBeTruthy();
+
+    const design = within(screen.getByLabelText('Phase Thiết kế'));
+    const coding = within(screen.getByLabelText('Phase Lập trình'));
+
+    expect(design.getByRole('columnheader', { name: 'Create' })).toBeTruthy();
+    expect(design.getByRole('columnheader', { name: 'Review' })).toBeTruthy();
+
+    expect(coding.getByRole('columnheader', { name: 'Review' })).toBeTruthy();
+    expect(coding.queryByRole('columnheader', { name: 'Create' })).toBeNull();
   });
 });
