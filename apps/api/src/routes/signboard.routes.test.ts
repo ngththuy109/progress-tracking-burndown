@@ -129,12 +129,19 @@ describe('dựng bảng', () => {
   });
 
   it('Function không có Sub-task nào cho một cột thì ô đó là ô TRỐNG', async () => {
-    reads.subtaskList = [sub({ issueKey: 'S-1', taskType: 'Create' })];
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', taskType: 'Create' }),
+      // Một Function KHÁC giữ cho hai cột còn lại có việc — nếu không, chúng bị
+      // rút khỏi bảng (cột rỗng toàn tập) và không còn ô trống nào để kiểm.
+      sub({ issueKey: 'S-2', functionKey: 'export', functionName: 'Export', taskType: 'BALReview' }),
+      sub({ issueKey: 'S-3', functionKey: 'export', functionName: 'Export', taskType: 'JMReview' }),
+    ];
     const { body } = await get<SignboardResponse>(BOARD);
+    const row = body.rows.find((r) => r.functionKey === 'login');
 
-    expect(body.rows[0]?.cells[0]).toMatchObject({ present: true });
-    expect(body.rows[0]?.cells[1]).toEqual({ present: false });
-    expect(body.rows[0]?.cells[2]).toEqual({ present: false });
+    expect(row?.cells[0]).toMatchObject({ present: true });
+    expect(row?.cells[1]).toEqual({ present: false });
+    expect(row?.cells[2]).toEqual({ present: false });
   });
 
   it('hai Sub-task cùng ô thì ô mang trạng thái XẤU NHẤT và đếm 2 ticket', async () => {
@@ -152,7 +159,13 @@ describe('dựng bảng', () => {
   });
 
   it('cột trả về đúng thứ tự cấu hình', async () => {
-    reads.subtaskList = [sub({ issueKey: 'S-1' })];
+    // Cấu hình xếp Create → BALReview → JMReview; dữ liệu đến theo thứ tự khác
+    // cũng KHÔNG được làm đổi thứ tự cột.
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', taskType: 'JMReview' }),
+      sub({ issueKey: 'S-2', taskType: 'Create' }),
+      sub({ issueKey: 'S-3', taskType: 'BALReview' }),
+    ];
     const { body } = await get<SignboardResponse>(BOARD);
 
     expect(body.columns.map((c) => c.taskCode)).toEqual(['Create', 'BALReview', 'JMReview']);
@@ -160,11 +173,45 @@ describe('dựng bảng', () => {
 
   it('taskType lạ KHÔNG sinh thêm cột mới', async () => {
     // Cột là do người quyết định, không phải suy ra từ dữ liệu (C-10).
-    reads.subtaskList = [sub({ issueKey: 'S-1', taskType: 'Deploy', parseStatus: 'UNKNOWN_TASK_TYPE' })];
+    reads.subtaskList = [
+      ...COLUMNS.map((c) => sub({ issueKey: `S-${c.taskCode}`, taskType: c.taskCode })),
+      sub({ issueKey: 'S-9', taskType: 'Deploy', parseStatus: 'UNKNOWN_TASK_TYPE' }),
+    ];
     const { body } = await get<SignboardResponse>(BOARD);
 
     expect(body.columns).toHaveLength(3);
     expect(body.columns.map((c) => c.taskCode)).not.toContain('Deploy');
+  });
+
+  it('cột không có Sub-task nào thì KHÔNG được dựng', async () => {
+    // Cả Phase chỉ làm khâu Create → hai cột review toàn ô trống, dựng ra chỉ
+    // đẩy cột có việc ra khỏi màn hình.
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', functionKey: 'a', functionName: 'A', taskType: 'Create' }),
+      sub({ issueKey: 'S-2', functionKey: 'b', functionName: 'B', taskType: 'Create' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    expect(body.columns.map((c) => c.taskCode)).toEqual(['Create']);
+    expect(body.columnGroups[0]?.taskColumns.map((c) => c.taskCode)).toEqual(['Create']);
+    // `cells` vẫn 1:1 với `columns`.
+    expect(body.rows.every((r) => r.cells.length === body.columns.length)).toBe(true);
+  });
+
+  it('CHỈ MỘT Function có việc ở một cột thì cột đó vẫn được dựng', async () => {
+    // Rút cột là chuyện của cả bảng, không phải của từng hàng: một Sub-task duy
+    // nhất cũng đủ giữ cột lại, các hàng khác hiện ô trống.
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', functionKey: 'a', functionName: 'A', taskType: 'Create' }),
+      sub({ issueKey: 'S-2', functionKey: 'b', functionName: 'B', taskType: 'JMReview' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    expect(body.columns.map((c) => c.taskCode)).toEqual(['Create', 'JMReview']);
+    expect(body.rows.find((r) => r.functionKey === 'a')?.cells[1]).toEqual({ present: false });
+    expect(body.rows.find((r) => r.functionKey === 'b')?.cells[0]).toEqual({ present: false });
   });
 
   it('cột Tổng của hàng không bao giờ TỐT HƠN ô xấu nhất', async () => {
@@ -271,10 +318,10 @@ describe('cột PIC', () => {
 
 describe('nhóm cột theo Sub-phase', () => {
   it('mỗi [Sub-phase] thành một nhóm cột; cột lá lặp bộ loại task', async () => {
-    reads.subtaskList = [
-      sub({ issueKey: 'S-1', subPhaseRaw: 'FUT_ConfirmPoint', taskType: 'Create' }),
-      sub({ issueKey: 'S-2', subPhaseRaw: 'FUT_TestCase', taskType: 'Create' }),
-    ];
+    // Cả hai Sub-phase đều có đủ 3 loại task nên bộ cột lặp nguyên vẹn.
+    reads.subtaskList = ['FUT_ConfirmPoint', 'FUT_TestCase'].flatMap((sp) =>
+      COLUMNS.map((c) => sub({ issueKey: `${sp}-${c.taskCode}`, subPhaseRaw: sp, taskType: c.taskCode })),
+    );
 
     const { body } = await get<SignboardResponse>(BOARD);
 
@@ -386,10 +433,23 @@ describe('nhóm cột theo Sub-phase', () => {
     reads.subtaskList = [
       sub({ issueKey: 'S-1', subPhaseRaw: 'A', taskType: 'Create', statusCategory: 'done' }),
       sub({ issueKey: 'S-2', subPhaseRaw: 'B', taskType: 'BALReview', statusCategory: 'done' }),
+      // Một Function khác lấp đủ 3 loại task cho CẢ hai Sub-phase, giữ lưới 2×3
+      // nguyên vẹn — bài này soi CHỖ ĐỨNG của ô, không soi việc rút cột rỗng.
+      ...['A', 'B'].flatMap((sp) =>
+        COLUMNS.map((c) =>
+          sub({
+            issueKey: `F-${sp}-${c.taskCode}`,
+            functionKey: 'khac',
+            functionName: 'Khác',
+            subPhaseRaw: sp,
+            taskType: c.taskCode,
+          }),
+        ),
+      ),
     ];
 
     const { body } = await get<SignboardResponse>(BOARD);
-    const row = body.rows[0];
+    const row = body.rows.find((r) => r.functionKey === 'login');
 
     // columns: [A/Create, A/BALReview, A/JMReview, B/Create, B/BALReview, B/JMReview]
     expect(row?.cells[0]).toMatchObject({ present: true, status: 'COMPLETED' }); // A/Create ← S-1
@@ -435,7 +495,7 @@ describe('nhóm cột theo Sub-phase', () => {
     expect(body.columnGroups.find((g) => g.subPhaseKey === '')?.subPhaseLabel).toBe('(No sub-phase)');
   });
 
-  it('totalCells = số hàng × (số Sub-phase × số loại task)', async () => {
+  it('totalCells = số hàng × số cột lá CÒN LẠI sau khi rút cột rỗng', async () => {
     reads.subtaskList = [
       sub({ issueKey: 'S-1', functionKey: 'a', functionName: 'A', subPhaseRaw: 'P1', taskType: 'Create' }),
       sub({ issueKey: 'S-2', functionKey: 'b', functionName: 'B', subPhaseRaw: 'P2', taskType: 'Create' }),
@@ -443,19 +503,62 @@ describe('nhóm cột theo Sub-phase', () => {
 
     const { body } = await get<SignboardResponse>(BOARD);
 
-    // 2 hàng × (2 Sub-phase × 3 loại task) = 12.
-    expect(body.summary.totalCells).toBe(12);
+    // Không Sub-phase nào có BALReview/JMReview → mỗi nhóm chỉ còn cột Create.
+    // 2 hàng × (2 Sub-phase × 1 loại task) = 4.
+    expect(body.columns).toHaveLength(2);
+    expect(body.summary.totalCells).toBe(4);
     const counted = Object.values(body.summary.byStatus).reduce((a, b) => a + b, 0);
-    expect(counted + body.summary.emptyCells).toBe(12);
+    expect(counted + body.summary.emptyCells).toBe(4);
+  });
+
+  it('cột rỗng được rút theo TỪNG Sub-phase, không phải cả bảng', async () => {
+    // P1 chỉ làm Create, P2 chỉ làm JMReview → mỗi nhóm một cột khác nhau. Giữ
+    // nguyên bộ 3 cột cho cả hai nhóm sẽ thành 6 cột mà chỉ 2 cột có việc.
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'P1', taskType: 'Create' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'P2', taskType: 'JMReview' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    expect(body.columnGroups.map((g) => g.taskColumns.map((c) => c.taskCode))).toEqual([
+      ['Create'],
+      ['JMReview'],
+    ]);
+    expect(body.columns).toEqual([
+      { taskCode: 'Create', label: 'Tạo', subPhaseKey: 'p1' },
+      { taskCode: 'JMReview', label: 'JM review', subPhaseKey: 'p2' },
+    ]);
+    expect(body.rows[0]?.cells).toHaveLength(2);
+    expect(body.rows[0]?.subtotals).toHaveLength(2);
+  });
+
+  it('Sub-phase chỉ toàn loại task chưa khai cột thì KHÔNG thành nhóm', async () => {
+    // `Deploy` không có trong cấu hình cột → Sub-phase P2 không có cột nào để
+    // dựng; hiện một header trống rỗng chỉ làm PM tưởng mất dữ liệu. Các
+    // Sub-task đó nằm ở khu "chưa lên được bảng".
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', subPhaseRaw: 'P1', taskType: 'Create' }),
+      sub({ issueKey: 'S-2', subPhaseRaw: 'P2', taskType: 'Deploy', parseStatus: 'UNKNOWN_TASK_TYPE' }),
+    ];
+
+    const { body } = await get<SignboardResponse>(BOARD);
+
+    expect(body.columnGroups.map((g) => g.subPhaseKey)).toEqual(['p1']);
+    expect(body.columns).toHaveLength(1);
   });
 });
 
 describe('thanh tóm tắt', () => {
   it('ô trống KHÔNG được đếm vào bất kỳ trạng thái nào', async () => {
-    reads.subtaskList = [sub({ issueKey: 'S-1', taskType: 'Create', statusCategory: 'done' })];
+    reads.subtaskList = [
+      sub({ issueKey: 'S-1', functionKey: 'a', functionName: 'A', taskType: 'Create', statusCategory: 'done' }),
+      sub({ issueKey: 'S-2', functionKey: 'b', functionName: 'B', taskType: 'BALReview', statusCategory: 'done' }),
+    ];
     const { body } = await get<SignboardResponse>(BOARD);
 
-    expect(body.summary.byStatus).toEqual({ COMPLETED: 1 });
+    // Lưới 2 hàng × 2 cột (JMReview bị rút vì không có việc): 2 ô có việc, 2 ô trống.
+    expect(body.summary.byStatus).toEqual({ COMPLETED: 2 });
     expect(body.summary.emptyCells).toBe(2);
   });
 
@@ -469,7 +572,8 @@ describe('thanh tóm tắt', () => {
     const counted = Object.values(body.summary.byStatus).reduce((a, b) => a + b, 0);
 
     expect(counted + body.summary.emptyCells).toBe(body.summary.totalCells);
-    expect(body.summary.totalCells).toBe(2 * 3);
+    // 2 hàng × 2 cột còn lại (JMReview không có việc nên bị rút).
+    expect(body.summary.totalCells).toBe(2 * 2);
   });
 });
 

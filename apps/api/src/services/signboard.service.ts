@@ -20,9 +20,11 @@ import { mergeCell, mergeCellStatus, normalize, normalizePreservingCase, resolve
  * hàng, nhóm cột và đếm.
  *
  * Cột được nhóm hai tầng: tầng trên là **Sub-phase** (`[Sub-phase]` ngay trước
- * Function trong tiêu đề — PRD §2.9.1), tầng dưới là loại task. Cùng một bộ loại
- * task lặp lại dưới mỗi Sub-phase; `cells`/`columns` là mảng LÁ đã làm phẳng theo
- * thứ tự nhóm, nên `SignboardCell` và logic ô ở engine không phải đổi.
+ * Function trong tiêu đề — PRD §2.9.1), tầng dưới là loại task. Bộ loại task lặp
+ * lại dưới mỗi Sub-phase, NHƯNG chỉ giữ những cột thật sự có việc: cột mà không
+ * Function nào có Sub-task nào (toàn ô trống từ trên xuống dưới) thì KHÔNG dựng.
+ * `cells`/`columns` là mảng LÁ đã làm phẳng theo thứ tự nhóm, nên `SignboardCell`
+ * và logic ô ở engine không phải đổi.
  */
 
 export interface ColumnSpec {
@@ -82,6 +84,12 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
   // Dùng nhầm thì `Login`, `login` và `Ｌｏｇｉｎ` thành ba hàng riêng và bảng trở
   // nên vô dụng (E-31). Ô gộp theo `(subPhaseKey, taskType)`.
   const subPhases = new Map<string, SubPhaseAgg>();
+  /**
+   * Những ô `(subPhaseKey, taskType)` CÓ ít nhất một Sub-task — gom trên TOÀN
+   * bảng, không theo từng hàng. Cột lá nào không nằm trong đây thì mọi hàng đều
+   * trống, dựng ra chỉ tốn bề ngang nên bị loại (xem `groups` bên dưới).
+   */
+  const usedCells = new Set<string>();
   const byFunction = new Map<
     string,
     {
@@ -126,6 +134,7 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     }
 
     const cellKey = spKey + CELL_KEY_SEP + s.taskType;
+    usedCells.add(cellKey);
     const list = row.byCell.get(cellKey);
     if (list) list.push(s);
     else row.byCell.set(cellKey, [s]);
@@ -154,16 +163,32 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
     return a.label.localeCompare(b.label, 'vi');
   });
 
-  const columnGroups: SignboardColumnGroup[] = orderedSubPhases.map((sp) => ({
-    subPhaseKey: sp.key,
-    subPhaseLabel: sp.label,
-    // Cùng bộ cột cấu hình cho MỌI nhóm — giữ lưới đều để so ngang giữa các Sub-phase.
-    taskColumns: args.columns.map((c) => ({ taskCode: c.taskCode, label: c.label })),
+  // Bộ cột của TỪNG nhóm: giữ thứ tự cấu hình, nhưng bỏ loại task mà Sub-phase
+  // này không có Sub-task nào. Cột toàn ô trống không nói lên điều gì, chỉ đẩy
+  // các cột có việc ra ngoài màn hình — bảng vốn đã rất rộng.
+  //
+  // Hệ quả: các nhóm có thể KHÁC số cột nhau. Web đã tính offset ô theo
+  // `taskColumns.length` của từng nhóm nên lưới vẫn khớp.
+  const groups = orderedSubPhases
+    .map((sp) => ({
+      key: sp.key,
+      label: sp.label,
+      columns: args.columns.filter((c) => usedCells.has(sp.key + CELL_KEY_SEP + c.taskCode)),
+    }))
+    // Nhóm không còn cột nào — Sub-phase chỉ có Sub-task mang loại task chưa khai
+    // cột (chúng nằm ở khu "chưa lên được bảng") — thì bỏ luôn cả nhóm, đừng
+    // dựng header rỗng.
+    .filter((g) => g.columns.length > 0);
+
+  const columnGroups: SignboardColumnGroup[] = groups.map((g) => ({
+    subPhaseKey: g.key,
+    subPhaseLabel: g.label,
+    taskColumns: g.columns.map((c) => ({ taskCode: c.taskCode, label: c.label })),
   }));
 
   // Cột LÁ đã làm phẳng — 1:1 với `cells` của mỗi hàng.
-  const flatColumns = orderedSubPhases.flatMap((sp) =>
-    args.columns.map((c) => ({ taskCode: c.taskCode, label: c.label, subPhaseKey: sp.key })),
+  const flatColumns = groups.flatMap((g) =>
+    g.columns.map((c) => ({ taskCode: c.taskCode, label: c.label, subPhaseKey: g.key })),
   );
 
   const byStatus: Record<string, number> = {};
@@ -176,9 +201,9 @@ export function buildSignboard(args: BuildSignboardArgs): SignboardResponse {
       const cells: SignboardCell[] = [];
       const subtotals: SignboardCell[] = [];
 
-      for (const sp of orderedSubPhases) {
-        const groupCells = args.columns.map((col) => {
-          const tickets = row.byCell.get(sp.key + CELL_KEY_SEP + col.taskCode) ?? [];
+      for (const g of groups) {
+        const groupCells = g.columns.map((col) => {
+          const tickets = row.byCell.get(g.key + CELL_KEY_SEP + col.taskCode) ?? [];
           if (tickets.length === 0) {
             emptyCells += 1;
             return EMPTY_CELL;

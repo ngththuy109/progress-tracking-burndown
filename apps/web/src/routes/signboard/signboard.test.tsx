@@ -330,3 +330,109 @@ describe('SignboardScreen — chọn nhiều Phase', () => {
     expect(screen.queryByRole('heading', { name: /Thiết kế/ })).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cột không có task thì API không dựng — bảng phải chịu được nhóm LỆCH số cột
+// ---------------------------------------------------------------------------
+
+const emptyCell: SignboardCell = { present: false };
+
+/**
+ * Hai Sub-phase với số cột KHÁC nhau: `Design` còn Create + Review, `Coding` chỉ
+ * còn Create (cột Review của Coding không có task nào nên API không dựng).
+ */
+const BOARD_RAGGED: SignboardResponse = {
+  ...BOARD,
+  columnGroups: [
+    {
+      subPhaseKey: 'design',
+      subPhaseLabel: 'Design',
+      taskColumns: [
+        { taskCode: 'CREATE', label: 'Create' },
+        { taskCode: 'REVIEW', label: 'Review' },
+      ],
+    },
+    { subPhaseKey: 'coding', subPhaseLabel: 'Coding', taskColumns: [{ taskCode: 'CREATE', label: 'Create' }] },
+  ],
+  columns: [
+    { taskCode: 'CREATE', label: 'Create', subPhaseKey: 'design' },
+    { taskCode: 'REVIEW', label: 'Review', subPhaseKey: 'design' },
+    { taskCode: 'CREATE', label: 'Create', subPhaseKey: 'coding' },
+  ],
+  rows: [
+    {
+      functionKey: 'login',
+      functionName: 'Login',
+      pics: [],
+      cells: [lateCell, emptyCell, doneCell],
+      subtotals: [lateCell, doneCell],
+      total: lateCell,
+    },
+  ],
+  summary: { byStatus: { DELAY_END: 1, COMPLETED: 1 }, emptyCells: 1, totalCells: 3 },
+};
+
+/** Không cột nào còn task — API trả về bảng KHÔNG có nhóm cột nào. */
+const BOARD_NO_COLUMNS: SignboardResponse = {
+  ...BOARD,
+  columnGroups: [],
+  columns: [],
+  rows: [
+    { functionKey: 'login', functionName: 'Login', pics: [], cells: [], subtotals: [], total: emptyCell },
+  ],
+  summary: { byStatus: {}, emptyCells: 0, totalCells: 0 },
+};
+
+function stubBoard(board: SignboardResponse): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const body = url.endsWith('/phases')
+        ? PHASES
+        : url.endsWith('/unparsed')
+          ? UNPARSED
+          : url.endsWith('/plan-conflicts')
+            ? CONFLICTS
+            : url.endsWith('/phase/DESIGN')
+              ? board
+              : null;
+      if (body === null) return Promise.reject(new Error(`no mock for ${url}`));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }),
+  );
+}
+
+describe('SignboardScreen — nhóm Sub-phase lệch số cột', () => {
+  it('vẽ đúng cột của TỪNG nhóm, ô vẫn khớp cột dù nhóm sau ít cột hơn', async () => {
+    stubBoard(BOARD_RAGGED);
+    renderAt('/signboard?epic=PAY-1&phase=DESIGN');
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+
+    // Tầng 2 của header: Create + Review + Σ (nhóm Design), rồi Create + Σ (nhóm Coding).
+    const headerRows = screen.getAllByRole('row').slice(0, 2);
+    const level2 = [...headerRows[1]!.querySelectorAll('th')].map((th) => th.textContent);
+    expect(level2).toEqual(['Create', 'Review', 'Σ', 'Create', 'Σ']);
+
+    // Hàng Login: ô lá thứ hai (Design/Review) là ô TRỐNG, ô lá thứ ba
+    // (Coding/Create) đã Done — offset không được trượt sang nhóm sau.
+    const cells = [...screen.getAllByRole('row')[2]!.querySelectorAll('td')];
+    expect(cells[1]?.textContent).toContain('Late finish'); // Design/Create
+    expect(cells[2]?.className).toContain('signboard__empty'); // Design/Review
+    expect(cells[4]?.textContent).toContain('Done'); // Coding/Create
+  });
+
+  it('không cột nào còn task thì nói rõ, không vẽ bảng rỗng', async () => {
+    stubBoard(BOARD_NO_COLUMNS);
+    renderAt('/signboard?epic=PAY-1&phase=DESIGN');
+
+    await waitFor(() => expect(screen.getByText(/No task-type column has any sub-task/)).toBeTruthy());
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+});
