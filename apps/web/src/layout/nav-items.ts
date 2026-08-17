@@ -47,6 +47,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     builtBy: 'Phase tickets',
   },
   {
+    path: '/logwork',
+    label: 'Log work',
+    icon: '⏱️',
+    summary: 'Who is logging work this period, and which open in-charge sub-tasks have no worklog.',
+    builtBy: 'Logwork',
+  },
+  {
     path: '/config/signboard',
     label: 'Signboard columns',
     icon: '🧩',

@@ -7,6 +7,7 @@ import { EpicListScreen } from './epics/index.js';
 import { BurndownScreen } from './burndown/index.js';
 import { SignboardScreen } from './signboard/index.js';
 import { PhaseSubtasksScreen } from './phase-subtasks/index.js';
+import { LogworkScreen } from './logwork/index.js';
 import { SignboardColumnScreen } from './config-signboard/index.js';
 import { HolidaysScreen } from './config-holidays/index.js';
 import { OpsScreen } from './ops/index.js';
@@ -31,6 +32,7 @@ export function AppRoutes() {
         <Route path="burndown" element={<BurndownScreen />} />
         <Route path="signboard" element={<SignboardScreen />} />
         <Route path="phase-subtasks" element={<PhaseSubtasksScreen />} />
+        <Route path="logwork" element={<LogworkScreen />} />
         <Route path="config/phase" element={<ConfigPhaseScreen />} />
         <Route path="config/signboard" element={<SignboardColumnScreen />} />
         <Route path="config/holidays" element={<HolidaysScreen />} />

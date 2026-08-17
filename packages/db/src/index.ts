@@ -65,13 +65,23 @@ export {
   findByKey,
   findManyByKeys,
   listActiveEpics,
+  listVisibleActiveEpics,
   updateEpic,
   removeEpic,
   listWithHealth,
   listMissingDates,
   type UpsertTrackedEpicArgs,
   type UpdateEpicData,
+  type VisibleEpicRow,
 } from './repositories/tracked-epic.repository.js';
+
+export {
+  listExemptionsForEpics,
+  upsertExemption,
+  deleteExemption,
+  type LogworkExemptionRecord,
+  type UpsertLogworkExemptionArgs,
+} from './repositories/logwork-exemption.repository.js';
 
 export {
   findAppUser,

@@ -13,3 +13,5 @@ export {
   addWorkdays,
   MAX_DAYS_IN_RANGE,
 } from './count-workdays.js';
+
+export { weekOf } from './week-of.js';

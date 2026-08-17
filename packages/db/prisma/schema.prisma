@@ -613,10 +613,39 @@ model Project {
   projectKey  String @id @map("project_key") @db.VarChar(32)
   displayName String? @map("display_name")
 
+  // Giờ/ngày kỳ vọng cho chỉ báo "behind" ở màn Log work — cấu hình RIÊNG theo
+  // project (mỗi dự án một nhịp). `null` → dùng giờ/ngày của lịch làm việc gắn
+  // với Epic, cuối cùng mới tới mặc định (8h).
+  expectedHoursPerDay Float? @map("expected_hours_per_day")
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("project")
+}
+
+// ============================================================================
+// Bảng 13b: "PM đã verify — thôi theo dõi" cho một cặp (member, ticket) ở màn
+// Log work.
+//
+// Có bản ghi = cặp (member accountId, Sub-task) đó KHÔNG còn bị gắn cờ "chưa
+// log" nữa (vẫn hiện dạng đã-xác-nhận để gỡ được). Ghi ai đánh dấu và lúc nào để
+// truy vết — cùng tinh thần với dq_exempt. `project_key`/`epic_key` denormalize
+// để kiểm quyền PM và lọc rẻ khi đọc theo tập Epic.
+// ============================================================================
+model LogworkExemption {
+  accountId  String @map("account_id") @db.VarChar(64)
+  issueKey   String @map("issue_key") @db.VarChar(32)
+  epicKey    String @map("epic_key") @db.VarChar(32)
+  projectKey String @map("project_key") @db.VarChar(32)
+
+  exemptedBy String   @map("exempted_by") @db.VarChar(254)
+  exemptedAt DateTime @default(now()) @map("exempted_at") @db.Timestamptz(6)
+  note       String?
+
+  @@id([accountId, issueKey])
+  @@index([epicKey], map: "idx_logwork_exemption_epic")
+  @@map("logwork_exemption")
 }
 
 // ============================================================================

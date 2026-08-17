@@ -49,6 +49,7 @@ compares against the stored snapshot, and names the culprit — who edited the e
 | **Burndown chart** | Whole Epic or a single Phase, Planned vs Actual over time |
 | **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase. Columns with no sub-task at all are left out |
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
+| **Log work** | Team-wide: who is logging work this week (or a chosen range), and which open in-charge sub-tasks (Jira Request participants) still have no worklog. Capacity check per project; a PM can mark a case verified to stop tracking it |
 | **Signboard columns** | Which task types become columns |
 | **Phase settings** | Title patterns and matching rules, with a preview before saving |
 | **Days off** | Public holidays and make-up workdays for the Vietnam and Japan calendars |
