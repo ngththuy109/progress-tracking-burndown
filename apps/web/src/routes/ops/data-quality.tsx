@@ -12,6 +12,7 @@ import {
 import { IssueLink } from '../../components/issue-link/index.js';
 import { buildDataQualityCsv, csvFileName, PROBLEM_LABEL } from './data-quality-csv.js';
 import { MetricChips } from './metric-chips.js';
+import { PlannedDatesBlock } from './planned-dates.js';
 
 /**
  * Khu Data quality — tách theo TỪNG Epic đang theo dõi.
@@ -21,6 +22,9 @@ import { MetricChips } from './metric-chips.js';
  *   1. Xuất CSV gửi cho đội sửa dữ liệu trên Jira.
  *   2. Đánh dấu ticket "không cần sửa" — cố ý thiếu dữ liệu thì đừng cảnh báo
  *      mãi; tiếng ồn lặp lại làm người ta bỏ qua luôn cả cảnh báo thật.
+ *   3. Đếm hai lỗi NGÀY KẾ HOẠCH theo Epic (`PlannedDatesBlock`): thiếu ngày, và
+ *      ngày rơi trúng ngày nghỉ. Hai số này trước ở màn Epics — chúng là chất
+ *      lượng dữ liệu, nên thuộc về đây.
  */
 
 export function DataQualitySection({ data }: { readonly data: OpsHealthResponse['data'] }) {
@@ -49,6 +53,8 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
           <MetricChips metrics={e.metrics} />
         </div>
       ))}
+
+      <PlannedDatesBlock />
 
       <div className="actions">
         <button type="button" className="button" onClick={() => setShowDetails((v) => !v)}>

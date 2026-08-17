@@ -48,8 +48,9 @@ sửa plan trên Jira trước khi thành trễ thật.
 
 **Trong:** migration thêm `side` vào `signboard_column` (mặc định `'VN'`,
 CHECK VN|JP); ô chọn phía trên màn Signboard columns; hàm thuần
-`computePlanConflicts`; API chi tiết theo Epic + API tổng hợp cho màn Epics;
-badge ⚠ trên màn Phase sub-tasks; cột "On days off" trên màn Epics.
+`computePlanConflicts`; API chi tiết theo Epic + API tổng hợp (một lần gọi cho
+cả danh sách Epic); badge ⚠ trên màn Phase sub-tasks; cột "On days off" trong
+khu Data quality của màn Monitoring.
 
 **Ngoài:** KHÔNG tách công thức burndown theo phía — task JP vẫn tính vào
 scope và cháy theo lịch thực thi của Epic. KHÔNG chặn ghi gì lên Jira.
@@ -73,8 +74,8 @@ scope và cháy theo lịch thực thi của Epic. KHÔNG chặn ghi gì lên Ji
 3. Route `GET /api/epics/:epicKey/plan-conflicts` (404 / quyền như biểu đồ) và
    `GET /api/plan-conflicts/summary` (PM chỉ nhận project mình).
 4. Web: banner tổng hợp + badge ⚠ kèm lý do trên màn Phase sub-tasks (không
-   chặn màn hình khi API kiểm tra lỗi); cột "On days off" trên màn Epics bấm
-   sang màn Sub-tasks.
+   chặn màn hình khi API kiểm tra lỗi); cột "On days off" trong khu Data
+   quality của màn Monitoring, bấm sang màn Sub-tasks.
 
 ## Quy ước bắt buộc
 
@@ -122,7 +123,9 @@ tên ngày lễ, và màn Epics đếm được số vi phạm của từng Epic
 - Migration `side` + toàn bộ đường ống schema/repo/seed/UI cấu hình cột.
 - Hàm thuần `computePlanConflicts` + 2 route + adapter Prisma (Phase lấy từ
   Task cha theo PRD §2.9.2).
-- Badge ⚠ và banner trên màn Phase sub-tasks; cột "On days off" trên màn Epics.
+- Badge ⚠ và banner trên màn Phase sub-tasks; cột "On days off" trên màn Epics
+  — từ 2026-08-17 chuyển sang khu Data quality của màn Monitoring (bảng
+  *Planned dates*), cùng chỗ với số Sub-task thiếu ngày kế hoạch.
 - 19 test mới cho service + route.
 - Bổ sung theo yêu cầu PM (2026-08-11): cảnh báo hiện NGAY TRÊN Ô của bảng
   Signboard — badge `⚠ day off (VN/JP)` trên ô lá chứa ticket vi phạm, lý do

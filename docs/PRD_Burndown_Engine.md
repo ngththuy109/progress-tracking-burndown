@@ -2940,7 +2940,7 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 | R-05 | **Atlassian đổi API** (deprecate endpoint) | Thấp | Cao | Contract test chạy hằng ngày. Đăng ký nhận thông báo thay đổi của Atlassian. Bọc toàn bộ lời gọi sau một lớp adapter. | Tech Lead |
 | R-06 | **Bug múi giờ làm lệch số liệu** | Trung bình | Cao | Bắt buộc dùng `luxon`. Có golden dataset riêng cho múi giờ. Lint rule cấm gọi `new Date()` trong thư mục `engine/`. | Backend Dev |
 | R-07 | **PM không tin số liệu** vì khác Jira | **Cao** | Trung bình | Làm tính năng "giải thích số liệu": bấm vào một điểm sẽ hiện chi tiết từng Sub-task và quy tắc nào đã được áp dụng. Đào tạo PM 1 buổi. | PM |
-| R-08 | **Sub-task thiếu `wbs_start_date` / `wbs_end_date`** nên không vẽ được đường Kế hoạch cho Phase | **Cao** | Cao | Khảo sát tỉ lệ điền hai trường này ngay tuần 1. Màn hình danh sách Epic hiện cột "tình trạng dữ liệu" kèm số Sub-task thiếu ngày. API `/api/epics/:key/missing-dates` liệt kê cụ thể để PM đi điền. **Không đoán bừa ngày** khi thiếu. | PM |
+| R-08 | **Sub-task thiếu `wbs_start_date` / `wbs_end_date`** nên không vẽ được đường Kế hoạch cho Phase | **Cao** | Cao | Khảo sát tỉ lệ điền hai trường này ngay tuần 1. Khu *Data quality* của màn Monitoring hiện số Sub-task thiếu ngày theo từng Epic. API `/api/epics/:key/missing-dates` liệt kê cụ thể để PM đi điền. **Không đoán bừa ngày** khi thiếu. | PM |
 | R-09 | **API token rò rỉ** | Thấp | **Rất cao** | Lưu trong secret manager. Quét secret trong CI. Bộ lọc che token trong log. Xoay vòng 90 ngày. | DevOps |
 | R-10 | **Log giờ lùi ngày quá nhiều** làm job tính lại chạy liên tục | Trung bình | Trung bình | Gom các yêu cầu tính lại vào 1 lần chạy mỗi giờ, thay vì tính ngay lập tức. Theo dõi số lượng qua metric. | Backend Dev |
 | **R-11** | **Đường Kế hoạch trôi theo thực tế nên không phát hiện được trễ tiến độ.** Vì đã bỏ baseline, mỗi lần ai đó lùi `wbs_end_date` là kế hoạch tự giãn ra — biểu đồ luôn trông "đúng tiến độ" dù dự án đã trễ hàng tuần | **Cao** | **Cao** | Đây là hệ quả **đã biết trước và đã chấp nhận** khi chọn bỏ baseline. Bốn tuyến phòng thủ: (1) bảng **Lịch sử dịch chuyển kế hoạch** ghi mọi lần `plan_end` bị lùi; (2) dấu mốc trên biểu đồ mỗi lần lùi; (3) chỉ số tổng "Kế hoạch đã bị lùi N ngày qua M lần" hiện ngay đầu biểu đồ; (4) cảnh báo P2 khi tổng số ngày lùi > 20% độ dài Phase. Xem thêm E-01 và E-15 | PM |
@@ -3339,8 +3339,8 @@ nghỉ khác ngày nhau (Tết ↔ Golden Week…), vì vậy:
 - API: `GET /api/epics/{epicKey}/plan-conflicts` (chi tiết từng vi phạm, kèm
   tên ngày lễ) và `GET /api/plan-conflicts/summary` (đếm theo Epic; PM chỉ
   nhận project mình — §9.3). Tính **lúc đọc**, không chốt vào snapshot.
-- UI: badge ⚠ + banner trên màn Phase sub-tasks; cột "On days off" trên màn
-  Epics.
+- UI: badge ⚠ + banner trên màn Phase sub-tasks; cột "On days off" trong khu
+  *Data quality* của màn Monitoring (bảng *Planned dates*).
 
 ### C.4 Gán lịch cho Epic (T-38)
 

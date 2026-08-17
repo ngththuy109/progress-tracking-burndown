@@ -88,18 +88,6 @@ async function installApi(
         return;
       }
 
-      if (path.endsWith('/missing-dates')) {
-        await route.fulfill(
-          json({
-            epicKey: 'PAY-1',
-            rows: [
-              { issueKey: 'PAY-11', summary: 'Màn đăng nhập', parentKey: 'PAY-10', missingStart: true, missingEnd: false },
-            ],
-          }),
-        );
-        return;
-      }
-
       if (path.endsWith('/resync') && method === 'POST') {
         calls.resynced.push(route.request().postDataJSON());
         await route.fulfill(json({ jobId: 'sync-epic:PAY-1', queued: true, estimatedSeconds: 40 }));
@@ -323,17 +311,21 @@ test('bỏ theo dõi BẮT gõ lại mã Epic trước khi cho bấm', async ({ 
   await expect.poll(() => calls.deleted).toEqual([{ purge: true, confirmKey: 'PAY-1' }]);
 });
 
-test('Epic có Sub-task thiếu ngày hiện số lượng và bấm vào xem được danh sách', async ({ page }) => {
+test('lỗi ngày kế hoạch KHÔNG còn ở bảng Epic, và màn hình chỉ đường sang Monitoring', async ({ page }) => {
+  // Hai cột đó đã chuyển sang khu Data quality của màn Monitoring. Người quen
+  // dùng phải được chỉ đường, không thì họ tưởng tính năng bị mất.
   await installApi(page, {
     epics: [EPIC({ dataHealth: { ...EPIC().dataHealth, missingWbsDateCount: 3 } })],
   });
   await page.goto('/epics');
 
-  await page.getByRole('button', { name: '3', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: 'Missing dates' })).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: 'On days off' })).toHaveCount(0);
 
-  await expect(page.getByRole('heading', { name: /Sub-tasks missing planned dates/ })).toBeVisible();
-  await expect(page.getByText('Màn đăng nhập')).toBeVisible();
-  await expect(page.getByText('no start date')).toBeVisible();
+  const pointer = page.getByRole('link', { name: 'Monitoring → Data quality' });
+  await expect(pointer).toBeVisible();
+  await pointer.click();
+  await expect(page).toHaveURL(/\/ops$/);
 });
 
 test('chưa theo dõi Epic nào thì hướng dẫn bước tiếp theo, không để trang trắng', async ({ page }) => {

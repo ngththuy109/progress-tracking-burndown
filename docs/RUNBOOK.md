@@ -282,7 +282,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Ảnh hưởng.** Không so được sớm/trễ cho phần đó; ô Signboard hiện `No planned dates` (rủi ro **R-08**).
 
-**Xử lý.** Mở màn hình Epic, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể, gửi cho đội.
+**Xử lý.** Mở màn hình **Monitoring** → khu *Data quality* → bảng *Planned dates*, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể (kèm câu JQL và file CSV), gửi cho đội.
 
 ---
 
@@ -517,8 +517,8 @@ psql "$DATABASE_URL" -f tools/db/fix-epic-calendar.sql
 
 Liên quan: cột Signboard nào do phía JP làm (JMReview…) thì đặt **Side = JP**
 ở màn **Signboard columns** — báo cáo "plan rơi vào ngày nghỉ" (màn Phase
-sub-tasks và cột *On days off* ở màn Epics) dựa vào cờ đó để biết soi bằng
-lịch nào.
+sub-tasks và cột *On days off* trong khu *Data quality* của màn Monitoring)
+dựa vào cờ đó để biết soi bằng lịch nào.
 
 ---
 

@@ -18,7 +18,7 @@
 | 4 | **US-02** Tạm dừng ≠ bỏ theo dõi | Đọc nhãn hai nút ở dòng một Epic | Nút ghi rõ *Pause (keep data)* và *Untrack (delete data)* | ☐ |
 | 5 | **US-02** Tạm dừng rồi bật lại | Bấm **Pause (keep data)**, chờ, bấm **Resume** | Dữ liệu cũ còn nguyên, biểu đồ không mất gì | ☐ |
 | 6 | **US-02** Bỏ theo dõi có rào chắn | Bấm **Untrack (delete data)** | Hộp thoại bắt **gõ lại mã Epic**; nút Xoá chỉ mở khi gõ đúng | ☐ |
-| 7 | **US-10** Sub-task thiếu ngày | Bấm vào số ở cột **Missing dates** | Hiện danh sách từng Sub-task, ghi rõ thiếu ngày bắt đầu hay ngày kết thúc | ☐ |
+| 7 | **US-10** Sub-task thiếu ngày | Mở *Monitoring* → *Data quality* → *Planned dates*, bấm vào số ở cột **Missing dates** | Hiện danh sách từng Sub-task, ghi rõ thiếu ngày bắt đầu hay ngày kết thúc | ☐ |
 | 7b | **US-02** Đồng bộ lại có ba mức | Bấm **Resync** ở dòng một Epic | Hộp thoại cho chọn *Quick* / *Full* / *A specific date range*; mặc định là **Quick** | ☐ |
 | 7c | **US-02** Mức đắt nói rõ cái giá | Chọn mức *Full* | Hiện cảnh báo mức này chiếm **hạn mức gọi Jira của cả hệ thống** | ☐ |
 | 7d | **US-02** Dải ngày ngược bị chặn | Chọn *A specific date range*, đặt ngày đầu **sau** ngày cuối | Nút **Resync** mờ đi, kèm câu giải thích đọc được | ☐ |
@@ -82,7 +82,7 @@
 | 41 | Mở biểu đồ Epic mà lịch **chưa khai** ngày lễ năm nay | Cảnh báo 📅 nói rõ lịch chưa có ngày lễ và cách khắc phục | ☐ |
 | 42 | Đặt `wbs_end_date` một Sub-task JMReview (Side = JP) vào đúng ngày lễ Nhật, sync | Màn Phase sub-tasks: banner đỏ + badge ⚠ trên dòng đó, ghi rõ ngày và **tên ngày lễ JP**; cùng ngày đó Sub-task phía VN **không** bị báo | ☐ |
 | 42a | Mở **Signboard** của Phase chứa Sub-task đó | Ô tương ứng có badge `⚠ day off (JP)`; rê chuột thấy lý do kèm tên ngày lễ; đầu bảng có banner đếm và link *See the full list* | ☐ |
-| 43 | Đặt `wbs_start_date` một Sub-task Create (Side = VN) vào thứ Bảy, sync | Badge ⚠ ghi *weekend* phía VN; màn Epics cột **On days off** đếm được và bấm sang được màn Sub-tasks | ☐ |
+| 43 | Đặt `wbs_start_date` một Sub-task Create (Side = VN) vào thứ Bảy, sync | Badge ⚠ ghi *weekend* phía VN; *Monitoring* → *Data quality* → *Planned dates* cột **On days off** đếm được và bấm sang được màn Sub-tasks | ☐ |
 | 44 | Sub-task có khoảng plan **vắt qua** cuối tuần (hai mốc đều ngày làm việc) | **Không** bị báo vi phạm | ☐ |
 | 45 | Thêm Epic mới ở màn Epics | Có ô chọn lịch (mặc định VN_STANDARD); lịch chưa có ngày lễ hiện ⚠ ngay trong ô chọn | ☐ |
 | 46 | ADMIN mở **Days off** → mục *Make-up workdays (làm bù)*, tab lịch VN, dán `2026-04-25, làm bù 30/4` rồi Import | Bảng hiện ngày kèm thứ (**Sat**) và lý do; thông báo mấy ngày thêm và mấy Epic sẽ tính lại | ☐ |
