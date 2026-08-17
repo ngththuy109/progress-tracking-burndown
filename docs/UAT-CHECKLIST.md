@@ -20,6 +20,7 @@
 | 6 | **US-02** Bỏ theo dõi có rào chắn | Bấm **Untrack (delete data)** | Hộp thoại bắt **gõ lại mã Epic**; nút Xoá chỉ mở khi gõ đúng | ☐ |
 | 7 | **US-10** Sub-task thiếu ngày | Mở *Monitoring* → *Data quality* → *Planned dates*, bấm vào số ở cột **Missing dates** | Hiện danh sách từng Sub-task, ghi rõ thiếu ngày bắt đầu hay ngày kết thúc | ☐ |
 | 7a | **US-10** Chỉ nhắc khi có việc | Nhìn cột **Data quality** ở màn *Epics* | Epic có lỗi dữ liệu hiện `⚠ Check data quality` (rê chuột thấy sai cái gì, bấm sang màn Monitoring); Epic sạch **không hiện gì** | ☐ |
+| 7a1 | **US-10** Giao việc sửa dữ liệu | Mở *Monitoring* → *Data quality* → **Show ticket details** | Bảng có cột **PIC**; chọn một người ở ô lọc **PIC** thì chỉ còn ticket của người đó, nút tải CSV đổi theo số dòng đang thấy; chọn **No PIC yet** ra đúng ticket chưa gán ai | ☐ |
 | 7b | **US-02** Đồng bộ lại có ba mức | Bấm **Resync** ở dòng một Epic | Hộp thoại cho chọn *Quick* / *Full* / *A specific date range*; mặc định là **Quick** | ☐ |
 | 7c | **US-02** Mức đắt nói rõ cái giá | Chọn mức *Full* | Hiện cảnh báo mức này chiếm **hạn mức gọi Jira của cả hệ thống** | ☐ |
 | 7d | **US-02** Dải ngày ngược bị chặn | Chọn *A specific date range*, đặt ngày đầu **sau** ngày cuối | Nút **Resync** mờ đi, kèm câu giải thích đọc được | ☐ |

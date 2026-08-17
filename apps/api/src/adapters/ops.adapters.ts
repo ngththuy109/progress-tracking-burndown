@@ -7,6 +7,7 @@ import {
   type RawPlanDrift,
   type RawRun,
 } from '../services/ops-health.service.js';
+import { toPics } from './signboard.adapters.js';
 
 /**
  * Nối cổng `opsHealth()` của dashboard giám sát vào PostgreSQL (T-33).
@@ -327,6 +328,8 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           closed_no_worklog: boolean;
           dq_exempt: boolean;
           dq_exempt_by: string | null;
+          /** JSONB "Request participants" — cột PIC. `null` khi chưa cấu hình field. */
+          sb_request_participants: unknown;
         }[]
       >(
         // Điều kiện `closed_no_worklog` lặp lại y hệt ở SELECT và WHERE — SQL
@@ -346,7 +349,8 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                     WHERE w.issue_key = ji.issue_key AND w.is_deleted = FALSE
                  )) AS closed_no_worklog,
                 ji.dq_exempt,
-                ji.dq_exempt_by
+                ji.dq_exempt_by,
+                ji.sb_request_participants
            FROM jira_issue ji
            JOIN tracked_epic te ON te.epic_key = ji.epic_key
           WHERE ji.issue_type = 'SUBTASK'
@@ -375,6 +379,8 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           epicDisplayName: r.display_name,
           summary: r.summary,
           problems,
+          // Cùng cột, cùng luật đọc với cột PIC của Signboard.
+          pics: toPics(r.sb_request_participants),
           exempt: r.dq_exempt,
           exemptBy: r.dq_exempt_by,
         };

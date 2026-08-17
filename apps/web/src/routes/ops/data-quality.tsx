@@ -11,6 +11,7 @@ import {
 } from '../../components/ui/index.js';
 import { IssueLink } from '../../components/issue-link/index.js';
 import { buildDataQualityCsv, csvFileName, PROBLEM_LABEL } from './data-quality-csv.js';
+import { ALL, filterIssues, picLabel, picOptions } from './data-quality-filter.js';
 import { MetricChips } from './metric-chips.js';
 import { PlannedDatesBlock } from './planned-dates.js';
 
@@ -29,9 +30,13 @@ import { PlannedDatesBlock } from './planned-dates.js';
 
 export function DataQualitySection({ data }: { readonly data: OpsHealthResponse['data'] }) {
   const [showDetails, setShowDetails] = useState(false);
-  // 'ALL' = mọi Epic. Lọc áp cho CẢ bảng lẫn file CSV — file tải về phải khớp
-  // với những gì đang nhìn thấy, không thì "sao file nhiều hơn màn hình?".
-  const [epicFilter, setEpicFilter] = useState<string>('ALL');
+  // 'ALL' = mọi Epic / mọi người. Lọc áp cho CẢ bảng lẫn file CSV — file tải về
+  // phải khớp với những gì đang nhìn thấy, không thì "sao file nhiều hơn màn
+  // hình?".
+  const [epicFilter, setEpicFilter] = useState<string>(ALL);
+  // Lọc theo NGƯỜI PHỤ TRÁCH: người đi sửa dữ liệu trên Jira chỉ sửa được
+  // ticket của chính mình, nên đây là bộ lọc biến danh sách thành việc làm được.
+  const [picFilter, setPicFilter] = useState<string>(ALL);
 
   const issuesQuery = useDataQualityIssues(showDetails);
 
@@ -67,6 +72,8 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
           query={issuesQuery}
           epicFilter={epicFilter}
           onEpicFilter={setEpicFilter}
+          picFilter={picFilter}
+          onPicFilter={setPicFilter}
           epicOptions={data.byEpic.map((e) => e.epicKey)}
         />
       )}
@@ -78,11 +85,15 @@ function DataQualityDetails({
   query,
   epicFilter,
   onEpicFilter,
+  picFilter,
+  onPicFilter,
   epicOptions,
 }: {
   readonly query: ReturnType<typeof useDataQualityIssues>;
   readonly epicFilter: string;
   readonly onEpicFilter: (value: string) => void;
+  readonly picFilter: string;
+  readonly onPicFilter: (value: string) => void;
   readonly epicOptions: readonly string[];
 }) {
   const setExempt = useSetDqExempt();
@@ -100,18 +111,26 @@ function DataQualityDetails({
   if (!query.isSuccess) return null;
 
   const all = query.data.issues;
-  const filtered = epicFilter === 'ALL' ? all : all.filter((i) => i.epicKey === epicFilter);
 
   // Danh sách Epic trong bộ lọc lấy từ CẢ hai nguồn: byEpic (Epic sạch vẫn chọn
   // được) và danh sách ticket (phòng Epic có ticket lỗi mà thiếu trong byEpic).
   const options = [...new Set([...epicOptions, ...all.map((i) => i.epicKey)])].sort();
+  // Danh sách người lấy theo Epic đang chọn, KHÔNG theo chính bộ lọc PIC — nếu
+  // không thì chọn một người xong ô chọn chỉ còn mỗi người đó, không đổi sang
+  // người khác được.
+  const pics = picOptions(filterIssues(all, { epicKey: epicFilter, pic: ALL }));
+  // Đổi Epic xong người đang chọn có thể không còn ticket nào ở Epic mới. Khi đó
+  // quay về "All PICs" thay vì giữ một ô chọn trỏ vào người không có trong danh
+  // sách — trông y hệt "Epic này sạch" trong khi thật ra chỉ là lọc trượt.
+  const activePic = picFilter === ALL || pics.some((p) => p.value === picFilter) ? picFilter : ALL;
+  const filtered = filterIssues(all, { epicKey: epicFilter, pic: activePic });
 
   const download = () => {
     const csv = buildDataQualityCsv(filtered);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = csvFileName(query.data.collectedAt, epicFilter === 'ALL' ? null : epicFilter);
+    a.download = csvFileName(query.data.collectedAt, epicFilter === ALL ? null : epicFilter);
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -120,6 +139,28 @@ function DataQualityDetails({
     { key: 'epic', header: 'Epic', render: (i) => <IssueLink issueKey={i.epicKey} />, sortKey: (i) => i.epicKey },
     { key: 'ticket', header: 'Ticket', render: (i) => <IssueLink issueKey={i.issueKey} />, sortKey: (i) => i.issueKey },
     { key: 'summary', header: 'Summary', render: (i) => i.summary, sortKey: (i) => i.summary },
+    {
+      // AI phải sửa ticket này. Không có cột này thì bảng lỗi là việc của "cả
+      // đội", tức là của không ai.
+      key: 'pic',
+      header: 'PIC',
+      render: (i) =>
+        i.pics.length === 0 ? (
+          <span className="muted" title="No Request participants on this ticket in Jira.">
+            no PIC yet
+          </span>
+        ) : (
+          <span className="chips">
+            {i.pics.map((p) => (
+              <Badge key={p.accountId} tone="muted" title={p.accountId}>
+                {picLabel(p)}
+              </Badge>
+            ))}
+          </span>
+        ),
+      // Ticket chưa có PIC xuống cuối bảng, không lên đầu (`null` là "thiếu").
+      sortKey: (i) => (i.pics.length === 0 ? null : i.pics.map(picLabel).join(', ')),
+    },
     {
       key: 'problems',
       header: 'Problems',
@@ -164,10 +205,28 @@ function DataQualityDetails({
         <label className="check">
           Epic
           <select className="input" value={epicFilter} onChange={(e) => onEpicFilter(e.target.value)}>
-            <option value="ALL">All epics</option>
+            <option value={ALL}>All epics</option>
             {options.map((k) => (
               <option key={k} value={k}>
                 {k}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="check">
+          PIC
+          <select
+            className="input"
+            value={activePic}
+            aria-label="Filter by PIC"
+            onChange={(e) => onPicFilter(e.target.value)}
+          >
+            <option value={ALL}>All PICs</option>
+            {/* Số ticket ngay trong ô chọn: người dùng thấy được khối lượng của
+                mình TRƯỚC khi bấm, không phải chọn rồi mới biết. */}
+            {pics.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label} ({p.count})
               </option>
             ))}
           </select>
@@ -190,7 +249,13 @@ function DataQualityDetails({
           <EmptyState
             icon="✅"
             title="No data problems"
-            description="Every active sub-task in this scope has an estimate, planned dates, a phase, and a well-formed title."
+            description={
+              activePic === ALL
+                ? 'Every active sub-task in this scope has an estimate, planned dates, a phase, and a well-formed title.'
+                : // Rỗng vì BỘ LỌC chứ không phải vì dữ liệu sạch — nói rõ ra,
+                  // không thì người dùng đóng màn hình và tin là hết việc.
+                  'Nothing left for this PIC in this scope. Switch the PIC filter to see the rest.'
+            }
           />
         }
       />

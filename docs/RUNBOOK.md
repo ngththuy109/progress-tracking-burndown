@@ -274,6 +274,13 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Xử lý.** PM nhờ đội điền ước lượng trên Jira. Hệ thống không tự đoán (rủi ro **R-02**).
 
+> **Giao việc cho đúng người.** Ở khu *Data quality* bấm **Show ticket details**:
+> bảng có cột **PIC** (lấy từ "Request participants" của Jira, cùng nguồn với cột
+> PIC trên Signboard) và ô lọc **PIC**. Chọn một người là ra đúng phần việc của
+> người đó, file CSV tải về cũng chỉ còn đúng những dòng đang nhìn thấy. Nhóm
+> **No PIC yet** là ticket chưa gán ai — không lọc riêng thì nó không nằm trong
+> danh sách của ai cả và không bao giờ được sửa.
+
 ---
 
 ## [P3] `MISSING_WBS_DATE` — Nhiều Sub-task thiếu ngày kế hoạch

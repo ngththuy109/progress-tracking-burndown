@@ -73,6 +73,8 @@ interface ApiOptions {
   readonly epics?: unknown[];
   /** `null` = API đếm plan rơi vào ngày nghỉ hỏng, để kiểm phần "chưa kiểm được". */
   readonly planConflictCounts?: { epicKey: string; total: number }[] | null;
+  /** Từng ticket lỗi dữ liệu — nguồn của bảng "Show ticket details". */
+  readonly dqIssues?: unknown[];
 }
 
 async function installApi(page: Page, options: ApiOptions = {}): Promise<Calls> {
@@ -102,6 +104,11 @@ async function installApi(page: Page, options: ApiOptions = {}): Promise<Calls> 
           );
         }
         return route.fulfill(json({ counts: counts ?? [] }));
+      }
+      if (path.endsWith('/data-quality/issues')) {
+        return route.fulfill(
+          json({ collectedAt: '2026-03-10T02:15:00Z', issues: options.dqIssues ?? [] }),
+        );
       }
       if (path.endsWith('/missing-dates')) {
         return route.fulfill(
@@ -249,4 +256,65 @@ test('không kiểm được ngày nghỉ thì NÓI RÕ, không hiện số 0', 
   await page.goto('/ops');
 
   await expect(page.getByText('not checked')).toBeVisible();
+});
+
+// --- Data quality › bảng chi tiết theo PIC ---------------------------------
+
+const DQ_ISSUE = (over: Record<string, unknown> = {}) => ({
+  issueKey: 'PAY-101',
+  epicKey: 'PAY-1',
+  epicDisplayName: 'Thanh toán',
+  summary: '[PAY][BE][DEV][Login]_Create',
+  problems: ['MISSING_ESTIMATE'],
+  pics: [{ accountId: 'a1', displayName: 'Nguyễn An' }],
+  exempt: false,
+  exemptBy: null,
+  ...over,
+});
+
+const DQ_ISSUES = [
+  DQ_ISSUE(),
+  DQ_ISSUE({ issueKey: 'PAY-102', pics: [{ accountId: 'b2', displayName: 'Trần Bình' }] }),
+  DQ_ISSUE({ issueKey: 'PAY-103', pics: [] }),
+];
+
+test('bảng chi tiết nói AI phải sửa từng ticket', async ({ page }) => {
+  await installApi(page, { dqIssues: DQ_ISSUES });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  // `exact` là bắt buộc: so chuỗi con thì "PIC" khớp luôn cả cột "Epic".
+  await expect(page.getByRole('button', { name: 'PIC', exact: true })).toBeVisible();
+  // `exact` để không đụng mục "Nguyễn An (1)" trong ô chọn lọc.
+  await expect(page.getByText('Nguyễn An', { exact: true })).toBeVisible();
+  // Ticket chưa gán ai phải NÓI RÕ, không để ô trống — ô trống trông y hệt
+  // "chưa tải xong".
+  await expect(page.getByText('no PIC yet', { exact: true })).toBeVisible();
+});
+
+test('lọc theo PIC để mỗi người thấy đúng phần việc của mình', async ({ page }) => {
+  await installApi(page, { dqIssues: DQ_ISSUES });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  // Số ticket hiện ngay trong ô chọn: thấy khối lượng TRƯỚC khi bấm.
+  await page.getByLabel('Filter by PIC').selectOption({ label: 'Nguyễn An (1)' });
+
+  await expect(page.getByText('PAY-101')).toBeVisible();
+  await expect(page.getByText('PAY-102')).toHaveCount(0);
+  // File tải về phải khớp với những gì đang nhìn thấy.
+  await expect(page.getByRole('button', { name: /Download CSV report \(1 tickets\)/ })).toBeVisible();
+});
+
+test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async ({ page }) => {
+  // Nhóm này không thuộc về ai, nên nếu chỉ lọc theo từng người thì nó không
+  // bao giờ lọt vào danh sách của ai cả.
+  await installApi(page, { dqIssues: DQ_ISSUES });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  await page.getByLabel('Filter by PIC').selectOption({ label: 'No PIC yet (1)' });
+
+  await expect(page.getByText('PAY-103')).toBeVisible();
+  await expect(page.getByText('PAY-101')).toHaveCount(0);
 });
