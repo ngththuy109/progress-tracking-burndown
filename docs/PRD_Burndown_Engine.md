@@ -2474,7 +2474,7 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 |---|---|
 | **Hàng** | Các Function của Phase đang chọn, lấy từ tiêu đề Sub-task (mục 2.9). Sắp theo tên A→Z, có ô tìm kiếm |
 | **Nhóm cột (tầng 1)** | Các **Sub-phase** của Phase, xếp tuần tự trái→phải. Sub-phase khớp một Phase trong cấu hình lấy nhãn + `display_order` của Phase đó; Sub-phase lạ xếp sau theo A→Z; Sub-task thiếu `[Sub-phase]` gộp vào nhóm dự phòng "(No sub-phase)" ở cuối |
-| **Cột loại task (tầng 2)** | Trong MỖI Sub-phase: các loại task theo thứ tự cấu hình (Create → BALReview → FixCommentBAL → JMReview → FixCommentJM) — cùng bộ cột cho mọi nhóm để so ngang được |
+| **Cột loại task (tầng 2)** | Trong MỖI Sub-phase: các loại task theo thứ tự cấu hình (Create → BALReview → FixCommentBAL → JMReview → FixCommentJM). **Chỉ dựng cột có việc**: loại task mà Sub-phase đó không có Sub-task nào (cột toàn ô trống từ trên xuống dưới) bị bỏ hẳn, nên hai nhóm có thể khác số cột |
 | **Ô** | Ngày `plan_start → plan_end` + huy hiệu trạng thái. Ngày thực tế nằm trong tooltip. Gộp theo `(Sub-phase, loại task)` |
 | **Cột Σ (mỗi nhóm)** | Cuối mỗi Sub-phase — trạng thái xấu nhất của Function trong Sub-phase đó |
 | **Cột Tổng (Overall)** | Cuối mỗi hàng — trạng thái chung của Function trên TẤT CẢ Sub-phase |
@@ -2483,6 +2483,15 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 > để **nhóm cột trên bảng**; Phase thật của Sub-task vẫn là Phase của Task cha
 > (mục 2.9.2). Sub-task thiếu bracket vẫn lên bảng bình thường, chỉ nằm ở nhóm
 > dự phòng.
+
+> **Cột rỗng không được dựng.** Một cột chỉ xuất hiện khi có **ít nhất một
+> Sub-task** rơi vào nó (xét trên CẢ bảng, không phải từng hàng): một Sub-task
+> duy nhất cũng đủ giữ cột lại, các Function khác hiện ô trống như thường. Bảng
+> Signboard rất rộng, cột mà mọi hàng đều trống chỉ đẩy cột có việc ra khỏi màn
+> hình. Sub-phase không còn cột nào (mọi Sub-task của nó mang loại task **chưa
+> khai cột**) thì cả nhóm cũng không được dựng — các Sub-task đó nằm ở khu
+> "chưa lên được bảng" (mục 6.8), không bị mất. Danh sách cột cấu hình **không
+> đổi**: cột vắng mặt chỉ vì Phase đang xem chưa có việc ở khâu đó.
 
 **Tô nền cả ô theo trạng thái** để lướt bảng thấy ngay hàng nào đang đỏ:
 
@@ -2767,7 +2776,7 @@ Ngoài các ca cụ thể, kiểm tra những **quy luật luôn phải đúng**
 | Cột Tổng nhất quán với hàng | `overallStatus` của hàng = trạng thái xấu nhất trong các ô có `present = true` của hàng đó |
 | Đã Done thì luôn Completed | `statusCategory = Done` ⟹ trạng thái là `Completed`, bất kể ngày plan là gì hay có thiếu hay không |
 | Thiếu ngày thì luôn NoPlan | Chưa Done **và** thiếu `plan_start` hoặc `plan_end` ⟹ `NoPlan`. Không bao giờ ra `NYS` hay `OnSchedule` |
-| Tổng số ô khớp | `Σ(các trạng thái trong summary) + emptyCells` = `số hàng × số cột` |
+| Tổng số ô khớp | `Σ(các trạng thái trong summary) + emptyCells` = `số hàng × số cột` — "số cột" là số cột **thật sự được dựng** (cột rỗng đã bị rút, mục 6.1) |
 | Đổi ngày hệ thống không đổi dữ liệu gốc | Chạy lại Signboard với ngày "hôm nay" khác nhau → chỉ `status` đổi, `plan_*` và `actual_*` giữ nguyên |
 
 ### 8.4. Test hồi quy & vận hành
