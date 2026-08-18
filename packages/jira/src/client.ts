@@ -5,10 +5,26 @@ import {
   TokenBucketRateLimiter,
   InMemoryTokenBucketStore,
 } from './rate-limiter.js';
-import { JiraHttpError, parseRetryAfter, withRetry, type RetryOptions } from './retry.js';
+import {
+  JiraHttpError,
+  JiraRequestTimeoutError,
+  parseRetryAfter,
+  withRetry,
+  type RetryOptions,
+} from './retry.js';
 
 /** Số request đồng thời tối đa (CONVENTIONS.md C-7). Đặt cao hơn sẽ bị Jira trả 429. */
 export const MAX_CONCURRENT_JIRA_CALLS = 8;
+
+/**
+ * Hạn chót cho MỘT request Jira, mặc định 30 giây.
+ *
+ * `fetch` của Node KHÔNG có hạn — thiếu nó thì một kết nối treo (server bắt tay
+ * TCP nhưng không trả byte nào) để `await` chờ MÃI MÃI, và cả job đứng im không
+ * bao giờ kết thúc. 30s dư sức cho một response Jira bình thường (<5s), chỉ bắn
+ * khi server thật sự treo. Chỉnh qua `JIRA_REQUEST_TIMEOUT_MS` cho mạng chậm.
+ */
+export const DEFAULT_JIRA_REQUEST_TIMEOUT_MS = 30_000;
 
 export interface JiraClientOptions {
   readonly credentials?: CredentialProvider;
@@ -17,6 +33,19 @@ export interface JiraClientOptions {
   readonly fetchImpl?: typeof fetch;
   readonly retry?: RetryOptions;
   readonly logger?: (event: Record<string, unknown>) => void;
+  /** Hạn chót cho mỗi request (ms). Mặc định `DEFAULT_JIRA_REQUEST_TIMEOUT_MS`. */
+  readonly requestTimeoutMs?: number;
+}
+
+/**
+ * Lỗi này có phải do `AbortSignal.timeout` bắn không?
+ *
+ * `AbortSignal.timeout(ms)` huỷ bằng `DOMException` tên `'TimeoutError'`; huỷ tay
+ * thì tên `'AbortError'`. Nhận theo `.name` để không phụ thuộc DOMException hay
+ * Error, và để một `AbortError` rò ra từ lúc đọc body cũng được quy về treo.
+ */
+function isTimeoutAbort(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
 }
 
 export interface RequestOptions {
@@ -38,6 +67,7 @@ export class JiraClient {
   private readonly fetchImpl: typeof fetch;
   private readonly retryOpts: RetryOptions;
   private readonly logger: (event: Record<string, unknown>) => void;
+  private readonly requestTimeoutMs: number;
 
   /** Đếm để T-11 ghi vào `sync_run.rate_limit_hits`. */
   private _apiCalls = 0;
@@ -51,6 +81,7 @@ export class JiraClient {
     this.limit = pLimit(opts.concurrency ?? MAX_CONCURRENT_JIRA_CALLS);
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.logger = opts.logger ?? (() => {});
+    this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_JIRA_REQUEST_TIMEOUT_MS;
     this.retryOpts = {
       ...opts.retry,
       onRateLimited: () => {
@@ -100,23 +131,38 @@ export class JiraClient {
           headers: redactHeaders(headers),
         });
 
-        const res = await this.fetchImpl(url.toString(), {
-          method: opts.method ?? 'GET',
-          headers,
-          ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
-        });
+        // Hạn chót cho request: `fetch` của Node không tự có. Signal tạo NGAY
+        // trước fetch (sau khi đã qua token bucket) nên hạn chỉ phủ phần gọi mạng
+        // + đọc body, không tính thời gian chờ giãn tốc độ. Khi bắn, nó huỷ cả
+        // fetch lẫn stream body đang đọc dở → không có nhánh nào treo lại.
+        const signal = AbortSignal.timeout(this.requestTimeoutMs);
+        try {
+          const res = await this.fetchImpl(url.toString(), {
+            method: opts.method ?? 'GET',
+            headers,
+            signal,
+            ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+          });
 
-        if (!res.ok) {
-          const body = await res.text().catch(() => '');
-          throw new JiraHttpError(
-            res.status,
-            url.toString(),
-            body,
-            parseRetryAfter(res.headers.get('retry-after'), Date.now()),
-          );
+          if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            throw new JiraHttpError(
+              res.status,
+              url.toString(),
+              body,
+              parseRetryAfter(res.headers.get('retry-after'), Date.now()),
+            );
+          }
+
+          return (await res.json()) as T;
+        } catch (err) {
+          // Quá hạn/huỷ → lỗi treo rõ ràng để `withRetry` thử lại (như 5xx) rồi
+          // ném hẳn nếu vẫn treo. JiraHttpError và các lỗi khác đi qua nguyên vẹn.
+          if (isTimeoutAbort(err)) {
+            throw new JiraRequestTimeoutError(url.toString(), this.requestTimeoutMs);
+          }
+          throw err;
         }
-
-        return (await res.json()) as T;
       }, this.retryOpts),
     );
   }

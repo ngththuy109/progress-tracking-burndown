@@ -106,7 +106,12 @@ export {
 
 export { upsertChangelog, type ChangelogUpsertRow } from './repositories/changelog.repository.js';
 
-export { startSyncRun, finishSyncRun } from './repositories/sync-run.repository.js';
+export {
+  startSyncRun,
+  finishSyncRun,
+  failStaleSyncRuns,
+  STALE_RUN_ERROR_MESSAGE,
+} from './repositories/sync-run.repository.js';
 
 export {
   getCalendar,

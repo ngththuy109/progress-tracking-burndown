@@ -256,6 +256,27 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 ---
 
+## [P2] Job kẹt ở `RUNNING` — lần chạy không kết thúc
+
+**Triệu chứng.** `/ops` hiện một lần chạy ở `RUNNING` mãi không xong (nhiều phút tới hàng giờ), thường khi database/Jira/Redis chập chờn.
+
+**Cách hệ thống tự lo (từ 2026-08).** Hai lớp chặn khiến chuyện này **tự khỏi**, không cần chạy SQL tay:
+
+1. **Hạn chót cấp kết nối** — mọi lời gọi Postgres, Jira, Redis trong job đều có hạn (xem `.env.example` khối "Hạn chót lúc CHẠY"). Kết nối treo giờ **ném lỗi** → job hỏng rồi thử lại theo BullMQ, thay vì `await` chờ mãi. Nhờ vậy một lần chạy không còn "sống" vô hạn.
+2. **Quét dọn dòng mồ côi** — nếu worker bị **giết cứng** (OOM/kill -9), hoặc DB sập đúng lúc job đang ghi `FAILED`, dòng đó vẫn kẹt ở `RUNNING`. Worker đánh nó thành `FAILED` (kèm `error_message` "Worker dừng giữa chừng…") khi nó quá `STALE_RUN_TIMEOUT_MS` (mặc định 1 giờ) — **lúc khởi động** và **mỗi 5 phút** sau đó. Trên `/ops` nó chuyển từ `RUNNING` sang `FAILED` trong vòng ≤ 5 phút sau khi qua mốc.
+
+**Cần dọn NGAY (không muốn chờ tới mốc)?** Khởi động lại worker (nó dọn ngay lúc khởi động), hoặc chạy tay:
+
+```sql
+UPDATE sync_run
+   SET status = 'FAILED', error_message = 'Dọn tay: worker đã dừng', finished_at = NOW(), duration_ms = 0
+ WHERE status = 'RUNNING' AND started_at < NOW() - INTERVAL '1 hour';
+```
+
+**Khi nào gọi Tech Lead:** dòng mới liên tục kẹt `RUNNING` dù DB/Jira/Redis đều ổn — nghĩa là có nhánh gọi mạng nào đó chưa được bọc hạn chót.
+
+---
+
 ## [P3] `DIRTY_PHASE_DATA` — Nhiều Task chưa phân loại
 
 **Triệu chứng.** Hơn 20% Task rơi vào *Unclassified*.

@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BasicAuthProvider, MissingCredentialError, redactHeaders } from './credentials.js';
 import { InMemoryTokenBucketStore, TokenBucketRateLimiter } from './rate-limiter.js';
-import { withRetry, JiraHttpError, parseRetryAfter, backoffDelayMs } from './retry.js';
+import {
+  withRetry,
+  JiraHttpError,
+  JiraRequestTimeoutError,
+  parseRetryAfter,
+  backoffDelayMs,
+} from './retry.js';
 import { JiraClient } from './client.js';
 import { searchIssues, getUpdatedWorklogIds } from './endpoints.js';
 
@@ -150,6 +156,58 @@ describe('thử lại khi Jira lỗi', () => {
       withRetry(fetchImpl as never, { sleep: async () => {} }),
     ).rejects.toThrow('ECONNRESET');
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('hạn chót mỗi request (chống treo)', () => {
+  /**
+   * fetch giả TREO tới khi `signal` bị huỷ, rồi reject bằng đúng `signal.reason`
+   * y như `fetch` thật của Node: `AbortSignal.timeout` cho DOMException tên
+   * 'TimeoutError'. Thiếu signal thì treo luôn — để lỡ quên gắn hạn là test lộ ra.
+   */
+  function hangingFetch() {
+    return vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal == null) return;
+          if (signal.aborted) {
+            reject(signal.reason as Error);
+            return;
+          }
+          signal.addEventListener('abort', () => reject(signal.reason as Error), { once: true });
+        }),
+    );
+  }
+
+  it('server treo (không trả byte) → quá hạn ném JiraRequestTimeoutError, CÓ thử lại', async () => {
+    const fetchImpl = hangingFetch();
+    const client = new JiraClient({
+      credentials: new BasicAuthProvider(CREDS as unknown as NodeJS.ProcessEnv),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      requestTimeoutMs: 10,
+      retry: { sleep: async () => {}, random: () => 0.5 },
+    });
+
+    await expect(client.request('/rest/api/3/status')).rejects.toBeInstanceOf(
+      JiraRequestTimeoutError,
+    );
+    // 1 lần đầu + 5 lần thử lại: hạn biến "treo im lặng" thành lỗi để withRetry lặp.
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+  });
+
+  it('mọi request đều được cấp AbortSignal — không nhánh nào gọi fetch thiếu hạn', async () => {
+    const seen: (AbortSignal | null)[] = [];
+    const fetchImpl = vi.fn((_url: unknown, init?: RequestInit) => {
+      seen.push(init?.signal ?? null);
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+
+    const client = makeClient(fetchImpl as unknown as typeof fetch);
+    await client.request('/rest/api/3/status');
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeInstanceOf(AbortSignal);
   });
 });
 

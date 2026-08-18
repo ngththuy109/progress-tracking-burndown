@@ -30,6 +30,27 @@ export class JiraHttpError extends Error {
 }
 
 /**
+ * Jira KHÔNG phản hồi trong hạn cho MỘT request — TCP có thể đã bắt tay nhưng
+ * server treo, không trả byte nào.
+ *
+ * Vì sao cần một lớp lỗi riêng: `fetch` của Node KHÔNG có hạn mặc định, nên một
+ * kết nối treo để `await` nằm chờ MÃI MÃI — job "đang chạy" vĩnh viễn, không bao
+ * giờ xong cũng không bao giờ hỏng, và BullMQ cứ gia hạn khoá nên nó không hề
+ * bị coi là "stalled". `client.ts` gắn hạn bằng `AbortSignal` rồi ném lỗi này để
+ * biến "treo im lặng" thành lỗi thật. Coi như 5xx: ĐÁNG thử lại (server chỉ đang
+ * chập chờn), nhưng có trần lần thử nên không thể chạy vô hạn.
+ */
+export class JiraRequestTimeoutError extends Error {
+  constructor(
+    public readonly url: string,
+    public readonly ms: number,
+  ) {
+    super(`Jira không phản hồi ${url} trong ${ms}ms`);
+    this.name = 'JiraRequestTimeoutError';
+  }
+}
+
+/**
  * Nhận diện lỗi Jira "issue key không tồn tại" — issue đã BỊ XOÁ khỏi Jira.
  *
  * JQL tham chiếu một key đã bị xoá (`key = "X"`, `parent = "X"`, `key IN (...)`)
@@ -99,13 +120,22 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}
     } catch (err) {
       lastError = err;
 
-      if (!(err instanceof JiraHttpError) || !isRetryable(err.status)) throw err;
+      // Đáng thử lại: 429/5xx của Jira, HOẶC request treo quá hạn (coi như server
+      // đang chập chờn). Mọi lỗi khác — 4xx, mất mạng (ECONNRESET), lỗi phân tích —
+      // ném NGAY: thử lại 404/401 chỉ tốn quota và làm chậm thông báo cho vận hành.
+      const retryable =
+        (err instanceof JiraHttpError && isRetryable(err.status)) ||
+        err instanceof JiraRequestTimeoutError;
+      if (!retryable) throw err;
       if (attempt === maxRetries) break;
 
-      if (err.status === 429) opts.onRateLimited?.();
+      if (err instanceof JiraHttpError && err.status === 429) opts.onRateLimited?.();
 
-      // Retry-After của Jira ưu tiên tuyệt đối; không có thì mới dùng công thức lùi.
-      const delay = err.retryAfterMs ?? backoffDelayMs(attempt, random);
+      // Retry-After của Jira ưu tiên tuyệt đối; không có (kể cả khi treo) thì dùng
+      // công thức lùi.
+      const delay =
+        (err instanceof JiraHttpError ? err.retryAfterMs : undefined) ??
+        backoffDelayMs(attempt, random);
       await sleep(delay);
     }
   }

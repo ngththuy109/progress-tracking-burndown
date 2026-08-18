@@ -4,7 +4,7 @@ import './load-env.js';
 import { pathToFileURL } from 'node:url';
 import { Redis } from 'ioredis';
 import { JiraClient, TokenBucketRateLimiter, type RateLimiter, type TokenBucketStore } from '@app/jira';
-import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
+import { assertMigrationsApplied, disconnectPrisma, failStaleSyncRuns, getPrisma } from '@app/db';
 import { withTimeout, TimeoutError } from '@app/shared';
 import { RedisTokenBucketStore, type EvalRedis } from './queue/redis-token-bucket.js';
 import { createShutdown, registerSignalHandlers } from './queue/shutdown.js';
@@ -38,6 +38,15 @@ export const WEEKLY_RECONCILE_CRON = '0 3 * * 0';
 export const DIRTY_SWEEP_CRON = '15 * * * *';
 
 /**
+ * Lịch quét dọn `sync_run` kẹt ở RUNNING: mỗi 5 phút.
+ *
+ * Dọn nhanh để màn hình Monitoring không hiển thị "đang chạy" cho một job đã
+ * chết hàng giờ. Quét chỉ là một `UPDATE` nhẹ theo chỉ mục `started_at`, nên
+ * chạy dày không đáng kể. Xem `failStaleSyncRuns`.
+ */
+export const STALE_RUN_SWEEP_CRON = '*/5 * * * *';
+
+/**
  * Hạn chót cho bước KHỞI ĐỘNG, để một phụ thuộc "treo" không giữ tiến trình ở
  * trạng thái "sống mà không làm gì" (xem `withTimeout`).
  *
@@ -51,6 +60,26 @@ function readTimeoutMs(name: string, fallback: number): number {
 }
 const REDIS_READY_TIMEOUT_MS = readTimeoutMs('REDIS_READY_TIMEOUT_MS', 10_000);
 const BOOTSTRAP_TIMEOUT_MS = readTimeoutMs('BOOTSTRAP_TIMEOUT_MS', 60_000);
+
+/**
+ * Hạn chót cho MỖI LỆNH Redis trên kết nối `general` (khoá, token bucket,
+ * dirty:epics, cache) — KHÔNG áp cho kết nối queue/worker vì BullMQ CẦN lệnh chờ
+ * (blocking) trên đó. Thiếu hạn này thì Redis treo giữa chừng (khác với treo lúc
+ * khởi động đã có ping chặn) sẽ làm token bucket `acquire()` — nằm trên đường đi
+ * của MỌI lời gọi Jira — chờ mãi, kéo cả job treo theo.
+ */
+const REDIS_COMMAND_TIMEOUT_MS = readTimeoutMs('REDIS_COMMAND_TIMEOUT_MS', 10_000);
+
+/** Hạn chót cho mỗi request Jira. Chuyển vào `JiraClient` (xem `client.ts`). */
+const JIRA_REQUEST_TIMEOUT_MS = readTimeoutMs('JIRA_REQUEST_TIMEOUT_MS', 30_000);
+
+/**
+ * Tuổi tối thiểu để coi một `sync_run` còn `RUNNING` là mồ côi (mặc định 1 giờ).
+ *
+ * Đặt RỘNG để tuyệt đối không dọn nhầm job đang chạy thật — không lần chạy nào,
+ * kể cả backfill lớn, ở `RUNNING` lâu tới một giờ. Xem `failStaleSyncRuns`.
+ */
+const STALE_RUN_TIMEOUT_MS = readTimeoutMs('STALE_RUN_TIMEOUT_MS', 60 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // Biến môi trường
@@ -216,7 +245,16 @@ async function bootstrap(): Promise<void> {
 
   // Ba kết nối RIÊNG BIỆT (xem `createRedisConnections`): dùng chung một kết nối
   // cho Queue lẫn Worker sẽ làm treo mọi lệnh Redis khác.
-  const redis = createRedisConnections((url, _role, options) => new Redis(url, options), env.redisUrl);
+  //
+  // CHỈ kết nối `general` gắn `commandTimeout`: nó chạy lệnh thường (khoá, token
+  // bucket, cache) nên hạn chót biến "Redis treo giữa chừng" thành lỗi thật thay
+  // vì để job chờ mãi. Kết nối queue/worker KHÔNG gắn — BullMQ cần lệnh chờ
+  // (blocking) và một hạn ở đó sẽ ngắt oan chế độ chờ hợp lệ.
+  const redis = createRedisConnections(
+    (url, role, options) =>
+      new Redis(url, role === 'general' ? { ...options, commandTimeout: REDIS_COMMAND_TIMEOUT_MS } : options),
+    env.redisUrl,
+  );
   for (const conn of redis.all) {
     conn.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
   }
@@ -242,7 +280,25 @@ async function bootstrap(): Promise<void> {
   // chứ không phải mỗi worker một hạn riêng — nếu không bốn worker thành 160 req/s
   // và Jira chặn cả tổ chức (R-04).
   const { limiter } = buildJiraRateLimiter(redis.general as unknown as EvalRedis);
-  const jira = new JiraClient({ rateLimiter: limiter, logger: (e) => log(e) });
+  const jira = new JiraClient({
+    rateLimiter: limiter,
+    logger: (e) => log(e),
+    // Hạn chót mỗi request: Jira treo (bắt tay TCP nhưng không trả byte) sẽ ném
+    // lỗi để thử lại rồi hỏng job, thay vì để `await fetch` chờ mãi.
+    requestTimeoutMs: JIRA_REQUEST_TIMEOUT_MS,
+  });
+
+  // Dọn NGAY lúc khởi động các `sync_run` mồ côi từ tiến trình worker đã chết:
+  // nếu lần trước bị giết cứng giữa job, dòng đó kẹt ở RUNNING. Quét định kỳ
+  // (trong wireWorker) sẽ lo tiếp về sau; đây là lần dọn đầu tiên, chạy sau khi
+  // đã chắc DB còn sống (SELECT 1 ở trên).
+  const reapedAtStartup = await failStaleSyncRuns(prisma, {
+    now: new Date(),
+    olderThanMs: STALE_RUN_TIMEOUT_MS,
+  });
+  if (reapedAtStartup > 0) {
+    log({ event: 'stale-run.swept', reaped: reapedAtStartup, phase: 'startup' });
+  }
 
   // Nạp field mapping + status map, dựng bảng điều phối, chạy Worker cho cả ba
   // hàng đợi. Ném lỗi (→ worker.fatal) nếu Jira sai/không tới được.
@@ -256,6 +312,8 @@ async function bootstrap(): Promise<void> {
     nightlyCron: NIGHTLY_CRON,
     weeklyReconcileCron: WEEKLY_RECONCILE_CRON,
     dirtySweepCron: DIRTY_SWEEP_CRON,
+    staleRunSweepCron: STALE_RUN_SWEEP_CRON,
+    staleRunTimeoutMs: STALE_RUN_TIMEOUT_MS,
   });
 
   // Tắt sạch (PRD §9.5): đóng worker TRƯỚC (chờ job đang chạy), rồi hàng đợi,
