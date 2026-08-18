@@ -106,6 +106,15 @@ function readTimeoutMs(name: string, fallback: number): number {
 const REDIS_READY_TIMEOUT_MS = readTimeoutMs('REDIS_READY_TIMEOUT_MS', 10_000);
 const BOOTSTRAP_TIMEOUT_MS = readTimeoutMs('BOOTSTRAP_TIMEOUT_MS', 60_000);
 
+/**
+ * Hạn chót cho mỗi LỆNH Redis (cache, hàng đợi backfill) và mỗi REQUEST Jira của
+ * API, để một phụ thuộc treo GIỮA CHỪNG không làm handler request chờ mãi (khác
+ * với treo lúc khởi động — đã có ping/watchdog chặn). API không chạy BullMQ
+ * Worker nên không có lệnh chờ (blocking) trên kết nối này → gắn hạn an toàn.
+ */
+const REDIS_COMMAND_TIMEOUT_MS = readTimeoutMs('REDIS_COMMAND_TIMEOUT_MS', 10_000);
+const JIRA_REQUEST_TIMEOUT_MS = readTimeoutMs('JIRA_REQUEST_TIMEOUT_MS', 30_000);
+
 /** Log JSON có cấu trúc, cùng dạng với Fastify logger (C-9). */
 function log(event: Record<string, unknown>): void {
   console.log(JSON.stringify({ level: 'info', name: 'api-bootstrap', ...event }));
@@ -206,7 +215,10 @@ async function bootstrap(): Promise<void> {
 
   // BullMQ BẮT BUỘC `maxRetriesPerRequest: null` trên kết nối nó dùng; kết nối
   // này vừa cho hàng đợi backfill vừa cho cache nên đặt luôn ở đây.
-  const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const redis = new Redis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
+  });
   redis.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
 
   // CHẶN ca Redis "treo": instance accept TCP nhưng không trả lời lệnh nào. Không
@@ -221,7 +233,7 @@ async function bootstrap(): Promise<void> {
   // 40 req/s toàn hệ thống (C-7) tồn tại để ghìm lượt đồng bộ HÀNG LOẠT của
   // worker (R-04), không phải mấy lookup này. Thông tin xác thực đọc từ
   // JIRA_* env qua BasicAuthProvider mặc định.
-  const jira = new JiraClient({ logger: (e) => log(e) });
+  const jira = new JiraClient({ logger: (e) => log(e), requestTimeoutMs: JIRA_REQUEST_TIMEOUT_MS });
 
   // Field mapping: nạp MỘT lần, CHẶN khởi động nếu field sai/thiếu (PRD §2.8,
   // E-23) — thà không chạy còn hơn để mọi Phase mất đường Kế hoạch trong im lặng.

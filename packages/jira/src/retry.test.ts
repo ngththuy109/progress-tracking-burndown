@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isIssueDoesNotExistError, JiraHttpError } from './retry.js';
+import { isIssueDoesNotExistError, JiraHttpError, JiraRequestTimeoutError, withRetry } from './retry.js';
 
 /**
  * `isIssueDoesNotExistError` là bản lề của việc xử lý "Epic đã bị xoá": nhầm thì
@@ -47,5 +47,46 @@ describe('isIssueDoesNotExistError', () => {
     expect(isIssueDoesNotExistError(new Error('boom'))).toBe(false);
     expect(isIssueDoesNotExistError('An issue with key does not exist')).toBe(false);
     expect(isIssueDoesNotExistError(null)).toBe(false);
+  });
+});
+
+/**
+ * Request Jira treo (server bắt tay TCP nhưng không trả byte) từng để cả job chờ
+ * MÃI. `client.ts` gắn hạn rồi ném `JiraRequestTimeoutError`; ở đây kiểm chứng
+ * `withRetry` coi lỗi đó ĐÁNG thử lại (như 5xx) nhưng vẫn có trần lần thử.
+ */
+describe('withRetry với request treo (JiraRequestTimeoutError)', () => {
+  it('thử lại rồi ném hẳn nếu vẫn treo — dùng công thức lùi vì không có Retry-After', async () => {
+    let calls = 0;
+    const waits: number[] = [];
+    const fn = async (): Promise<never> => {
+      calls++;
+      throw new JiraRequestTimeoutError('https://x.atlassian.net/rest/api/3/status', 5);
+    };
+
+    await expect(
+      withRetry(fn, {
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+        random: () => 0,
+      }),
+    ).rejects.toBeInstanceOf(JiraRequestTimeoutError);
+
+    expect(calls).toBe(6); // 1 lần đầu + 5 lần thử lại
+    expect(waits).toEqual([1000, 2000, 4000, 8000, 16000]);
+  });
+
+  it('treo TẠM THỜI rồi hồi phục thì KHÔNG ném — trả kết quả thật, không đổ cả job', async () => {
+    let calls = 0;
+    const fn = async (): Promise<string> => {
+      calls++;
+      if (calls <= 2) throw new JiraRequestTimeoutError('https://x/rest', 5);
+      return 'ok';
+    };
+
+    const result = await withRetry(fn, { sleep: async () => {}, random: () => 0 });
+    expect(result).toBe('ok');
+    expect(calls).toBe(3);
   });
 });
