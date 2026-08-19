@@ -36,7 +36,7 @@ describe('AppLayout — thanh bên hai nhóm theo demo đã chốt', () => {
     const titles = [...nav.querySelectorAll('.nav__group-title')].map((el) =>
       (el.textContent ?? '').replace(/^\d/, '').trim(),
     );
-    expect(titles).toEqual(['Theo dõi tiến độ', 'Cấu hình dự án']);
+    expect(titles).toEqual(['Progress tracking', 'Project configuration']);
   });
 
   it('mục trong từng nhóm đúng thứ tự demo (non-admin: Projects/Users ẩn)', () => {
@@ -46,15 +46,15 @@ describe('AppLayout — thanh bên hai nhóm theo demo đã chốt', () => {
       .getAllByRole('link')
       .map((a) => a.textContent?.trim());
     expect(labels).toEqual([
-      // ① Theo dõi tiến độ
+      // ① Progress tracking
       '📋Epics',
       '📉Burndown chart',
       '🗂️Signboard',
       '🧾Phase sub-tasks',
       '⏱️Log work',
       '🩺Monitoring',
-      // ② Cấu hình dự án
-      '🏗️Cấu trúc tầng',
+      // ② Project configuration
+      '🏗️Tier structure',
       '⚙️Phase settings',
       '🧩Signboard columns',
       '📅Days off',

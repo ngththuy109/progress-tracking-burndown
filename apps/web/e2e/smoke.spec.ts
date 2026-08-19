@@ -12,7 +12,7 @@ import { expect, test, type Page } from '@playwright/test';
  * theo và vẫn xanh — nó sẽ không còn kiểm được gì nữa.
  */
 
-// Theo bố cục 2 nhóm của demo đã chốt: ① Theo dõi tiến độ · ② Cấu hình dự án
+// Theo bố cục 2 nhóm của demo đã chốt: ① Progress tracking · ② Project configuration
 // (mục adminOnly — Projects/Users — không hiện vì e2e không stub /api/me).
 const NAV_LABELS = [
   'Epics',
@@ -21,7 +21,7 @@ const NAV_LABELS = [
   'Phase sub-tasks',
   'Log work',
   'Monitoring',
-  'Cấu trúc tầng',
+  'Tier structure',
   'Phase settings',
   'Signboard columns',
   'Days off',

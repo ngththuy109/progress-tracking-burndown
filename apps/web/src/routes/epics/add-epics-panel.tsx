@@ -238,7 +238,7 @@ export function AddQueryScopePanel() {
       <p className="panel__hint">
         Dự án không có Epic/Task cha — lá là ticket khớp JQL. Đặt một ID scope tuỳ ý; khoá
         nhóm lấy từ tiêu đề ticket, nên hãy cấu hình tầng dùng <code>SELF_TITLE</code> ở màn
-        <strong> Cấu trúc tầng</strong>.
+        <strong> Tier structure</strong>.
       </p>
 
       <label className="field">

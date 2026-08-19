@@ -7,8 +7,8 @@
  */
 /** Hai nhóm điều hướng — đúng bố cục demo đã chốt (dynamic-tiers-demo.html). */
 export const NAV_GROUPS = [
-  { id: 'TRACK', title: 'Theo dõi tiến độ' },
-  { id: 'CONFIG', title: 'Cấu hình dự án' },
+  { id: 'TRACK', title: 'Progress tracking' },
+  { id: 'CONFIG', title: 'Project configuration' },
 ] as const;
 export type NavGroupId = (typeof NAV_GROUPS)[number]['id'];
 
@@ -82,9 +82,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     path: '/config/tiers',
-    label: 'Cấu trúc tầng',
+    label: 'Tier structure',
     icon: '🏗️',
-    summary: 'Khai 1..N tầng nhóm logic cho dự án; đánh dấu đúng một tầng là Phase.',
+    summary: 'Define 1..N logical grouping tiers; mark exactly one as the Phase tier.',
     builtBy: 'Dynamic tiers',
     group: 'CONFIG',
   },
