@@ -64,9 +64,16 @@ export function OpsScreen() {
         </span>
       </div>
 
+      {/* Thứ tự ưu tiên: chất lượng dữ liệu trước, rồi tới lần chạy job gần nhất,
+          các cụm số đo, Epic đang lỗi, và cuối cùng là trôi kế hoạch. */}
+      <DataQualitySection data={data.data} />
+
+      {errorRunId !== null && <RunDetailDialog runId={errorRunId} onClose={() => setErrorRunId(null)} />}
+
+      <RecentRuns runs={data.jobs.recentRuns} onShowError={setErrorRunId} />
+
       <MetricGroup title="Nightly jobs" metrics={data.jobs.metrics} />
       <MetricGroup title="Jira calls" metrics={data.jira.metrics} />
-      <DataQualitySection data={data.data} />
 
       <ErroredEpics
         epics={data.jobs.erroredEpics}
@@ -77,10 +84,6 @@ export function OpsScreen() {
         pending={resync.isPending}
         queuedKey={resync.isSuccess ? resync.variables.epicKey : null}
       />
-
-      {errorRunId !== null && <RunDetailDialog runId={errorRunId} onClose={() => setErrorRunId(null)} />}
-
-      <RecentRuns runs={data.jobs.recentRuns} onShowError={setErrorRunId} />
 
       <PlanDrift rows={data.planDrift.rows} />
     </div>

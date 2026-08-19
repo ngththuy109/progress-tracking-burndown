@@ -230,8 +230,11 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   });
 
   // Kiểm tra plan rơi vào ngày nghỉ (T-37): báo cáo sau-sync, tính lúc đọc.
+  // Dùng CHUNG một cổng đọc cho cả route lẫn dashboard giám sát (loại lỗi Data
+  // quality thứ sáu ghép từ chính phép tính này).
+  const planConflictReads = createPlanConflictReadPort(deps.prisma);
   registerPlanConflictRoutes(app, {
-    reads: createPlanConflictReadPort(deps.prisma),
+    reads: planConflictReads,
     resolvePrincipal: getPrincipal,
   });
 
@@ -239,7 +242,7 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   // lần đọc, và `/metrics` phát số đo Prometheus. `checks`/`bannerAlerts` cố ý bỏ
   // trống — `main.ts` đã tự mở `/healthz` bằng Prisma/Redis thật (khai lại ở đây
   // sẽ trùng route), còn banner cảnh báo P3 chưa có nơi gọi.
-  const opsHealthPort = createOpsHealthPort(deps.prisma);
+  const opsHealthPort = createOpsHealthPort(deps.prisma, { planConflictReads });
   registerOpsRoutes(app, {
     registry,
     opsHealth: () => opsHealthPort.opsHealth(),

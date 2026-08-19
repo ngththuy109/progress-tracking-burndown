@@ -16,8 +16,8 @@ function healthBody(over: Record<string, unknown> = {}) {
     collectedAt: '2026-03-10T02:15:00Z',
     jobs: {
       metrics: [
-        metric('nightlyDuration', 'Thời lượng job đêm', 18, 240, 'phút', 'OK'),
-        metric('missingSnapshotDays', 'Ngày thiếu snapshot', 0, 0, 'ngày', 'OK'),
+        metric('nightlyDuration', 'Latest nightly job duration', 18, 240, 'min', 'OK'),
+        metric('snapshotBehind', 'Epics behind on snapshots', 0, 0, 'Epics', 'OK'),
       ],
       recentRuns: [
         {
@@ -32,9 +32,13 @@ function healthBody(over: Record<string, unknown> = {}) {
       ],
       erroredEpics: [],
     },
-    jira: { metrics: [metric('rateLimitHits', 'Lần bị chặn 24h', 3, 10, 'lần', 'OK')] },
+    jira: { metrics: [metric('rateLimitHits', 'Jira rate-limit hits (24h)', 3, 10, 'hits', 'OK')] },
     data: {
-      metrics: [metric('missingWbs', 'Thiếu ngày kế hoạch', 5, 10, '%', 'OK')],
+      metrics: [
+        metric('missingWbsDate', 'Missing planned dates', 5, 10, '%', 'OK'),
+        // Loại lỗi thứ sáu (T-37): ghép từ hệ plan-conflicts, có ngưỡng riêng.
+        metric('plannedOnDayOff', 'Sub-tasks planned on a day off', 8, 10, '%', 'OK'),
+      ],
       byEpic: [],
     },
     planDrift: { rows: [] },
@@ -110,22 +114,6 @@ async function installApi(page: Page, options: ApiOptions = {}): Promise<Calls> 
           json({ collectedAt: '2026-03-10T02:15:00Z', issues: options.dqIssues ?? [] }),
         );
       }
-      if (path.endsWith('/missing-dates')) {
-        return route.fulfill(
-          json({
-            epicKey: 'PAY-1',
-            rows: [
-              {
-                issueKey: 'PAY-11',
-                summary: 'Màn đăng nhập',
-                parentKey: 'PAY-10',
-                missingStart: true,
-                missingEnd: false,
-              },
-            ],
-          }),
-        );
-      }
       return route.fulfill(json({}));
     },
   );
@@ -140,8 +128,8 @@ test('mọi số đo hiện kèm NGƯỠNG của nó', async ({ page }) => {
   await installApi(page);
   await page.goto('/ops');
 
-  await expect(page.getByText('Thời lượng job đêm: 18 / 240 phút')).toBeVisible();
-  await expect(page.getByText('Lần bị chặn 24h: 3 / 10 lần')).toBeVisible();
+  await expect(page.getByText('Latest nightly job duration: 18 / 240 min')).toBeVisible();
+  await expect(page.getByText('Jira rate-limit hits (24h): 3 / 10 hits')).toBeVisible();
 });
 
 test('màn hình luôn hiện THỜI ĐIỂM số liệu được lấy', async ({ page }) => {
@@ -157,11 +145,11 @@ test('màn hình luôn hiện THỜI ĐIỂM số liệu được lấy', async 
 
 test('chỉ số chưa đo được nói "chưa đo được", KHÔNG hiện số 0', async ({ page }) => {
   await installApi(page, {
-    health: { jira: { metrics: [metric('rateLimitHits', 'Lần bị chặn 24h', null, 10, 'lần', 'UNKNOWN')] } },
+    health: { jira: { metrics: [metric('rateLimitHits', 'Jira rate-limit hits (24h)', null, 10, 'hits', 'UNKNOWN')] } },
   });
   await page.goto('/ops');
 
-  await expect(page.getByText('Lần bị chặn 24h: not measured yet')).toBeVisible();
+  await expect(page.getByText('Jira rate-limit hits (24h): not measured yet')).toBeVisible();
 });
 
 test('Epic lỗi hiện NGUYÊN VĂN thông báo và bấm chạy lại được', async ({ page }) => {
@@ -224,38 +212,30 @@ test('tắt được tự làm mới', async ({ page }) => {
   await expect(toggle).not.toBeChecked();
 });
 
-// --- Data quality › Planned dates (chuyển từ màn Epics sang) ----------------
+// --- Thứ tự section & loại lỗi "plan vào ngày nghỉ" (T-37) ------------------
 
-test('Sub-task thiếu ngày kế hoạch đếm được và bấm vào xem được danh sách', async ({ page }) => {
-  await installApi(page, {
-    epics: [EPIC({ dataHealth: { ...EPIC().dataHealth, missingWbsDateCount: 3 } })],
-  });
+test('thứ tự section: Data quality đầu tiên, rồi Most recent job runs, rồi Nightly jobs', async ({ page }) => {
+  await installApi(page);
   await page.goto('/ops');
+  // Đợi thoát trạng thái Loading trước khi đọc DOM — nếu không thì bắt phải bộ
+  // khung tải, chưa có panel nào.
+  await expect(page.getByRole('heading', { name: 'Data quality' })).toBeVisible();
 
-  await page.getByRole('button', { name: '3', exact: true }).click();
-
-  await expect(page.getByRole('heading', { name: /Sub-tasks missing planned dates/ })).toBeVisible();
-  await expect(page.getByText('Màn đăng nhập')).toBeVisible();
-  await expect(page.getByText('no start date')).toBeVisible();
+  // Tiêu đề panel (h2/h3) và caption bảng theo đúng thứ tự DOM.
+  const headings = await page.locator('.panel__title, .table__caption').allInnerTexts();
+  const at = (needle: string) => headings.findIndex((t) => t.includes(needle));
+  expect(at('Data quality')).toBeGreaterThanOrEqual(0);
+  expect(at('Data quality')).toBeLessThan(at('Most recent job runs'));
+  expect(at('Most recent job runs')).toBeLessThan(at('Nightly jobs'));
+  expect(at('Nightly jobs')).toBeLessThan(at('Jira calls'));
+  expect(at('Jira calls')).toBeLessThan(at('Epics in error'));
 });
 
-test('plan rơi vào ngày nghỉ đếm được và bấm sang được màn Sub-tasks', async ({ page }) => {
-  await installApi(page, { planConflictCounts: [{ epicKey: 'PAY-1', total: 2 }] });
+test('Data quality hiện chip "planned on a day off" (loại lỗi thứ sáu)', async ({ page }) => {
+  await installApi(page);
   await page.goto('/ops');
 
-  const link = page.getByRole('link', { name: '⚠ 2' });
-  await expect(link).toBeVisible();
-  await link.click();
-  await expect(page).toHaveURL(/\/phase-subtasks\?epic=PAY-1/);
-});
-
-test('không kiểm được ngày nghỉ thì NÓI RÕ, không hiện số 0', async ({ page }) => {
-  // Số 0 ở đây trông y hệt "sạch" — đúng kiểu lỗi im lặng mà màn hình giám sát
-  // phải tránh (C-10).
-  await installApi(page, { planConflictCounts: null });
-  await page.goto('/ops');
-
-  await expect(page.getByText('not checked')).toBeVisible();
+  await expect(page.getByText('Sub-tasks planned on a day off: 8 / 10 %')).toBeVisible();
 });
 
 // --- Data quality › bảng chi tiết theo PIC ---------------------------------
@@ -316,5 +296,23 @@ test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async
   await page.getByLabel('Filter by PIC').selectOption({ label: 'No PIC yet (1)' });
 
   await expect(page.getByText('PAY-103')).toBeVisible();
+  await expect(page.getByText('PAY-101')).toHaveCount(0);
+});
+
+test('lọc theo LOẠI LỖI (kể cả "planned on a day off") để xử lý gọn từng nhóm', async ({ page }) => {
+  await installApi(page, {
+    dqIssues: [
+      DQ_ISSUE({ issueKey: 'PAY-101', problems: ['MISSING_ESTIMATE'] }),
+      DQ_ISSUE({ issueKey: 'PAY-201', problems: ['PLANNED_ON_DAY_OFF'] }),
+    ],
+  });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  // Badge loại lỗi hiện NGAY trên ticket (exact để không đụng mục "… (1)" trong ô chọn).
+  await expect(page.getByText('Planned on a day off', { exact: true })).toBeVisible();
+
+  await page.getByLabel('Filter by problem type').selectOption({ label: 'Planned on a day off (1)' });
+  await expect(page.getByText('PAY-201')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);
 });

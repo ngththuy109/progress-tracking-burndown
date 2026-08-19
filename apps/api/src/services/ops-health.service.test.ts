@@ -23,6 +23,7 @@ function input(over: Partial<OpsHealthInput> = {}): OpsHealthInput {
       missingWbsDateRatio: 0.05,
       unparsedSubtaskRatio: 0.05,
       closedNoWorklogRatio: 0.05,
+      plannedOnDayOffRatio: 0.05,
     },
     dataByEpic: [],
     recentRuns: [],
@@ -64,7 +65,7 @@ describe('buildOpsHealth — hợp đồng phản hồi', () => {
     expect(() => opsHealthResponseSchema.parse(res)).not.toThrow();
     expect(res.jobs.metrics.length).toBeGreaterThan(0);
     expect(res.jira.metrics.length).toBeGreaterThan(0);
-    expect(res.data.metrics.length).toBe(5);
+    expect(res.data.metrics.length).toBe(6);
     expect(res.planDrift.rows).toEqual([]);
   });
 
@@ -132,6 +133,30 @@ describe('buildOpsHealth — số đo vượt ngưỡng bị đánh dấu', () =
     );
     expect(crit?.level).toBe('CRITICAL');
   });
+
+  it('plan rơi ngày nghỉ (T-37): 10% → WARN, 20% → CRITICAL, ngưỡng RIÊNG 10%', () => {
+    const ok = metricByName(
+      buildOpsHealth(input({ data: { ...input().data, plannedOnDayOffRatio: 0.05 } })),
+      'plannedOnDayOff',
+    );
+    expect(ok?.value).toBe(5);
+    expect(ok?.threshold).toBe(10);
+    expect(ok?.unit).toBe('%');
+    expect(ok?.level).toBe('OK');
+
+    expect(
+      metricByName(
+        buildOpsHealth(input({ data: { ...input().data, plannedOnDayOffRatio: 0.1 } })),
+        'plannedOnDayOff',
+      )?.level,
+    ).toBe('WARN');
+    expect(
+      metricByName(
+        buildOpsHealth(input({ data: { ...input().data, plannedOnDayOffRatio: 0.2 } })),
+        'plannedOnDayOff',
+      )?.level,
+    ).toBe('CRITICAL');
+  });
 });
 
 describe('buildOpsHealth — chưa đo được nói "chưa đo được", KHÔNG hiện 0', () => {
@@ -153,7 +178,7 @@ describe('buildOpsHealth — chưa đo được nói "chưa đo được", KHÔN
 });
 
 describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () => {
-  it('mỗi Epic có bộ 4 số đo riêng, cùng ngưỡng với số toàn cục', () => {
+  it('mỗi Epic có bộ 6 số đo riêng, cùng ngưỡng với số toàn cục', () => {
     const res = buildOpsHealth(
       input({
         dataByEpic: [
@@ -166,6 +191,7 @@ describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () =
             missingWbsDateRatio: 0,
             unparsedSubtaskRatio: 0,
             closedNoWorklogRatio: 0,
+            plannedOnDayOffRatio: 0,
           },
           {
             epicKey: 'CRM-1',
@@ -176,6 +202,7 @@ describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () =
             missingWbsDateRatio: 0,
             unparsedSubtaskRatio: 0,
             closedNoWorklogRatio: 0,
+            plannedOnDayOffRatio: 0,
           },
         ],
       }),
@@ -201,6 +228,7 @@ describe('buildOpsHealth — Data quality tách theo Epic đang theo dõi', () =
             missingWbsDateRatio: 0,
             unparsedSubtaskRatio: 0,
             closedNoWorklogRatio: 0,
+            plannedOnDayOffRatio: 0,
           },
         ],
       }),

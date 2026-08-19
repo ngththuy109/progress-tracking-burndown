@@ -11,9 +11,8 @@ import {
 } from '../../components/ui/index.js';
 import { IssueLink } from '../../components/issue-link/index.js';
 import { buildDataQualityCsv, csvFileName, PROBLEM_LABEL } from './data-quality-csv.js';
-import { ALL, filterIssues, picLabel, picOptions } from './data-quality-filter.js';
+import { ALL, filterIssues, picLabel, picOptions, problemOptions } from './data-quality-filter.js';
 import { MetricChips } from './metric-chips.js';
-import { PlannedDatesBlock } from './planned-dates.js';
 
 /**
  * Khu Data quality — tách theo TỪNG Epic đang theo dõi.
@@ -23,9 +22,9 @@ import { PlannedDatesBlock } from './planned-dates.js';
  *   1. Xuất CSV gửi cho đội sửa dữ liệu trên Jira.
  *   2. Đánh dấu ticket "không cần sửa" — cố ý thiếu dữ liệu thì đừng cảnh báo
  *      mãi; tiếng ồn lặp lại làm người ta bỏ qua luôn cả cảnh báo thật.
- *   3. Đếm hai lỗi NGÀY KẾ HOẠCH theo Epic (`PlannedDatesBlock`): thiếu ngày, và
- *      ngày rơi trúng ngày nghỉ. Hai số này trước ở màn Epics — chúng là chất
- *      lượng dữ liệu, nên thuộc về đây.
+ *   3. Lọc theo LOẠI LỖI (kể cả "plan vào ngày nghỉ" — T-37, nay là loại lỗi thứ
+ *      sáu hiện ngay trên từng ticket): danh sách trộn nhiều loại khó xử lý, lọc
+ *      xuống một loại thì thành việc làm được ngay.
  */
 
 export function DataQualitySection({ data }: { readonly data: OpsHealthResponse['data'] }) {
@@ -37,6 +36,9 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
   // Lọc theo NGƯỜI PHỤ TRÁCH: người đi sửa dữ liệu trên Jira chỉ sửa được
   // ticket của chính mình, nên đây là bộ lọc biến danh sách thành việc làm được.
   const [picFilter, setPicFilter] = useState<string>(ALL);
+  // Lọc theo LOẠI LỖI: bảng trộn cả sáu loại lỗi khó xử lý; thu về một loại thì
+  // xử lý gọn từng nhóm một (vd chỉ xem "Planned on a day off").
+  const [problemFilter, setProblemFilter] = useState<string>(ALL);
 
   const issuesQuery = useDataQualityIssues(showDetails);
 
@@ -59,8 +61,6 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
         </div>
       ))}
 
-      <PlannedDatesBlock />
-
       <div className="actions">
         <button type="button" className="button" onClick={() => setShowDetails((v) => !v)}>
           {showDetails ? 'Hide ticket details' : 'Show ticket details'}
@@ -74,6 +74,8 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
           onEpicFilter={setEpicFilter}
           picFilter={picFilter}
           onPicFilter={setPicFilter}
+          problemFilter={problemFilter}
+          onProblemFilter={setProblemFilter}
           epicOptions={data.byEpic.map((e) => e.epicKey)}
         />
       )}
@@ -87,6 +89,8 @@ function DataQualityDetails({
   onEpicFilter,
   picFilter,
   onPicFilter,
+  problemFilter,
+  onProblemFilter,
   epicOptions,
 }: {
   readonly query: ReturnType<typeof useDataQualityIssues>;
@@ -94,6 +98,8 @@ function DataQualityDetails({
   readonly onEpicFilter: (value: string) => void;
   readonly picFilter: string;
   readonly onPicFilter: (value: string) => void;
+  readonly problemFilter: string;
+  readonly onProblemFilter: (value: string) => void;
   readonly epicOptions: readonly string[];
 }) {
   const setExempt = useSetDqExempt();
@@ -115,15 +121,19 @@ function DataQualityDetails({
   // Danh sách Epic trong bộ lọc lấy từ CẢ hai nguồn: byEpic (Epic sạch vẫn chọn
   // được) và danh sách ticket (phòng Epic có ticket lỗi mà thiếu trong byEpic).
   const options = [...new Set([...epicOptions, ...all.map((i) => i.epicKey)])].sort();
-  // Danh sách người lấy theo Epic đang chọn, KHÔNG theo chính bộ lọc PIC — nếu
-  // không thì chọn một người xong ô chọn chỉ còn mỗi người đó, không đổi sang
-  // người khác được.
-  const pics = picOptions(filterIssues(all, { epicKey: epicFilter, pic: ALL }));
-  // Đổi Epic xong người đang chọn có thể không còn ticket nào ở Epic mới. Khi đó
-  // quay về "All PICs" thay vì giữ một ô chọn trỏ vào người không có trong danh
-  // sách — trông y hệt "Epic này sạch" trong khi thật ra chỉ là lọc trượt.
+  // Hai ô chọn phụ (PIC, loại lỗi) tính TRONG phạm vi Epic đang chọn nhưng KHÔNG
+  // theo lẫn nhau — chọn một cái không làm rỗng danh sách của cái kia, và cũng
+  // không tự khoá vào chính lựa chọn đang chọn.
+  const epicScope = filterIssues(all, { epicKey: epicFilter, pic: ALL, problem: ALL });
+  const pics = picOptions(epicScope);
+  const problems = problemOptions(epicScope);
+  // Đổi Epic xong lựa chọn cũ có thể không còn ticket nào ở Epic mới. Khi đó quay
+  // về "All …" thay vì giữ ô chọn trỏ vào thứ không có trong danh sách — trông y
+  // hệt "Epic này sạch" trong khi thật ra chỉ là lọc trượt.
   const activePic = picFilter === ALL || pics.some((p) => p.value === picFilter) ? picFilter : ALL;
-  const filtered = filterIssues(all, { epicKey: epicFilter, pic: activePic });
+  const activeProblem =
+    problemFilter === ALL || problems.some((p) => p.value === problemFilter) ? problemFilter : ALL;
+  const filtered = filterIssues(all, { epicKey: epicFilter, pic: activePic, problem: activeProblem });
 
   const download = () => {
     const csv = buildDataQualityCsv(filtered);
@@ -231,6 +241,24 @@ function DataQualityDetails({
             ))}
           </select>
         </label>
+        <label className="check">
+          Problem
+          <select
+            className="input"
+            value={activeProblem}
+            aria-label="Filter by problem type"
+            onChange={(e) => onProblemFilter(e.target.value)}
+          >
+            <option value={ALL}>All problems</option>
+            {/* Số ticket mỗi loại lỗi ngay trong ô chọn — thấy khối lượng trước
+                khi lọc. Chỉ hiện loại đang có ticket, theo thứ tự số đo phía trên. */}
+            {problems.map((p) => (
+              <option key={p.value} value={p.value}>
+                {PROBLEM_LABEL[p.value]} ({p.count})
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" className="button" onClick={download} disabled={filtered.length === 0}>
           Download CSV report ({filtered.length} tickets)
         </button>
@@ -250,11 +278,11 @@ function DataQualityDetails({
             icon="✅"
             title="No data problems"
             description={
-              activePic === ALL
-                ? 'Every active sub-task in this scope has an estimate, planned dates, a phase, and a well-formed title.'
+              activePic === ALL && activeProblem === ALL
+                ? 'Every active sub-task in this scope has an estimate, planned dates, a phase, a well-formed title, and no planned date on a day off.'
                 : // Rỗng vì BỘ LỌC chứ không phải vì dữ liệu sạch — nói rõ ra,
                   // không thì người dùng đóng màn hình và tin là hết việc.
-                  'Nothing left for this PIC in this scope. Switch the PIC filter to see the rest.'
+                  'Nothing matches the current filters in this scope. Clear the PIC or problem filter to see the rest.'
             }
           />
         }

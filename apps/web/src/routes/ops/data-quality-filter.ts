@@ -1,4 +1,4 @@
-import type { DataQualityIssue, SignboardPic } from '@app/shared';
+import { DQ_PROBLEMS, type DataQualityIssue, type DqProblem, type SignboardPic } from '@app/shared';
 
 /**
  * Lọc danh sách ticket lỗi dữ liệu theo Epic và theo PIC — HÀM THUẦN.
@@ -76,6 +76,8 @@ export interface IssueFilter {
   readonly epicKey: string;
   /** `accountId` của PIC, `NO_PIC`, hoặc `ALL`. */
   readonly pic: string;
+  /** Một loại lỗi (`DqProblem`), hoặc `ALL`. */
+  readonly problem: string;
 }
 
 export function filterIssues(
@@ -84,8 +86,34 @@ export function filterIssues(
 ): readonly DataQualityIssue[] {
   return issues.filter((i) => {
     if (filter.epicKey !== ALL && i.epicKey !== filter.epicKey) return false;
+    // Một ticket có thể mang nhiều lỗi — "lọc theo loại lỗi" nghĩa là "CÓ chứa
+    // loại này" (giống ngữ nghĩa multi-PIC bên dưới dùng `some`).
+    if (filter.problem !== ALL && !i.problems.includes(filter.problem as DqProblem)) return false;
     if (filter.pic === ALL) return true;
     if (filter.pic === NO_PIC) return i.pics.length === 0;
     return i.pics.some((p) => p.accountId === filter.pic);
   });
+}
+
+export interface ProblemOption {
+  readonly value: DqProblem;
+  /** Số ticket đang mang loại lỗi này (trong phạm vi đang xét). */
+  readonly count: number;
+}
+
+/**
+ * Danh sách loại lỗi để đổ vào ô chọn, kèm số ticket mỗi loại.
+ *
+ * Một ticket nhiều lỗi được đếm ở TỪNG loại. Sắp theo thứ tự `DQ_PROBLEMS` để
+ * khớp thứ tự chip số đo phía trên, và chỉ hiện loại lỗi đang thực sự có ticket
+ * (nhãn hiển thị do nơi gọi tra `PROBLEM_LABEL`, tránh phụ thuộc vòng vào CSV).
+ */
+export function problemOptions(issues: readonly DataQualityIssue[]): readonly ProblemOption[] {
+  const count = new Map<DqProblem, number>();
+  for (const issue of issues) {
+    for (const p of issue.problems) {
+      count.set(p, (count.get(p) ?? 0) + 1);
+    }
+  }
+  return DQ_PROBLEMS.filter((p) => count.has(p)).map((p) => ({ value: p, count: count.get(p) ?? 0 }));
 }

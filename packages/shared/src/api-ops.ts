@@ -102,13 +102,20 @@ export const dataQualityEpicSchema = z.object({
 });
 export type DataQualityEpic = z.infer<typeof dataQualityEpicSchema>;
 
-/** Năm loại lỗi dữ liệu — khớp với năm số đo ở nhóm Data quality. */
+/**
+ * Sáu loại lỗi dữ liệu — khớp với sáu số đo ở nhóm Data quality.
+ *
+ * `PLANNED_ON_DAY_OFF` (T-37) khác năm lỗi kia ở chỗ không tính được bằng SQL
+ * thuần trên `jira_issue`: nó cần lịch nghỉ của đúng phía làm (VN/JP), nên được
+ * ghép vào từ hệ plan-conflicts lúc đọc — xem `ops.adapters.ts`.
+ */
 export const DQ_PROBLEMS = [
   'MISSING_ESTIMATE',
   'MISSING_WBS_DATE',
   'UNCLASSIFIED_PHASE',
   'UNPARSED_TITLE',
   'CLOSED_NO_WORKLOG',
+  'PLANNED_ON_DAY_OFF',
 ] as const;
 export type DqProblem = (typeof DQ_PROBLEMS)[number];
 
