@@ -81,8 +81,8 @@ Hai thao tác này phải **trông khác nhau rõ ràng** trên màn hình.
 3. Trạng thái đồng bộ hiện bằng `Badge` có màu, kèm **thời điểm** đồng bộ gần nhất. Chưa từng đồng bộ thì nói *"đang dựng lịch sử lần đầu, khoảng N phút"* chứ không để trống.
 4. Cảnh báo `NO_CHILD_TASK` và `MISSING_WBS_DATES` từ `/validate` hiện ngay tại dòng Epic tương ứng.
 5. Bỏ theo dõi: hộp xác nhận buộc **gõ lại key Epic**. Thao tác này xoá dữ liệu và không hoàn tác được.
-6. Khu "thiếu ngày kế hoạch": gọi `/missing-dates`, nhóm theo Phase, mỗi dòng có link sang Jira để PM sửa.
-7. Bảng sắp xếp được theo lần đồng bộ cuối và theo số Sub-task thiếu ngày — hai cột PM nhìn nhiều nhất.
+6. Khu "thiếu ngày kế hoạch": gọi `/missing-dates`, mỗi dòng có link sang Jira để PM sửa. **Từ 2026-08-17 khu này nằm ở màn Monitoring** (khu *Data quality* → bảng *Planned dates*) chứ không còn ở màn Epics. Màn Epics chỉ giữ cột **Data quality**: Epic nào có lỗi dữ liệu (số đo theo Epic của `/api/ops/health` > 0, hoặc có plan rơi vào ngày nghỉ) thì hiện link `⚠ Check data quality` sang màn Monitoring, kèm tooltip nói rõ sai cái gì; **Epic sạch không hiện gì**.
+7. Bảng sắp xếp được theo lần đồng bộ cuối và theo số Sub-task — những cột PM nhìn nhiều nhất.
 
 ## Quy ước bắt buộc
 Từ [CONVENTIONS.md](./CONVENTIONS.md):

@@ -1,0 +1,180 @@
+import { z } from 'zod';
+import { STATUS_CATEGORY } from './enums.js';
+
+/**
+ * Hợp đồng HTTP: theo dõi việc LOG WORK của member — TOÀN ĐỘI, mọi Epic đang
+ * theo dõi mà người xem được phép thấy.
+ *
+ * Trả lời câu hỏi: "Trong kỳ này, ai chưa log work? Trên những ticket đang mở
+ * nào mà họ đang 'in charge' (field Request participants của Jira)? Bấm vào đâu
+ * để sang Jira log?".
+ *
+ * Nguồn dữ liệu (chỉ đọc Postgres, KHÔNG gọi Jira):
+ *   - Giờ đã log: `worklog_entry` (lọc theo `started_at`, bỏ bản `is_deleted`).
+ *   - "In charge": `jira_issue.sb_request_participants` (chỉ có ở Sub-task).
+ *   - Ticket "chưa đóng": `status_category <> 'done'` (C-4: KHÔNG so `status.name`).
+ *
+ * "Chưa log" nghĩa là CHÍNH member đó chưa log giờ nào lên ticket trong kỳ — dù
+ * người khác có thể đã log (khi đó `totalLoggedHours > 0` còn `memberLoggedHours`
+ * = 0, UI đọc thành "0 / X"). Ticket đã được PM "verify — thôi theo dõi" thì
+ * `exempted = true` và KHÔNG còn tính vào `notLogged`/`notLoggedCount`.
+ */
+
+export const logworkTicketSchema = z.object({
+  issueKey: z.string(),
+  epicKey: z.string(),
+  /** Project của Epic — để web quyết định user hiện tại có được "verify" dòng này không. */
+  projectKey: z.string(),
+  summary: z.string(),
+  parentKey: z.string().nullable(),
+  phaseCode: z.string(),
+  /** Luôn khác `'done'` (chỉ liệt kê ticket đang mở), nhưng giữ đủ union cho gọn kiểu. */
+  statusCategory: z.enum(STATUS_CATEGORY),
+  originalEstimateHours: z.number(),
+  /** Giờ CHÍNH member này log lên ticket này, trong kỳ. */
+  memberLoggedHours: z.number(),
+  /** Tổng giờ MỌI người log lên ticket này, trong kỳ (0 / X → người khác đã cover). */
+  totalLoggedHours: z.number(),
+  /** `memberLoggedHours === 0 && !exempted`. */
+  notLogged: z.boolean(),
+  /** PM đã "verify — thôi theo dõi" cặp (member, ticket) này. */
+  exempted: z.boolean(),
+  /** `userId` (email) của người đã đánh dấu; `null` khi chưa exempt. */
+  exemptedBy: z.string().nullable(),
+  /** ISO timestamp lúc đánh dấu; `null` khi chưa exempt. */
+  exemptedAt: z.string().nullable(),
+});
+
+export const logworkMemberSchema = z.object({
+  accountId: z.string(),
+  /** Tên hiển thị lấy từ participant JSON; `null` → web hiện accountId thay thế. */
+  displayName: z.string().nullable(),
+  /** Tổng giờ member log trong kỳ, trên MỌI Epic thấy được (kể cả ticket không in-charge). */
+  totalLoggedHours: z.number(),
+  /** `false` = có log giờ nhưng không in-charge ticket mở nào ("logged, not assigned"). */
+  hasOpenAssignments: z.boolean(),
+  tickets: z.array(logworkTicketSchema),
+  /** Số ticket đang mở mà member này chưa log (đã trừ ticket exempt). */
+  notLoggedCount: z.number().int(),
+  /** Số ticket đã được PM "verify — thôi theo dõi". */
+  exemptedCount: z.number().int(),
+  /** Epic "chính" dùng để tính capacity; `null` khi member không in-charge Epic nào. */
+  primaryEpicKey: z.string().nullable(),
+  /** Giờ kỳ vọng = số ngày công (đã prorate) × giờ/ngày của project/lịch. */
+  expectedHours: z.number(),
+  /** `max(0, expectedHours - totalLoggedHours)`. */
+  deficitHours: z.number(),
+  /** `expectedHours > 0 && totalLoggedHours < expectedHours`. */
+  behind: z.boolean(),
+});
+
+export const logworkResponseSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  members: z.array(logworkMemberSchema),
+  totalMembers: z.number().int(),
+  /** Tổng số cặp (member, ticket) đang bị gắn cờ chưa-log trên toàn đội. */
+  totalNotLogged: z.number().int(),
+  /** Số Epic đang theo dõi mà người xem được phép thấy (đã lọc theo quyền). */
+  visibleEpicCount: z.number().int(),
+  /**
+   * `false` = không Sub-task mở nào có participant. Hai khả năng: field Request
+   * participants chưa bật trong `config/jira-fields.yaml`, HOẶC thật sự chưa ai
+   * được gán. Web phải nêu cả hai trong empty-state.
+   */
+  hasParticipantData: z.boolean(),
+  /** Kỳ bao gồm hôm nay/tương lai → `expectedHours` đã được prorate theo ngày công đã qua. */
+  partialPeriod: z.boolean(),
+  /** Cảnh báo lịch (thiếu lịch/ngày lễ/mask sai) — gộp trùng qua các Epic thấy được. */
+  warnings: z.array(z.string()),
+});
+
+/**
+ * Kiểu TypeScript khai TAY để giữ `readonly` xuyên suốt (zod sinh mảng sửa
+ * được). Schema ở trên vẫn dùng để `apps/web` kiểm dữ liệu tại biên (T-20).
+ */
+export interface LogworkTicket {
+  readonly issueKey: string;
+  readonly epicKey: string;
+  readonly projectKey: string;
+  readonly summary: string;
+  readonly parentKey: string | null;
+  readonly phaseCode: string;
+  readonly statusCategory: (typeof STATUS_CATEGORY)[number];
+  readonly originalEstimateHours: number;
+  readonly memberLoggedHours: number;
+  readonly totalLoggedHours: number;
+  readonly notLogged: boolean;
+  readonly exempted: boolean;
+  readonly exemptedBy: string | null;
+  readonly exemptedAt: string | null;
+}
+
+export interface LogworkMember {
+  readonly accountId: string;
+  readonly displayName: string | null;
+  readonly totalLoggedHours: number;
+  readonly hasOpenAssignments: boolean;
+  readonly tickets: readonly LogworkTicket[];
+  readonly notLoggedCount: number;
+  readonly exemptedCount: number;
+  readonly primaryEpicKey: string | null;
+  readonly expectedHours: number;
+  readonly deficitHours: number;
+  readonly behind: boolean;
+}
+
+export interface LogworkResponse {
+  readonly from: string;
+  readonly to: string;
+  readonly members: readonly LogworkMember[];
+  readonly totalMembers: number;
+  readonly totalNotLogged: number;
+  readonly visibleEpicCount: number;
+  readonly hasParticipantData: boolean;
+  readonly partialPeriod: boolean;
+  readonly warnings: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
+// Cấu hình giờ/ngày kỳ vọng theo project (quyết định "behind") — GET/PUT settings.
+// ---------------------------------------------------------------------------
+
+export const logworkProjectSettingSchema = z.object({
+  projectKey: z.string(),
+  /** `null` = chưa cấu hình riêng → dùng giờ/ngày của lịch, cuối cùng tới mặc định. */
+  expectedHoursPerDay: z.number().nullable(),
+  /** User hiện tại có được sửa project này không (PM của project, hoặc ADMIN). */
+  canEdit: z.boolean(),
+});
+
+export const logworkSettingsResponseSchema = z.object({
+  defaultHoursPerDay: z.number(),
+  projects: z.array(logworkProjectSettingSchema),
+});
+
+export const logworkSetHoursRequestSchema = z.object({
+  /** `> 0` và `<= 24`; `null` = xoá cấu hình riêng, quay về mặc định của lịch. */
+  expectedHoursPerDay: z.number().positive().max(24).nullable(),
+});
+
+// ---------------------------------------------------------------------------
+// PM "verify — thôi theo dõi" một cặp (member, ticket).
+// ---------------------------------------------------------------------------
+
+export const logworkExemptionRequestSchema = z.object({
+  accountId: z.string().min(1),
+  issueKey: z.string().min(1),
+  note: z.string().max(500).nullish(),
+});
+
+export interface LogworkProjectSetting {
+  readonly projectKey: string;
+  readonly expectedHoursPerDay: number | null;
+  readonly canEdit: boolean;
+}
+
+export interface LogworkSettingsResponse {
+  readonly defaultHoursPerDay: number;
+  readonly projects: readonly LogworkProjectSetting[];
+}

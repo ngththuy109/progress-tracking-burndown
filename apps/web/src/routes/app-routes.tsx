@@ -7,12 +7,14 @@ import { EpicListScreen } from './epics/index.js';
 import { BurndownScreen } from './burndown/index.js';
 import { SignboardScreen } from './signboard/index.js';
 import { PhaseSubtasksScreen } from './phase-subtasks/index.js';
+import { LogworkScreen } from './logwork/index.js';
 import { SignboardColumnScreen } from './config-signboard/index.js';
 import { TierStructureScreen } from './config-tiers/index.js';
 import { HolidaysScreen } from './config-holidays/index.js';
 import { OpsScreen } from './ops/index.js';
 import { AdminUsersScreen } from './admin-users/index.js';
 import { AdminProjectsScreen } from './admin-projects/index.js';
+import { AdminLdapScreen } from './admin-ldap/index.js';
 
 /**
  * Bảng định tuyến.
@@ -32,12 +34,14 @@ export function AppRoutes() {
         <Route path="signboard" element={<SignboardScreen />} />
         <Route path="phase-subtasks" element={<PhaseSubtasksScreen />} />
         <Route path="config/tiers" element={<TierStructureScreen />} />
+        <Route path="logwork" element={<LogworkScreen />} />
         <Route path="config/phase" element={<ConfigPhaseScreen />} />
         <Route path="config/signboard" element={<SignboardColumnScreen />} />
         <Route path="config/holidays" element={<HolidaysScreen />} />
         <Route path="ops" element={<OpsScreen />} />
         <Route path="admin/projects" element={<AdminProjectsScreen />} />
         <Route path="admin/users" element={<AdminUsersScreen />} />
+        <Route path="admin/ldap" element={<AdminLdapScreen />} />
 
         <Route
           path="*"

@@ -47,9 +47,10 @@ compares against the stored snapshot, and names the culprit — who edited the e
 |---|---|
 | **Epics** | Which Epics (or flat JQL scopes) are tracked, how each is syncing, and what data is missing |
 | **Burndown chart** | Whole Epic, a single Phase, or drill-down by tier, Planned vs Actual over time |
-| **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase. Filterable by top-tier group (e.g. stage GĐ1/GĐ2) when the epic has more than one |
+| **Signboard** | Function × sub-phase × task-type grid — which function is late, at which step, in which sub-phase. Columns with no sub-task at all are left out; filterable by top-tier group (e.g. stage GĐ1/GĐ2) when the epic has more than one |
 | **Phase sub-tasks** | Which sub-tasks fall under each defined Phase, for one Epic |
-| **Tier structure** | Define 1..N logical grouping tiers per project; mark exactly one as the Phase tier. Built-in preview: paste a Task title, see the resulting `group_path` before saving |
+| **Log work** | Team-wide: who is logging work this week (or a chosen range), and which open in-charge sub-tasks (Jira Request participants) still have no worklog. Capacity check per project; a PM can mark a case verified to stop tracking it |
+| **Tier structure** | Define 1..N logical grouping tiers per project; mark exactly one as the Phase tier. Built-in preview: paste Task titles, see the resulting `group_path` before saving |
 | **Signboard columns** | Which task types become columns |
 | **Phase settings** | Title patterns and matching rules, with a preview before saving |
 | **Days off** | Public holidays and make-up workdays for the Vietnam and Japan calendars |
@@ -67,11 +68,11 @@ Requires **Node ≥ 20.11** and **pnpm 9.15**. PostgreSQL and Redis are needed t
 but not to run the tests — see below.
 
 ```bash
-pnpm install:all              # one-shot: pnpm install + prisma generate (builds re2, generates Prisma Client)
+pnpm install:all              # one-shot: install deps + generate Prisma Client — no native build, works offline
 cp .env.example .env          # fill in your Jira token, database and Redis URLs
 pnpm db:migrate
 pnpm db:seed                  # (recommended) load the default Phase-matching config + Signboard columns + work calendars
-pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consumer)
+pnpm dev                      # API :3000 · web :8080 · worker (BullMQ consumer)
 ```
 
 > **Three ways to get the Default config, in priority order.** Migrations create the tables
@@ -89,9 +90,11 @@ pnpm dev                      # API :3000 · web :5180 · worker (BullMQ consume
 > Methods 1 and 2 load the same set (6 Phases, 29 VI/JA/EN match rules, 5 Signboard columns).
 > Full detail in [`docs/ONBOARDING.md`](./docs/ONBOARDING.md).
 
-`pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :5180) and the
-**worker** (BullMQ consumer) in parallel. The web dev server uses port **5180**, not Vite's default
-5173 — deliberately, so it never collides with another project on the same machine. The API and
+`pnpm dev` starts the **API** (Fastify, listening on :3000), the **web app** (Vite on :8080) and the
+**worker** (BullMQ consumer) in parallel. The web dev server uses port **8080**, not Vite's default
+5173 — deliberately, so it never collides with another project on the same machine. The built-preview
+server (`pnpm web:start`) also defaults to 8080: dev and preview are two ways to serve the same app,
+run one at a time, never both at once. The API and
 worker each need PostgreSQL, Redis and reachable Jira credentials to start; missing any of them
 stops the process with a clear message rather than a half-running server.
 
@@ -101,12 +104,23 @@ stops the process with a clear message rather than a half-running server.
 > `node --watch src/*.ts` crashes with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on Node 22+/24. `tsx`
 > fully transpiles the TypeScript, so the dev entry points run on any supported Node.
 
-> **One-shot setup.** `pnpm install:all` runs `pnpm install` (which also builds the native
-> [`re2`](https://github.com/uhop/node-re2) engine — required by the ReDoS-safe regex layer, not
-> optional) and `pnpm db:generate` **in sequence**. On **Claude Code on the web**, a `SessionStart`
-> hook (`.claude/hooks/session-start.sh`) runs this automatically at session start, so a freshly
-> cloned container is ready to `pnpm dev` / `pnpm test` without manual setup — the container is then
-> cached, so later sessions start near-instantly.
+> **`pnpm dev` sets itself up — you only run it.** A `predev` hook runs
+> [`tools/dev/preflight.mjs`](./tools/dev/preflight.mjs) before the servers start. The first time it
+> installs dependencies and generates the Prisma Client; every run after that it just checks
+> (node_modules present, Prisma Client generated, `pnpm-lock.yaml` unchanged) and goes **straight to
+> the server with no install step**. Change a dependency and the next `pnpm dev` re-installs on its
+> own. Run the same preparation without starting anything with `pnpm preflight`; `pnpm install:all`
+> (`pnpm install && pnpm db:generate`) remains the explicit two-step form.
+>
+> **No native build, fully offline.** `pnpm install` has **no compile step to fail**: the ReDoS-safe
+> regex layer uses [`re2-wasm`](https://github.com/google/re2-wasm) — Google's RE2 engine compiled to
+> WebAssembly — instead of the native [`re2`](https://github.com/uhop/node-re2) addon, so there is no
+> node-gyp / MSVC / prebuilt-binary download that can break on a locked-down or toolchain-less machine
+> (Windows especially). It is the same RE2 engine, so the linear-time, backtracking-free ReDoS
+> guarantee is unchanged — see `packages/engine/src/parser/safe-regex.ts`. On **Claude Code on the
+> web**, a `SessionStart` hook (`.claude/hooks/session-start.sh`) runs the same preflight at session
+> start, so a freshly cloned container is ready without manual setup; the container is then cached, so
+> later sessions start near-instantly.
 >
 > Do **not** move `prisma generate` into a `postinstall` script: Prisma's generate internally runs
 > `pnpm add @prisma/client`, which re-triggers `postinstall` → `prisma generate` → … in an **infinite
@@ -223,6 +237,7 @@ All under [`docs/`](./docs), in Vietnamese:
 | [`DYNAMIC-TIERS-DESIGN.md`](./docs/DYNAMIC-TIERS-DESIGN.md) | Configurable 1..N grouping tiers + CONTAINER/QUERY scopes — design & what shipped |
 | [`PHASE-MAPPING.md`](./docs/PHASE-MAPPING.md) | How a ticket gets its Phase, and when a settings change shows up on screens |
 | [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Package boundaries and why they exist |
+| [`AUTH.md`](./docs/AUTH.md) | LDAP login, the three roles, and how to grant access |
 | [`ONBOARDING.md`](./docs/ONBOARDING.md) | A new developer, day one |
 | [`WEB-SERVER.md`](./docs/WEB-SERVER.md) | Building and serving the web app on a configurable port (default 8080) |
 | [`RUNBOOK.md`](./docs/RUNBOOK.md) | Whoever is on call, possibly at 2am |

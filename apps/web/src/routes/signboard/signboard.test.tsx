@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -406,5 +406,215 @@ describe('SignboardScreen — bộ lọc Giai đoạn', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Giai đoạn 2/ }).getAttribute('aria-pressed')).toBe('true'),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cột không có task thì API không dựng — bảng phải chịu được nhóm LỆCH số cột
+// ---------------------------------------------------------------------------
+
+const emptyCell: SignboardCell = { present: false };
+
+/**
+ * Hai Sub-phase với số cột KHÁC nhau: `Design` còn Create + Review, `Coding` chỉ
+ * còn Create (cột Review của Coding không có task nào nên API không dựng).
+ */
+const BOARD_RAGGED: SignboardResponse = {
+  ...BOARD,
+  columnGroups: [
+    {
+      subPhaseKey: 'design',
+      subPhaseLabel: 'Design',
+      taskColumns: [
+        { taskCode: 'CREATE', label: 'Create' },
+        { taskCode: 'REVIEW', label: 'Review' },
+      ],
+    },
+    { subPhaseKey: 'coding', subPhaseLabel: 'Coding', taskColumns: [{ taskCode: 'CREATE', label: 'Create' }] },
+  ],
+  columns: [
+    { taskCode: 'CREATE', label: 'Create', subPhaseKey: 'design' },
+    { taskCode: 'REVIEW', label: 'Review', subPhaseKey: 'design' },
+    { taskCode: 'CREATE', label: 'Create', subPhaseKey: 'coding' },
+  ],
+  rows: [
+    {
+      functionKey: 'login',
+      functionName: 'Login',
+      pics: [],
+      cells: [lateCell, emptyCell, doneCell],
+      subtotals: [lateCell, doneCell],
+      total: lateCell,
+    },
+  ],
+  summary: { byStatus: { DELAY_END: 1, COMPLETED: 1 }, emptyCells: 1, totalCells: 3 },
+};
+
+/** Không cột nào còn task — API trả về bảng KHÔNG có nhóm cột nào. */
+const BOARD_NO_COLUMNS: SignboardResponse = {
+  ...BOARD,
+  columnGroups: [],
+  columns: [],
+  rows: [
+    { functionKey: 'login', functionName: 'Login', pics: [], cells: [], subtotals: [], total: emptyCell },
+  ],
+  summary: { byStatus: {}, emptyCells: 0, totalCells: 0 },
+};
+
+function stubBoard(board: SignboardResponse): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const body = url.endsWith('/phases')
+        ? PHASES
+        : url.endsWith('/unparsed')
+          ? UNPARSED
+          : url.endsWith('/plan-conflicts')
+            ? CONFLICTS
+            : url.endsWith('/phase/DESIGN')
+              ? board
+              : null;
+      if (body === null) return Promise.reject(new Error(`no mock for ${url}`));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }),
+  );
+}
+
+describe('SignboardScreen — nhóm Sub-phase lệch số cột', () => {
+  it('vẽ đúng cột của TỪNG nhóm, ô vẫn khớp cột dù nhóm sau ít cột hơn', async () => {
+    stubBoard(BOARD_RAGGED);
+    renderAt('/signboard?epic=PAY-1&phase=DESIGN');
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+
+    // Tầng 2 của header: Create + Review + Σ (nhóm Design), rồi Create + Σ (nhóm Coding).
+    const headerRows = screen.getAllByRole('row').slice(0, 2);
+    const level2 = [...headerRows[1]!.querySelectorAll('th')].map((th) => th.textContent);
+    expect(level2).toEqual(['Create', 'Review', 'Σ', 'Create', 'Σ']);
+
+    // Hàng Login: ô lá thứ hai (Design/Review) là ô TRỐNG, ô lá thứ ba
+    // (Coding/Create) đã Done — offset không được trượt sang nhóm sau.
+    const cells = [...screen.getAllByRole('row')[2]!.querySelectorAll('td')];
+    expect(cells[1]?.textContent).toContain('Late finish'); // Design/Create
+    expect(cells[2]?.className).toContain('signboard__empty'); // Design/Review
+    expect(cells[4]?.textContent).toContain('Done'); // Coding/Create
+  });
+
+  it('không cột nào còn task thì nói rõ, không vẽ bảng rỗng', async () => {
+    stubBoard(BOARD_NO_COLUMNS);
+    renderAt('/signboard?epic=PAY-1&phase=DESIGN');
+
+    await waitFor(() => expect(screen.getByText(/No task-type column has any sub-task/)).toBeTruthy());
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chọn NHIỀU Phase: mỗi bảng rút cột theo dữ liệu của CHÍNH nó
+// ---------------------------------------------------------------------------
+
+/** DESIGN còn hai cột: Create + Review. */
+const BOARD_DESIGN_WIDE: SignboardResponse = {
+  ...BOARD,
+  columnGroups: [
+    {
+      subPhaseKey: '',
+      subPhaseLabel: 'Design',
+      taskColumns: [
+        { taskCode: 'CREATE', label: 'Create' },
+        { taskCode: 'REVIEW', label: 'Review' },
+      ],
+    },
+  ],
+  columns: [
+    { taskCode: 'CREATE', label: 'Create', subPhaseKey: '' },
+    { taskCode: 'REVIEW', label: 'Review', subPhaseKey: '' },
+  ],
+  rows: [
+    {
+      functionKey: 'login',
+      functionName: 'Login',
+      pics: [],
+      cells: [lateCell, doneCell],
+      subtotals: [lateCell],
+      total: lateCell,
+    },
+  ],
+  summary: { byStatus: { DELAY_END: 1, COMPLETED: 1 }, emptyCells: 0, totalCells: 2 },
+};
+
+/** CODING chỉ có việc ở khâu Review → cột Create của nó bị rút. */
+const BOARD_CODING_NARROW: SignboardResponse = {
+  ...BOARD,
+  phaseCode: 'CODING',
+  columnGroups: [
+    { subPhaseKey: '', subPhaseLabel: 'Coding', taskColumns: [{ taskCode: 'REVIEW', label: 'Review' }] },
+  ],
+  columns: [{ taskCode: 'REVIEW', label: 'Review', subPhaseKey: '' }],
+  rows: [
+    {
+      functionKey: 'report',
+      functionName: 'Report',
+      pics: [],
+      cells: [doneCell],
+      subtotals: [doneCell],
+      total: doneCell,
+    },
+  ],
+  summary: { byStatus: { COMPLETED: 1 }, emptyCells: 0, totalCells: 1 },
+};
+
+function stubTwoBoards(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const body = url.endsWith('/phases')
+        ? PHASES_MULTI
+        : url.endsWith('/unparsed')
+          ? UNPARSED
+          : url.endsWith('/plan-conflicts')
+            ? CONFLICTS
+            : url.endsWith('/phase/DESIGN')
+              ? BOARD_DESIGN_WIDE
+              : url.endsWith('/phase/CODING')
+                ? BOARD_CODING_NARROW
+                : null;
+      if (body === null) return Promise.reject(new Error(`no mock for ${url}`));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }),
+  );
+}
+
+describe('SignboardScreen — nhiều Phase, mỗi bảng rút cột riêng', () => {
+  it('bảng của Phase này KHÔNG mượn cột của Phase kia', async () => {
+    // Mỗi Phase là MỘT lần gọi API riêng nên việc rút cột rỗng diễn ra độc lập:
+    // DESIGN có việc ở cả Create lẫn Review, CODING chỉ có Review → bảng CODING
+    // không được hiện cột Create chỉ vì bảng bên cạnh có.
+    stubTwoBoards();
+    renderAt('/signboard?epic=PAY-1&phases=DESIGN,CODING');
+
+    await waitFor(() => expect(screen.getByText('Login')).toBeTruthy());
+    expect(screen.getByText('Report')).toBeTruthy();
+
+    const design = within(screen.getByLabelText('Phase Thiết kế'));
+    const coding = within(screen.getByLabelText('Phase Lập trình'));
+
+    expect(design.getByRole('columnheader', { name: 'Create' })).toBeTruthy();
+    expect(design.getByRole('columnheader', { name: 'Review' })).toBeTruthy();
+
+    expect(coding.getByRole('columnheader', { name: 'Review' })).toBeTruthy();
+    expect(coding.queryByRole('columnheader', { name: 'Create' })).toBeNull();
   });
 });

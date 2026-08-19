@@ -176,6 +176,7 @@ const DQ_ISSUE: DataQualityIssue = {
   epicDisplayName: 'Payment',
   summary: '[PAY][BE][DEV][Login]_Create',
   problems: ['MISSING_ESTIMATE', 'MISSING_WBS_DATE'],
+  pics: [{ accountId: 'acc-1', displayName: 'Nguyễn An' }],
   exempt: false,
   exemptBy: null,
 };
@@ -211,6 +212,9 @@ describe('registerOpsRoutes — GET /api/ops/data-quality/issues', () => {
     const body = res.json() as { collectedAt: string; issues: DataQualityIssue[] };
     expect(body.collectedAt).toBe('2026-03-10T02:00:00.000Z');
     expect(body.issues[0]?.problems).toEqual(['MISSING_ESTIMATE', 'MISSING_WBS_DATE']);
+    // PIC đi kèm từng ticket: bảng chi tiết lọc theo người, và file CSV gửi đi
+    // phải nói được AI sửa dòng nào.
+    expect(body.issues[0]?.pics).toEqual([{ accountId: 'acc-1', displayName: 'Nguyễn An' }]);
   });
 });
 

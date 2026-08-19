@@ -1,4 +1,5 @@
 import type { DataQualityIssue, DqProblem } from '@app/shared';
+import { picLabel } from './data-quality-filter.js';
 
 /**
  * Dựng file CSV báo cáo chi tiết lỗi dữ liệu — HÀM THUẦN, để test được phần
@@ -24,13 +25,24 @@ function csvField(value: string): string {
 }
 
 export function buildDataQualityCsv(issues: readonly DataQualityIssue[]): string {
-  const header = ['Epic', 'Epic name', 'Ticket', 'Summary', 'Problems', 'Marked "no fix needed"'];
+  const header = [
+    'Epic',
+    'Epic name',
+    'Ticket',
+    'Summary',
+    // Ai phải sửa — thiếu cột này thì file gửi đi trở thành việc của "cả đội",
+    // tức là của không ai.
+    'PIC',
+    'Problems',
+    'Marked "no fix needed"',
+  ];
   const rows = issues.map((i) => [
     i.epicKey,
     i.epicDisplayName,
     i.issueKey,
     i.summary,
     // Nối bằng "; " chứ không phải dấu phẩy để Excel không tách nhầm cột.
+    i.pics.map(picLabel).join('; '),
     i.problems.map((p) => PROBLEM_LABEL[p]).join('; '),
     i.exempt ? 'yes' : 'no',
   ]);

@@ -1,0 +1,142 @@
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * E2E màn "Log work" — theo dõi việc log work của member (toàn đội).
+ *
+ * Spec KHÔNG cần API thật: chặn `/api/**` bằng `page.route`. Trạng thái "đã
+ * verify" giữ trong một biến đóng để bấm verify → POST → tải lại thấy đổi.
+ */
+
+interface Opts {
+  role: 'ADMIN' | 'PM' | 'VIEWER';
+  hasParticipantData: boolean;
+  noMembers?: boolean;
+  verified?: boolean;
+}
+
+function report(opts: Opts, verified: boolean) {
+  const members = opts.noMembers
+    ? []
+    : [
+        {
+          accountId: 'u1',
+          displayName: 'Nguyễn An',
+          totalLoggedHours: 12.5,
+          hasOpenAssignments: true,
+          tickets: [
+            {
+              issueKey: 'PAY-11',
+              epicKey: 'PAY-1',
+              projectKey: 'PAY',
+              summary: 'Payout retry worker',
+              parentKey: null,
+              phaseCode: 'DEV',
+              statusCategory: 'indeterminate',
+              originalEstimateHours: 8,
+              memberLoggedHours: 0,
+              totalLoggedHours: 0,
+              notLogged: !verified,
+              exempted: verified,
+              exemptedBy: verified ? 'pm@example.com' : null,
+              exemptedAt: verified ? '2026-08-12T00:00:00.000Z' : null,
+            },
+          ],
+          notLoggedCount: verified ? 0 : 1,
+          exemptedCount: verified ? 1 : 0,
+          primaryEpicKey: 'PAY-1',
+          expectedHours: 40,
+          deficitHours: 27.5,
+          behind: true,
+        },
+      ];
+  return {
+    from: '2026-08-10',
+    to: '2026-08-16',
+    members,
+    totalMembers: members.length,
+    totalNotLogged: verified || opts.noMembers ? 0 : 1,
+    visibleEpicCount: 1,
+    hasParticipantData: opts.hasParticipantData,
+    partialPeriod: false,
+    warnings: [],
+  };
+}
+
+async function installApi(page: Page, opts: Opts): Promise<void> {
+  const state = { verified: opts.verified ?? false };
+  await page.route(
+    (url) => url.pathname.startsWith('/api/'),
+    async (route) => {
+      const req = route.request();
+      const path = new URL(req.url()).pathname;
+      const json = (body: unknown) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/logwork/exemptions') {
+        state.verified = req.method() === 'POST';
+        await json({ ok: true });
+        return;
+      }
+      if (path === '/api/logwork/settings') {
+        await json({
+          defaultHoursPerDay: 8,
+          projects: [{ projectKey: 'PAY', expectedHoursPerDay: null, canEdit: opts.role !== 'VIEWER' }],
+        });
+        return;
+      }
+      if (path === '/api/logwork') {
+        await json(report(opts, state.verified));
+        return;
+      }
+      if (path === '/api/me') {
+        await json({ userId: 'pm@example.com', role: opts.role, projects: ['PAY'] });
+        return;
+      }
+      await json({});
+    },
+  );
+}
+
+test('hiện member và ticket chưa log; PM thấy nút verify', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await expect(page.getByText('Nguyễn An').first()).toBeVisible();
+  // Card mở sẵn vì còn ticket chưa log.
+  await expect(page.getByText('⚠ no worklog')).toBeVisible();
+  await expect(page.getByRole('button', { name: '✓ verify' })).toBeVisible();
+});
+
+test('PM bấm verify thì ticket chuyển sang "đã xác nhận"', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('button', { name: '✓ verify' }).click();
+  await expect(page.getByText('✔ verified')).toBeVisible();
+});
+
+test('VIEWER không thấy nút verify, chỉ thấy nhắc "PM verifies"', async ({ page }) => {
+  await installApi(page, { role: 'VIEWER', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await expect(page.getByText('⚠ no worklog')).toBeVisible();
+  await expect(page.getByRole('button', { name: '✓ verify' })).toHaveCount(0);
+  await expect(page.getByText('PM verifies')).toBeVisible();
+});
+
+test('preset "Last week" đẩy from/to vào URL', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('button', { name: 'Last week' }).click();
+  await expect(page).toHaveURL(/from=\d{4}-\d{2}-\d{2}/);
+  await expect(page).toHaveURL(/to=\d{4}-\d{2}-\d{2}/);
+});
+
+test('không có participant thì nêu rõ hai khả năng trong empty-state', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: false, noMembers: true });
+  await page.goto('/logwork');
+
+  await expect(page.getByText('Request participants')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No members in view' })).toBeVisible();
+});

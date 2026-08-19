@@ -19,6 +19,7 @@ const NAV_LABELS = [
   'Burndown chart',
   'Signboard',
   'Phase sub-tasks',
+  'Log work',
   'Monitoring',
   'Cấu trúc tầng',
   'Phase settings',

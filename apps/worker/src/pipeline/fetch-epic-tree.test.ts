@@ -58,6 +58,9 @@ describe('fetchEpicTree — scope QUERY (project phẳng §2.5)', () => {
 
   it('lá = ticket khớp JQL, đặt ở subtasks; epic=null, tasks=[]', async () => {
     const issues: FakeIssue[] = [
+      // FakeJira (như Jira thật) VALIDATE mọi key trong mệnh đề `parent`: key
+      // không tồn tại là cả truy vấn 400. Ticket gốc phải CÓ THẬT trong fake.
+      { id: '9', key: 'FLAT-ROOT', type: 'TASK', summary: 'gốc của project phẳng' },
       { id: '10', key: 'F-1', type: 'TASK', parent: 'FLAT-ROOT', summary: '[PAY][x][Design][y]_Create', originalEstimate: 3600 },
       { id: '11', key: 'F-2', type: 'TASK', parent: 'FLAT-ROOT', summary: '[PAY][x][Dev][y]_Create', originalEstimate: 3600 },
       { id: '12', key: 'OTHER', type: 'TASK', parent: 'ELSEWHERE', summary: 'ngoài scope' },

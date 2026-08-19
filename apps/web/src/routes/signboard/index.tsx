@@ -621,6 +621,18 @@ function BoardTable({
     );
   }
 
+  // Cột nào không có task nào thì API không dựng cột đó. Hết sạch cột (mọi
+  // sub-task mang một loại task chưa khai cột) thì lưới chỉ còn tên Function —
+  // nói thẳng ra còn hơn vẽ một cái bảng rỗng.
+  if (columnGroups.length === 0) {
+    return (
+      <EmptyState
+        title="No task-type column has any sub-task"
+        description="Every configured column is empty for this Phase, so there is no grid to draw. See “Not on the board” below for the sub-tasks that fit no column."
+      />
+    );
+  }
+
   // Cột Σ (gộp mỗi Sub-phase) CHỈ có nghĩa khi có ≥2 Sub-phase để so với nhau.
   // Một Sub-phase thì Σ của nó TRÙNG KHÍT cột "Overall" (cùng đúng bộ ticket) —
   // hiện cả hai là in "total" hai lần. Bỏ Σ, giữ "Overall" cho rõ nghĩa.

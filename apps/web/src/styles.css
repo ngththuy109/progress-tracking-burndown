@@ -233,6 +233,43 @@ code {
   font-size: 15px;
 }
 
+/* --- Màn hình đăng nhập (chế độ LDAP) ------------------------------------ */
+
+/* Form thay CẢ trang khi chưa đăng nhập — canh giữa màn hình, không sidebar. */
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.login__card {
+  width: min(380px, 100%);
+  padding: 24px;
+}
+.login__card .field {
+  /* Trong form hẹp: nhãn nằm TRÊN ô nhập, không chen cùng hàng. */
+  display: grid;
+  gap: 4px;
+}
+.login__card .actions {
+  margin-top: 16px;
+}
+.login__card .actions .button {
+  width: 100%;
+}
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+.login__brand-mark {
+  font-size: 22px;
+}
+
 /* --- Ba trạng thái ------------------------------------------------------ */
 
 .state {

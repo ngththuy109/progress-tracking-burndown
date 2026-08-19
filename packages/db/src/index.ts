@@ -65,13 +65,23 @@ export {
   findByKey,
   findManyByKeys,
   listActiveEpics,
+  listVisibleActiveEpics,
   updateEpic,
   removeEpic,
   listWithHealth,
   listMissingDates,
   type UpsertTrackedEpicArgs,
   type UpdateEpicData,
+  type VisibleEpicRow,
 } from './repositories/tracked-epic.repository.js';
+
+export {
+  listExemptionsForEpics,
+  upsertExemption,
+  deleteExemption,
+  type LogworkExemptionRecord,
+  type UpsertLogworkExemptionArgs,
+} from './repositories/logwork-exemption.repository.js';
 
 export {
   findAppUser,
@@ -106,7 +116,12 @@ export {
 
 export { upsertChangelog, type ChangelogUpsertRow } from './repositories/changelog.repository.js';
 
-export { startSyncRun, finishSyncRun } from './repositories/sync-run.repository.js';
+export {
+  startSyncRun,
+  finishSyncRun,
+  failStaleSyncRuns,
+  STALE_RUN_ERROR_MESSAGE,
+} from './repositories/sync-run.repository.js';
 
 export {
   getCalendar,
@@ -178,3 +193,19 @@ export {
   loadSnapshots,
   type UpsertSnapshotResult,
 } from './repositories/snapshot.repository.js';
+
+export {
+  findLdapConfig,
+  upsertLdapConfig,
+  type LdapConfigRow,
+  type UpsertLdapConfigArgs,
+} from './repositories/auth-ldap.repository.js';
+
+export {
+  seal,
+  open,
+  parseEncryptionKey,
+  SecretBoxError,
+  SECRET_BOX_VERSION,
+  SECRET_KEY_BYTES,
+} from './crypto/secret-box.js';

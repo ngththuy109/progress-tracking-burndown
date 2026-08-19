@@ -27,6 +27,7 @@ export * from './group-rollup.js';
 export * from './snapshot.js';
 export * from './api-burndown.js';
 export * from './api-phase-subtasks.js';
+export * from './api-logwork.js';
 export * from './api-epic-ops.js';
 export * from './sync-job.js';
 export * from './reconcile.js';

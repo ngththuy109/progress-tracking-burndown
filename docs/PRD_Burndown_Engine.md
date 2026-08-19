@@ -2381,7 +2381,7 @@ CREATE INDEX idx_planshift_epic
 >
 > Signboard vì thế **tính lúc đọc**: một truy vấn trên `jira_issue` (đã có sẵn `function_key`, `task_type`, ngày plan/actual) rồi chạy cây quyết định ở mục 6.3 — thuần tính toán, không gọi Jira, không đọc lịch sử. Nhờ vậy Signboard rẻ hơn hẳn Burndown và không cần thêm bảng nào.
 
-> **Bảng phân quyền (bổ sung cho SSO, 2026-08-09 — xem [AUTH.md](./AUTH.md)).** Hai bảng dưới đây không có trong PRD gốc; thêm khi lắp xác thực SSO. Nguồn sự thật của role/projects — cổng SSO chỉ xác thực *danh tính*, còn *vai trò* tra ở đây.
+> **Bảng phân quyền (bổ sung 2026-08-09 — xem [AUTH.md](./AUTH.md)).** Hai bảng dưới đây không có trong PRD gốc; thêm khi lắp xác thực. Nguồn sự thật của role/projects — đăng nhập (LDAP) chỉ xác thực *danh tính*, còn *vai trò* tra ở đây.
 
 ```sql
 -- ============================================================
@@ -2517,7 +2517,7 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 |---|---|
 | **Hàng** | Các Function của Phase đang chọn, lấy từ tiêu đề Sub-task (mục 2.9). Sắp theo tên A→Z, có ô tìm kiếm |
 | **Nhóm cột (tầng 1)** | Các **Sub-phase** của Phase, xếp tuần tự trái→phải. Sub-phase khớp một Phase trong cấu hình lấy nhãn + `display_order` của Phase đó; Sub-phase lạ xếp sau theo A→Z; Sub-task thiếu `[Sub-phase]` gộp vào nhóm dự phòng "(No sub-phase)" ở cuối |
-| **Cột loại task (tầng 2)** | Trong MỖI Sub-phase: các loại task theo thứ tự cấu hình (Create → BALReview → FixCommentBAL → JMReview → FixCommentJM) — cùng bộ cột cho mọi nhóm để so ngang được |
+| **Cột loại task (tầng 2)** | Trong MỖI Sub-phase: các loại task theo thứ tự cấu hình (Create → BALReview → FixCommentBAL → JMReview → FixCommentJM). **Chỉ dựng cột có việc**: loại task mà Sub-phase đó không có Sub-task nào (cột toàn ô trống từ trên xuống dưới) bị bỏ hẳn, nên hai nhóm có thể khác số cột |
 | **Ô** | Ngày `plan_start → plan_end` + huy hiệu trạng thái. Ngày thực tế nằm trong tooltip. Gộp theo `(Sub-phase, loại task)` |
 | **Cột Σ (mỗi nhóm)** | Cuối mỗi Sub-phase — trạng thái xấu nhất của Function trong Sub-phase đó |
 | **Cột Tổng (Overall)** | Cuối mỗi hàng — trạng thái chung của Function trên TẤT CẢ Sub-phase |
@@ -2526,6 +2526,15 @@ Mỗi Sub-phase thành một nhóm cột, và bộ loại task lặp lại dư�
 > để **nhóm cột trên bảng**; Phase thật của Sub-task vẫn là Phase của Task cha
 > (mục 2.9.2). Sub-task thiếu bracket vẫn lên bảng bình thường, chỉ nằm ở nhóm
 > dự phòng.
+
+> **Cột rỗng không được dựng.** Một cột chỉ xuất hiện khi có **ít nhất một
+> Sub-task** rơi vào nó (xét trên CẢ bảng, không phải từng hàng): một Sub-task
+> duy nhất cũng đủ giữ cột lại, các Function khác hiện ô trống như thường. Bảng
+> Signboard rất rộng, cột mà mọi hàng đều trống chỉ đẩy cột có việc ra khỏi màn
+> hình. Sub-phase không còn cột nào (mọi Sub-task của nó mang loại task **chưa
+> khai cột**) thì cả nhóm cũng không được dựng — các Sub-task đó nằm ở khu
+> "chưa lên được bảng" (mục 6.8), không bị mất. Danh sách cột cấu hình **không
+> đổi**: cột vắng mặt chỉ vì Phase đang xem chưa có việc ở khâu đó.
 
 **Tô nền cả ô theo trạng thái** để lướt bảng thấy ngay hàng nào đang đỏ:
 
@@ -2810,7 +2819,7 @@ Ngoài các ca cụ thể, kiểm tra những **quy luật luôn phải đúng**
 | Cột Tổng nhất quán với hàng | `overallStatus` của hàng = trạng thái xấu nhất trong các ô có `present = true` của hàng đó |
 | Đã Done thì luôn Completed | `statusCategory = Done` ⟹ trạng thái là `Completed`, bất kể ngày plan là gì hay có thiếu hay không |
 | Thiếu ngày thì luôn NoPlan | Chưa Done **và** thiếu `plan_start` hoặc `plan_end` ⟹ `NoPlan`. Không bao giờ ra `NYS` hay `OnSchedule` |
-| Tổng số ô khớp | `Σ(các trạng thái trong summary) + emptyCells` = `số hàng × số cột` |
+| Tổng số ô khớp | `Σ(các trạng thái trong summary) + emptyCells` = `số hàng × số cột` — "số cột" là số cột **thật sự được dựng** (cột rỗng đã bị rút, mục 6.1) |
 | Đổi ngày hệ thống không đổi dữ liệu gốc | Chạy lại Signboard với ngày "hôm nay" khác nhau → chỉ `status` đổi, `plan_*` và `actual_*` giữ nguyên |
 
 ### 8.4. Test hồi quy & vận hành
@@ -2884,7 +2893,7 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 | Xoay vòng token | 90 ngày/lần. Có runbook hướng dẫn. Cảnh báo trước hạn 14 ngày. |
 | Chuẩn bị cho tương lai | Bọc phần xác thực sau interface `CredentialProvider`, để sau này chuyển sang OAuth mà không phải sửa engine. |
 | Ghi log | **Cấm ghi token vào log.** Có bộ lọc tự động che (redact) header `Authorization`. |
-| Xác thực người dùng | SSO (OpenID Connect) qua một **auth proxy** đứng trước API; proxy đặt header danh tính `x-user-id` (email đã xác thực) và **xoá header `x-user-*` giả** từ client. IdP đã chốt: **Microsoft Entra ID**. Chi tiết: [AUTH.md](./AUTH.md); cấu hình cổng: `config/auth-proxy/`. |
+| Xác thực người dùng | App tự đăng nhập bằng **LDAP** (form username/password → bind LDAP → phiên `ptb_sess`); API tra vai trò ở bảng `app_user`, KHÔNG tin `role` từ bên ngoài. Chi tiết: [AUTH.md](./AUTH.md). |
 | Phân quyền người dùng | Vai trò `ADMIN` / `PM` / `VIEWER` **tra bảng `app_user`** (KHÔNG suy từ quyền Jira, KHÔNG tin `role` từ header). VIEWER xem tất cả; PM xem/thao tác project mình phụ trách (gán từ danh mục `project` — nhiều–nhiều); ADMIN toàn quyền. Kiểm ở tầng API. |
 | Quyền sửa cấu hình Phase | Chỉ role **Admin** (sửa bộ Mặc định) và **PM** (sửa bộ ghi đè của project mình phụ trách). Người dùng thường chỉ xem. Mọi lần lưu đều ghi `created_by` + ghi chú lý do. |
 | Quản lý phân quyền | Chỉ **ADMIN**: màn hình Users/Projects hoặc `pnpm auth:grant`. Admin đầu tiên mồi qua `AUTH_BOOTSTRAP_ADMINS`. Không cho tự hạ quyền chính mình. |
@@ -2974,7 +2983,7 @@ Jira Cloud không công bố con số cứng, nhưng thực tế bắt đầu tr
 | R-05 | **Atlassian đổi API** (deprecate endpoint) | Thấp | Cao | Contract test chạy hằng ngày. Đăng ký nhận thông báo thay đổi của Atlassian. Bọc toàn bộ lời gọi sau một lớp adapter. | Tech Lead |
 | R-06 | **Bug múi giờ làm lệch số liệu** | Trung bình | Cao | Bắt buộc dùng `luxon`. Có golden dataset riêng cho múi giờ. Lint rule cấm gọi `new Date()` trong thư mục `engine/`. | Backend Dev |
 | R-07 | **PM không tin số liệu** vì khác Jira | **Cao** | Trung bình | Làm tính năng "giải thích số liệu": bấm vào một điểm sẽ hiện chi tiết từng Sub-task và quy tắc nào đã được áp dụng. Đào tạo PM 1 buổi. | PM |
-| R-08 | **Sub-task thiếu `wbs_start_date` / `wbs_end_date`** nên không vẽ được đường Kế hoạch cho Phase | **Cao** | Cao | Khảo sát tỉ lệ điền hai trường này ngay tuần 1. Màn hình danh sách Epic hiện cột "tình trạng dữ liệu" kèm số Sub-task thiếu ngày. API `/api/epics/:key/missing-dates` liệt kê cụ thể để PM đi điền. **Không đoán bừa ngày** khi thiếu. | PM |
+| R-08 | **Sub-task thiếu `wbs_start_date` / `wbs_end_date`** nên không vẽ được đường Kế hoạch cho Phase | **Cao** | Cao | Khảo sát tỉ lệ điền hai trường này ngay tuần 1. Khu *Data quality* của màn Monitoring hiện số Sub-task thiếu ngày theo từng Epic. API `/api/epics/:key/missing-dates` liệt kê cụ thể để PM đi điền. **Không đoán bừa ngày** khi thiếu. | PM |
 | R-09 | **API token rò rỉ** | Thấp | **Rất cao** | Lưu trong secret manager. Quét secret trong CI. Bộ lọc che token trong log. Xoay vòng 90 ngày. | DevOps |
 | R-10 | **Log giờ lùi ngày quá nhiều** làm job tính lại chạy liên tục | Trung bình | Trung bình | Gom các yêu cầu tính lại vào 1 lần chạy mỗi giờ, thay vì tính ngay lập tức. Theo dõi số lượng qua metric. | Backend Dev |
 | **R-11** | **Đường Kế hoạch trôi theo thực tế nên không phát hiện được trễ tiến độ.** Vì đã bỏ baseline, mỗi lần ai đó lùi `wbs_end_date` là kế hoạch tự giãn ra — biểu đồ luôn trông "đúng tiến độ" dù dự án đã trễ hàng tuần | **Cao** | **Cao** | Đây là hệ quả **đã biết trước và đã chấp nhận** khi chọn bỏ baseline. Bốn tuyến phòng thủ: (1) bảng **Lịch sử dịch chuyển kế hoạch** ghi mọi lần `plan_end` bị lùi; (2) dấu mốc trên biểu đồ mỗi lần lùi; (3) chỉ số tổng "Kế hoạch đã bị lùi N ngày qua M lần" hiện ngay đầu biểu đồ; (4) cảnh báo P2 khi tổng số ngày lùi > 20% độ dài Phase. Xem thêm E-01 và E-15 | PM |
@@ -3381,8 +3390,8 @@ nghỉ khác ngày nhau (Tết ↔ Golden Week…), vì vậy:
 - API: `GET /api/epics/{epicKey}/plan-conflicts` (chi tiết từng vi phạm, kèm
   tên ngày lễ) và `GET /api/plan-conflicts/summary` (đếm theo Epic; PM chỉ
   nhận project mình — §9.3). Tính **lúc đọc**, không chốt vào snapshot.
-- UI: badge ⚠ + banner trên màn Phase sub-tasks; cột "On days off" trên màn
-  Epics.
+- UI: badge ⚠ + banner trên màn Phase sub-tasks; cột "On days off" trong khu
+  *Data quality* của màn Monitoring (bảng *Planned dates*).
 
 ### C.4 Gán lịch cho Epic (T-38)
 

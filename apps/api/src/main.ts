@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { Redis } from 'ioredis';
 import { Queue, type JobsOptions } from 'bullmq';
-import { assertMigrationsApplied, disconnectPrisma, getPrisma } from '@app/db';
+import { assertMigrationsApplied, disconnectPrisma, getPrisma, open, parseEncryptionKey, seal } from '@app/db';
+import { Client as LdaptsClient } from 'ldapts';
 import {
   JiraClient,
   fieldMappingConfigSchema,
@@ -20,6 +21,10 @@ import {
 import { withTimeout, TimeoutError, type StatusIdMap } from '@app/shared';
 import { createServer, DEFAULT_PORT, type ServerDeps } from './server.js';
 import { authConfigFromEnv } from './adapters/principal.js';
+import { createLdapConfigStore } from './adapters/ldap-config.adapters.js';
+import { createRedisSessionStore } from './adapters/session.adapters.js';
+import type { LdapClientFactory } from './services/ldap.service.js';
+import type { TokenBox } from './routes/auth.routes.js';
 
 /**
  * Điểm vào tiến trình API.
@@ -101,6 +106,15 @@ function readTimeoutMs(name: string, fallback: number): number {
 const REDIS_READY_TIMEOUT_MS = readTimeoutMs('REDIS_READY_TIMEOUT_MS', 10_000);
 const BOOTSTRAP_TIMEOUT_MS = readTimeoutMs('BOOTSTRAP_TIMEOUT_MS', 60_000);
 
+/**
+ * Hạn chót cho mỗi LỆNH Redis (cache, hàng đợi backfill) và mỗi REQUEST Jira của
+ * API, để một phụ thuộc treo GIỮA CHỪNG không làm handler request chờ mãi (khác
+ * với treo lúc khởi động — đã có ping/watchdog chặn). API không chạy BullMQ
+ * Worker nên không có lệnh chờ (blocking) trên kết nối này → gắn hạn an toàn.
+ */
+const REDIS_COMMAND_TIMEOUT_MS = readTimeoutMs('REDIS_COMMAND_TIMEOUT_MS', 10_000);
+const JIRA_REQUEST_TIMEOUT_MS = readTimeoutMs('JIRA_REQUEST_TIMEOUT_MS', 30_000);
+
 /** Log JSON có cấu trúc, cùng dạng với Fastify logger (C-9). */
 function log(event: Record<string, unknown>): void {
   console.log(JSON.stringify({ level: 'info', name: 'api-bootstrap', ...event }));
@@ -163,6 +177,22 @@ function loadFieldMappingConfig(): FieldMappingConfig {
   return fieldMappingConfigSchema.parse(raw);
 }
 
+/**
+ * Hộp seal/open bí mật trong DB (bind password LDAP) — dựng từ
+ * APP_ENCRYPTION_KEY. `null` khi khóa CHƯA đặt (chưa cần mã hóa gì): route lưu
+ * bind password sẽ từ chối rõ ràng thay vì lưu thô. Khóa CÓ nhưng sai độ dài
+ * thì `parseEncryptionKey` ném ngay — fail-fast lúc boot (C-9).
+ */
+function createTokenBox(env: NodeJS.ProcessEnv): TokenBox | null {
+  const raw = env['APP_ENCRYPTION_KEY'];
+  if (!raw || raw.trim() === '') return null;
+  const key = parseEncryptionKey(raw);
+  return {
+    seal: (plaintext) => seal(plaintext, key),
+    open: (sealed) => open(sealed, key),
+  };
+}
+
 async function bootstrap(): Promise<void> {
   const env = readEnv(process.env);
   log({
@@ -185,7 +215,10 @@ async function bootstrap(): Promise<void> {
 
   // BullMQ BẮT BUỘC `maxRetriesPerRequest: null` trên kết nối nó dùng; kết nối
   // này vừa cho hàng đợi backfill vừa cho cache nên đặt luôn ở đây.
-  const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const redis = new Redis(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
+  });
   redis.on('error', (err: Error) => log({ event: 'redis.error', message: err.message }));
 
   // CHẶN ca Redis "treo": instance accept TCP nhưng không trả lời lệnh nào. Không
@@ -200,7 +233,7 @@ async function bootstrap(): Promise<void> {
   // 40 req/s toàn hệ thống (C-7) tồn tại để ghìm lượt đồng bộ HÀNG LOẠT của
   // worker (R-04), không phải mấy lookup này. Thông tin xác thực đọc từ
   // JIRA_* env qua BasicAuthProvider mặc định.
-  const jira = new JiraClient({ logger: (e) => log(e) });
+  const jira = new JiraClient({ logger: (e) => log(e), requestTimeoutMs: JIRA_REQUEST_TIMEOUT_MS });
 
   // Field mapping: nạp MỘT lần, CHẶN khởi động nếu field sai/thiếu (PRD §2.8,
   // E-23) — thà không chạy còn hơn để mọi Phase mất đường Kế hoạch trong im lặng.
@@ -216,6 +249,20 @@ async function bootstrap(): Promise<void> {
     defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });
 
+  // Client LDAP thật, dựng MỚI cho từng lượt bind/test. `allowSelfSigned` chỉ
+  // có nghĩa với ldaps:// — chứng chỉ tự ký thường gặp ở LDAP nội bộ; ldap://
+  // thường không TLS nên không có gì để nới lỏng. Timeout ngắn để một server
+  // LDAP treo không giữ request đăng nhập mãi.
+  const ldapClientFactory: LdapClientFactory = ({ url, allowSelfSigned }) =>
+    new LdaptsClient({
+      url,
+      connectTimeout: 5_000,
+      timeout: 10_000,
+      ...(allowSelfSigned && url.startsWith('ldaps://')
+        ? { tlsOptions: { rejectUnauthorized: false } }
+        : {}),
+    });
+
   const deps: ServerDeps = {
     prisma,
     redis,
@@ -224,9 +271,18 @@ async function bootstrap(): Promise<void> {
     backfillQueue,
     statusIdMap,
     cache: createConfigCache(redis),
-    // Danh tính do cổng SSO đặt vào header; vai trò tra `app_user`. Cấu hình
-    // qua AUTH_* (xem adapters/principal.ts và config/auth-proxy/).
+    // Danh tính qua header (local dev + van khôi phục AUTH_FORCE_HEADER); vai trò
+    // tra `app_user`. Cấu hình qua AUTH_* (xem adapters/principal.ts).
     auth: authConfigFromEnv(process.env),
+    // Đăng nhập LDAP in-app: phiên trên Redis (cookie `ptb_sess`), cấu hình ở
+    // bảng `auth_ldap_config`, bind password mã hoá bằng TokenBox dưới đây.
+    sessions: createRedisSessionStore(redis),
+    ldapConfigs: createLdapConfigStore(prisma),
+    ldapClientFactory,
+    // AUTH_FORCE_HEADER=1: van thoát hiểm khi LDAP bật nhầm cấu hình hỏng —
+    // ép quay về danh tính header mà không cần sửa database.
+    forceHeaderAuth: process.env['AUTH_FORCE_HEADER'] === '1',
+    tokenBox: createTokenBox(process.env),
   };
 
   const app = createServer(deps);

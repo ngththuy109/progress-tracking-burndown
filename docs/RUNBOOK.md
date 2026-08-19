@@ -123,7 +123,7 @@ Bình thường `healthz` trả `{"status":"ok","components":{"postgres":"ok","r
 | Dấu hiệu trong `lastError` | Nguyên nhân | Cách xử lý |
 |---|---|---|
 | `401` hoặc `403` | Token Jira hết hạn hoặc bị thu hồi | Đổi token — xem quy trình bên dưới |
-| `Epic không tồn tại` | Ai đó xoá hoặc đổi key Epic trên Jira | Bỏ theo dõi Epic đó |
+| `Epic không tồn tại` / log `EPIC_DELETED_IN_JIRA` | Epic đã bị xoá trên Jira | Resync (hoặc job đêm) tự **xoá mềm** toàn bộ issue và **giữ nguyên** lịch sử — không còn kẹt ở ERROR. Bỏ theo dõi Epic nếu không cần giữ nữa |
 | `timeout` / `ECONNRESET` | Jira chậm hoặc mạng chập chờn | Bấm **Run again** ở `/ops`; thường qua ngay |
 
 **Khi nào gọi Tech Lead:** chạy lại hai lần vẫn hỏng với cùng một lỗi.
@@ -256,6 +256,27 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 ---
 
+## [P2] Job kẹt ở `RUNNING` — lần chạy không kết thúc
+
+**Triệu chứng.** `/ops` hiện một lần chạy ở `RUNNING` mãi không xong (nhiều phút tới hàng giờ), thường khi database/Jira/Redis chập chờn.
+
+**Cách hệ thống tự lo (từ 2026-08).** Hai lớp chặn khiến chuyện này **tự khỏi**, không cần chạy SQL tay:
+
+1. **Hạn chót cấp kết nối** — mọi lời gọi Postgres, Jira, Redis trong job đều có hạn (xem `.env.example` khối "Hạn chót lúc CHẠY"). Kết nối treo giờ **ném lỗi** → job hỏng rồi thử lại theo BullMQ, thay vì `await` chờ mãi. Nhờ vậy một lần chạy không còn "sống" vô hạn.
+2. **Quét dọn dòng mồ côi** — nếu worker bị **giết cứng** (OOM/kill -9), hoặc DB sập đúng lúc job đang ghi `FAILED`, dòng đó vẫn kẹt ở `RUNNING`. Worker đánh nó thành `FAILED` (kèm `error_message` "Worker dừng giữa chừng…") khi nó quá `STALE_RUN_TIMEOUT_MS` (mặc định 1 giờ) — **lúc khởi động** và **mỗi 5 phút** sau đó. Trên `/ops` nó chuyển từ `RUNNING` sang `FAILED` trong vòng ≤ 5 phút sau khi qua mốc.
+
+**Cần dọn NGAY (không muốn chờ tới mốc)?** Khởi động lại worker (nó dọn ngay lúc khởi động), hoặc chạy tay:
+
+```sql
+UPDATE sync_run
+   SET status = 'FAILED', error_message = 'Dọn tay: worker đã dừng', finished_at = NOW(), duration_ms = 0
+ WHERE status = 'RUNNING' AND started_at < NOW() - INTERVAL '1 hour';
+```
+
+**Khi nào gọi Tech Lead:** dòng mới liên tục kẹt `RUNNING` dù DB/Jira/Redis đều ổn — nghĩa là có nhánh gọi mạng nào đó chưa được bọc hạn chót.
+
+---
+
 ## [P3] `DIRTY_PHASE_DATA` — Nhiều Task chưa phân loại
 
 **Triệu chứng.** Hơn 20% Task rơi vào *Unclassified*.
@@ -274,6 +295,13 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Xử lý.** PM nhờ đội điền ước lượng trên Jira. Hệ thống không tự đoán (rủi ro **R-02**).
 
+> **Giao việc cho đúng người.** Ở khu *Data quality* bấm **Show ticket details**:
+> bảng có cột **PIC** (lấy từ "Request participants" của Jira, cùng nguồn với cột
+> PIC trên Signboard) và ô lọc **PIC**. Chọn một người là ra đúng phần việc của
+> người đó, file CSV tải về cũng chỉ còn đúng những dòng đang nhìn thấy. Nhóm
+> **No PIC yet** là ticket chưa gán ai — không lọc riêng thì nó không nằm trong
+> danh sách của ai cả và không bao giờ được sửa.
+
 ---
 
 ## [P3] `MISSING_WBS_DATE` — Nhiều Sub-task thiếu ngày kế hoạch
@@ -282,7 +310,7 @@ curl -s localhost:3000/api/epic/PAY-1/plan-shift-history | jq
 
 **Ảnh hưởng.** Không so được sớm/trễ cho phần đó; ô Signboard hiện `No planned dates` (rủi ro **R-08**).
 
-**Xử lý.** Mở màn hình Epic, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể, gửi cho đội.
+**Xử lý.** Mở màn hình **Monitoring** → khu *Data quality* → bảng *Planned dates*, bấm vào số ở cột **Missing dates** để xem danh sách cụ thể (kèm câu JQL và file CSV), gửi cho đội. Màn *Epics* cũng gắn link `⚠ Check data quality` trên đúng những Epic đang có lỗi dữ liệu — đó là đường đi nhanh nhất sang đây.
 
 ---
 
@@ -381,6 +409,61 @@ pnpm smoke
 
 Worker chờ tối đa 30 giây cho job đang chạy. Quá hạn nó thoát với mã khác 0 và ghi log rõ ràng.
 
+### 2a. Bật đăng nhập LDAP (lần đầu)
+
+Bật app tự đăng nhập bằng LDAP. Toàn bộ cấu hình nằm trên UI (bảng
+`auth_ldap_config`), không sửa file. Chi tiết mô hình: xem [AUTH.md §1](./AUTH.md).
+
+Nếu dùng **search-then-bind** (có tài khoản dịch vụ), đặt khoá mã hoá bind password
+cho CẢ api lẫn worker trước — direct bind thì bỏ qua bước này:
+
+```bash
+# Sinh khoá 32 byte, đặt vào APP_ENCRYPTION_KEY rồi khởi động lại api + worker.
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Sau đó, **vẫn đang ở chế độ header** (đăng nhập bằng cổng/dev như thường):
+
+1. Đăng nhập bằng tài khoản **ADMIN**, vào **Admin → LDAP**.
+2. Điền `Server URL` (`ldap://` hoặc `ldaps://`) và chọn một cách xác định user:
+   - **Direct bind (template DN)** — `Template DN` chứa `{username}`, ví dụ
+     `uid={username},ou=users,dc=cty,dc=vn` (hợp OpenLDAP).
+   - **Direct bind + email lookup (Active Directory)** — bind bằng CHÍNH mật khẩu
+     người dùng: `Template DN` kiểu `cty.com.vn\{username}` (hoặc UPN
+     `{username}@cty.com.vn`), rồi khai `Search base` + `User filter` (vd
+     `(cn={username})`) để app TỰ TRA email trên chính kết nối đó. KHÔNG cần tài
+     khoản dịch vụ (bỏ trống Bind DN/password).
+   - **Search then bind (Active Directory)** — `Bind DN` + `Bind password` tài khoản
+     dịch vụ, `Search base`, và `User filter` chứa `{username}` (ví dụ
+     `(sAMAccountName={username})` cho Active Directory).
+3. Đặt `Email attribute` (mặc định `mail`) — danh tính trong hệ thống là email đọc
+   từ thuộc tính này, phải khớp `user_id` trong `app_user`.
+4. Bấm **Test** cho tới khi cả ba bước (CONNECT → BIND → SEARCH) đều xanh.
+5. Tick **Enable LDAP login** rồi bấm **Save**. Server **từ chối bật** nếu Test
+   chưa pass — không thể tự khoá mình bằng cấu hình hỏng.
+
+> **Đừng tự khoá:** trước khi bật, bảo đảm CÓ ÍT NHẤT một ADMIN mà email khớp
+> attribute email LDAP sẽ trả về (admin mồi `AUTH_BOOTSTRAP_ADMINS` hoặc dòng trong
+> `app_user`). Ngay khi bật, header danh tính bị bỏ qua — chỉ đăng nhập bằng LDAP
+> mới vào được. Lỡ hỏng thì khôi phục theo 2b.
+
+### 2b. Bật LDAP xong bị khóa ngoài (cấu hình sai / LDAP server hỏng)
+
+Server đã chặn trước phần lớn ca này (từ chối bật khi Test chưa pass), nhưng
+LDAP server vẫn có thể hỏng SAU khi bật (đổi mật khẩu tài khoản dịch vụ, đổi
+cấu trúc cây LDAP, server sập...). Khi không ai đăng nhập được nữa:
+
+```bash
+# 1. Tạm quay về đường header (dev/khôi phục):
+AUTH_FORCE_HEADER=1   # đặt vào env của API rồi khởi động lại
+# 2. Vào Admin → LDAP với header danh tính x-user-id=<email admin> (đặt qua
+#    reverse proxy tạm, hoặc gọi API bằng curl -H). Sửa cấu hình, Test pass, Lưu.
+# 3. BỎ AUTH_FORCE_HEADER đi và khởi động lại lần nữa.
+```
+
+`AUTH_FORCE_HEADER=1` chỉ dành cho khôi phục — để quên nó là mở lại đường
+header vĩnh viễn ngay cả khi LDAP đang bật.
+
 ### 3. Tắt khẩn cấp việc gọi Jira
 
 ```bash
@@ -478,8 +561,8 @@ psql "$DATABASE_URL" -f tools/db/fix-epic-calendar.sql
 
 Liên quan: cột Signboard nào do phía JP làm (JMReview…) thì đặt **Side = JP**
 ở màn **Signboard columns** — báo cáo "plan rơi vào ngày nghỉ" (màn Phase
-sub-tasks và cột *On days off* ở màn Epics) dựa vào cờ đó để biết soi bằng
-lịch nào.
+sub-tasks và cột *On days off* trong khu *Data quality* của màn Monitoring)
+dựa vào cờ đó để biết soi bằng lịch nào.
 
 ---
 

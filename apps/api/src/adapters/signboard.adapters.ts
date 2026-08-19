@@ -34,11 +34,14 @@ const d = (v: Date | null): string | null => (v === null ? null : v.toISOString(
 /**
  * Chuẩn hoá cột JSONB `sb_request_participants` thành `SignboardPic[]`.
  *
+ * Dùng chung với khu Data quality của màn Monitoring (`ops.adapters.ts`): cùng
+ * một cột dữ liệu thì phải đọc theo cùng một luật, không chép lại thành hai bản.
+ *
  * Đọc PHÒNG THỦ: cột do worker ghi (đã đúng hình dạng) nhưng vẫn có thể là null,
  * hoặc dữ liệu cũ trước migration. Bỏ phần tử thiếu `accountId`; `displayName`
  * không phải chuỗi thì coi như `null` (chưa tra được tên).
  */
-function toPics(raw: unknown): SignboardPic[] {
+export function toPics(raw: unknown): SignboardPic[] {
   // Driver `pg` thường trả JSONB đã parse (mảng), nhưng phòng ca trả về chuỗi.
   const value =
     typeof raw === 'string'

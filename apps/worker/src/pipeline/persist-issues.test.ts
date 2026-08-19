@@ -68,6 +68,7 @@ function build(subtasks: JiraIssue[]) {
     tasks: [mkIssue('1001', 'PAY-101', '[Phase] Development', 'PAY-100')],
     subtasks,
     liveKeys: new Set(['PAY-100', 'PAY-101', ...subtasks.map((s) => s.key)]),
+    epicGone: false,
   };
   return buildRecords({
     epicKey: 'PAY-100',
@@ -234,6 +235,7 @@ describe('buildRecords — Request participants (cột PIC)', () => {
       tasks: [mkIssue('1001', 'PAY-101', '[Phase] Development', 'PAY-100')],
       subtasks: [subtask],
       liveKeys: new Set(['PAY-100', 'PAY-101', subtask.key]),
+      epicGone: false,
     };
     return buildRecords({
       epicKey: 'PAY-100',
@@ -328,6 +330,7 @@ describe('buildRecords — tầng Giai đoạn từ title Task cha', () => {
       tasks,
       subtasks,
       liveKeys: new Set(['PAY-100', ...tasks.map((t) => t.key), ...subtasks.map((s) => s.key)]),
+      epicGone: false,
     };
     return buildRecords({
       epicKey: 'PAY-100',

@@ -72,6 +72,32 @@ export async function listActiveEpics(prisma: PrismaClient): Promise<string[]> {
   return rows.map((r) => r.epicKey);
 }
 
+export interface VisibleEpicRow {
+  epicKey: string;
+  projectKey: string;
+  calendarId: string;
+}
+
+/**
+ * Epic ACTIVE người xem được phép thấy — cho màn Log work TOÀN ĐỘI.
+ *
+ * `projectKeys = null` (ADMIN/VIEWER) → mọi Epic ACTIVE. Mảng (PM) → chỉ Epic
+ * thuộc các project đó; mảng rỗng → không Epic nào (PM chưa được gán).
+ */
+export async function listVisibleActiveEpics(
+  prisma: PrismaClient,
+  projectKeys: readonly string[] | null,
+): Promise<VisibleEpicRow[]> {
+  return prisma.trackedEpic.findMany({
+    where: {
+      status: 'ACTIVE',
+      ...(projectKeys === null ? {} : { projectKey: { in: [...projectKeys] } }),
+    },
+    select: { epicKey: true, projectKey: true, calendarId: true },
+    orderBy: { epicKey: 'asc' },
+  });
+}
+
 /**
  * Trường nào cũng có thể vắng mặt. Viết `| undefined` tường minh vì dự án bật
  * `exactOptionalPropertyTypes`: ở chế độ đó `status?: string` nghĩa là "được

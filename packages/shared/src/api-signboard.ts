@@ -58,12 +58,20 @@ export const signboardColumnHeaderSchema = z.object({
  * `[Sub-phase]` là cặp ngoặc vuông NGAY TRƯỚC Function trong tiêu đề Sub-task
  * (PRD §2.9.1). Một Phase có thể chứa nhiều Sub-phase; mỗi Sub-phase thành một
  * nhóm cột, xếp tuần tự trái→phải theo `display_order` của cấu hình Phase.
+ *
+ * Chỉ nhóm CÓ ít nhất một cột còn việc mới xuất hiện — xem `taskColumns`.
  */
 export const signboardColumnGroupSchema = z.object({
   subPhaseKey: z.string(),
   /** Nhãn hiển thị: nhãn Phase khớp trong cấu hình, nếu không thì chữ gốc. */
   subPhaseLabel: z.string(),
-  /** Các loại task trong nhóm — cùng bộ cột cấu hình, cùng thứ tự cho mọi nhóm. */
+  /**
+   * Các loại task trong nhóm, theo thứ tự cấu hình.
+   *
+   * CHỈ gồm loại task mà Sub-phase này thật sự có Sub-task: cột không có việc
+   * nào (mọi hàng đều là ô trống) không được dựng, nên hai nhóm có thể khác số
+   * cột nhau. Nhóm không còn cột nào thì không xuất hiện trong `columnGroups`.
+   */
   taskColumns: z.array(z.object({ taskCode: z.string(), label: z.string() })),
 });
 

@@ -7,6 +7,7 @@ import type { Redis } from 'ioredis';
 import {
   CalendarCache,
   DEFAULT_PHASE_CONFIG,
+  failStaleSyncRuns,
   findActiveConfigSet,
   findByKey,
   findManyByKeys,
@@ -74,6 +75,9 @@ const WEEKLY_RECONCILE_SWEEP = 'weekly-reconcile-sweep';
 // Quét `dirty:epics` (PRD §2.2.7, §4.7): nhặt Epic bị đánh dấu cần tính lại
 // (đổi Phase settings, worklog lùi ngày, mất khoá) và đẩy backfill toàn bộ.
 const DIRTY_EPICS_SWEEP = 'dirty-epics-sweep';
+// Quét dọn `sync_run` kẹt ở RUNNING: đánh FAILED cho dòng mồ côi (worker chết
+// giữa chừng, hoặc DB sập đúng lúc ghi FAILED). Chạy trên hàng đợi sync.
+const STALE_RUN_SWEEP = 'stale-run-sweep';
 
 export interface WireDeps {
   readonly prisma: PrismaClient;
@@ -88,6 +92,9 @@ export interface WireDeps {
   readonly nightlyCron: string;
   readonly weeklyReconcileCron: string;
   readonly dirtySweepCron: string;
+  readonly staleRunSweepCron: string;
+  /** Tuổi tối thiểu để coi một dòng `RUNNING` là mồ côi (ms). Xem `failStaleSyncRuns`. */
+  readonly staleRunTimeoutMs: number;
 }
 
 export interface WiredWorker {
@@ -105,6 +112,7 @@ interface JobContext {
   readonly queues: QueueSet;
   readonly log: (event: Record<string, unknown>) => void;
   readonly now: () => Date;
+  readonly staleRunTimeoutMs: number;
 }
 
 /**
@@ -130,6 +138,7 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
     queues,
     log,
     now,
+    staleRunTimeoutMs: deps.staleRunTimeoutMs,
   };
 
   const handlers: HandlerMap = {
@@ -142,6 +151,7 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
     [NIGHTLY_SWEEP]: () => runNightlySweep(ctx),
     [WEEKLY_RECONCILE_SWEEP]: () => runWeeklyReconcileSweep(ctx),
     [DIRTY_EPICS_SWEEP]: () => runDirtyEpicsSweep(ctx),
+    [STALE_RUN_SWEEP]: () => runStaleRunSweep(ctx),
   };
 
   // Một Worker cho mỗi hàng đợi. BullMQ tự nhân bản kết nối cho client chờ, nên
@@ -168,6 +178,13 @@ export async function wireWorker(deps: WireDeps): Promise<WiredWorker> {
     DIRTY_EPICS_SWEEP,
     { pattern: deps.dirtySweepCron },
     { name: DIRTY_EPICS_SWEEP, data: {} },
+  );
+  // Quét dọn dòng RUNNING mồ côi định kỳ — không phải chờ tới lần restart worker
+  // mới dọn được, và bắt được cả ca DB vừa hồi phục sau khi job hỏng lúc DB sập.
+  await queues.sync.upsertJobScheduler(
+    STALE_RUN_SWEEP,
+    { pattern: deps.staleRunSweepCron },
+    { name: STALE_RUN_SWEEP, data: {} },
   );
 
   log({ event: 'worker.wired', queues: ['sync', 'backfill', 'reconcile'] });
@@ -361,6 +378,23 @@ async function runDirtyEpicsSweep(ctx: JobContext): Promise<void> {
     },
     log: (e) => ctx.log(e),
   });
+}
+
+/**
+ * Đánh FAILED cho các `sync_run` kẹt ở RUNNING quá `staleRunTimeoutMs`.
+ *
+ * Đây là nửa CÒN LẠI của việc "job treo không kết thúc": hạn chót cấp driver
+ * (Jira/Postgres/Redis) chặn job KHÔNG treo nữa, còn quét này dọn những dòng đã
+ * MỒ CÔI từ trước — worker bị giết cứng, hoặc DB sập đúng lúc job đang ghi FAILED
+ * nên chính bản ghi FAILED cũng không xuống được. Chỉ là ghi lại quan sát cho
+ * màn hình Monitoring; không đụng tới hàng đợi hay trạng thái Epic.
+ */
+async function runStaleRunSweep(ctx: JobContext): Promise<void> {
+  const reaped = await failStaleSyncRuns(ctx.prisma, {
+    now: ctx.now(),
+    olderThanMs: ctx.staleRunTimeoutMs,
+  });
+  ctx.log({ event: 'stale-run.swept', reaped, olderThanMs: ctx.staleRunTimeoutMs });
 }
 
 // ---------------------------------------------------------------------------

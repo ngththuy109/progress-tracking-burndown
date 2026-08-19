@@ -35,16 +35,23 @@ export {
 export {
   withRetry,
   isRetryable,
+  isIssueDoesNotExistError,
   parseRetryAfter,
   backoffDelayMs,
   JiraHttpError,
+  JiraRequestTimeoutError,
   MAX_RETRIES,
   BASE_DELAY_MS,
   MAX_JITTER_MS,
   type RetryOptions,
 } from './retry.js';
 
-export { JiraClient, MAX_CONCURRENT_JIRA_CALLS, type JiraClientOptions } from './client.js';
+export {
+  JiraClient,
+  MAX_CONCURRENT_JIRA_CALLS,
+  DEFAULT_JIRA_REQUEST_TIMEOUT_MS,
+  type JiraClientOptions,
+} from './client.js';
 
 export * from './endpoints.js';
 

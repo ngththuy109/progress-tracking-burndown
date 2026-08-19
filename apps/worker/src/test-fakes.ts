@@ -67,6 +67,12 @@ export interface FakeJiraOptions {
   rateLimitFirstNCalls?: number;
   /** Mọi lời gọi đều hỏng — dùng cho ca "Jira lỗi liên tục". */
   failEverything?: boolean;
+  /**
+   * Ép `/issue/{key}/changelog` và `/worklog` trả 404 cho các key này DÙ issue vẫn
+   * có trong `issues` — mô phỏng issue bị xoá ĐÚNG lúc job chạy (giữa lấy cây và
+   * lấy lịch sử). Issue KHÔNG có trong `issues` thì luôn 404, khỏi cần liệt kê ở đây.
+   */
+  history404Keys?: string[];
 }
 
 export class FakeJira {
@@ -116,6 +122,23 @@ export class FakeJira {
     if (u.pathname === '/rest/api/3/search/jql') {
       const body = JSON.parse(String(init?.body ?? '{}')) as { jql: string };
       this.jqls.push(body.jql);
+
+      // Jira Cloud VALIDATE mọi key trong mệnh đề `key`/`parent`: chỉ cần MỘT key
+      // được tham chiếu mà không tồn tại là cả truy vấn trả HTTP 400 "does not
+      // exist" (KHÔNG phải danh sách rỗng). Đây chính là hành vi khiến Resync một
+      // Epic đã bị xoá phát sinh lỗi — mô phỏng đúng để test tái hiện được.
+      const existing = new Set(this.opts.issues.map((i) => i.key));
+      const missing = referencedKeys(body.jql).find((k) => !existing.has(k));
+      if (missing !== undefined) {
+        return json(
+          {
+            errorMessages: [`An issue with key '${missing}' does not exist for the field 'key'.`],
+            errors: {},
+          },
+          400,
+        );
+      }
+
       const issues = this.resolveJql(body.jql).map((i) => this.toJiraIssue(i));
       // Enhanced search: một trang, không còn nextPageToken → searchIssues dừng.
       return json({ issues, isLast: true });
@@ -124,6 +147,7 @@ export class FakeJira {
     const worklogMatch = /^\/rest\/api\/3\/issue\/([^/]+)\/worklog$/.exec(u.pathname);
     if (worklogMatch) {
       const key = decodeURIComponent(worklogMatch[1]!);
+      if (this.isIssueGone(key)) return issueNotFound();
       const worklogs = (this.opts.worklogs ?? [])
         .filter((w) => w.issueKey === key)
         .map((w) => this.toJiraWorklog(w));
@@ -133,6 +157,7 @@ export class FakeJira {
     const changelogMatch = /^\/rest\/api\/3\/issue\/([^/]+)\/changelog$/.exec(u.pathname);
     if (changelogMatch) {
       const key = decodeURIComponent(changelogMatch[1]!);
+      if (this.isIssueGone(key)) return issueNotFound();
       const values = (this.opts.changelog ?? [])
         .filter((c) => c.issueKey === key)
         .map((c) => ({
@@ -170,6 +195,17 @@ export class FakeJira {
     }
 
     return json({ message: `Đường dẫn chưa hỗ trợ: ${u.pathname}` }, 404);
+  }
+
+  /**
+   * Issue KHÔNG còn trên Jira: đọc lịch sử theo key sẽ bị 404 (như Jira thật).
+   *
+   * Gồm cả issue vắng mặt trong `issues` (đã xoá) lẫn key bị ép 404 qua
+   * `history404Keys` (mô phỏng xoá đúng lúc job chạy).
+   */
+  private isIssueGone(key: string): boolean {
+    if ((this.opts.history404Keys ?? []).includes(key)) return true;
+    return !this.opts.issues.some((i) => i.key === key);
   }
 
   /** Bộ suy diễn JQL đủ dùng: `key = X`, `parent = X`, `parent IN (...)`, `updated >= "..."`. */
@@ -236,6 +272,30 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+/** 404 nguyên văn của Jira khi issue không tồn tại — dùng cho endpoint theo key. */
+function issueNotFound(): Response {
+  return json(
+    { errorMessages: ['Issue does not exist or you do not have permission to see it.'], errors: {} },
+    404,
+  );
+}
+
+/**
+ * Mọi issue key được THAM CHIẾU trong mệnh đề `key`/`parent` của một JQL:
+ * `key = "X"`, `parent = "X"`, `key IN (...)`, `parent IN (...)`.
+ *
+ * Đây là các toán hạng mà Jira Cloud kiểm sự tồn tại — dùng để mô phỏng lỗi 400
+ * "does not exist". Mốc `updated >= "..."` KHÔNG phải key nên không bị bắt.
+ */
+function referencedKeys(jql: string): string[] {
+  const out: string[] = [];
+  for (const m of jql.matchAll(/(?:key|parent)\s*=\s*"([^"]+)"/g)) out.push(m[1]!);
+  for (const m of jql.matchAll(/(?:key|parent)\s+IN\s*\(([^)]*)\)/gi)) {
+    for (const km of m[1]!.matchAll(/"([^"]+)"/g)) out.push(km[1]!);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

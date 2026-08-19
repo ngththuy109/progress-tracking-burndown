@@ -5,7 +5,9 @@ import {
   getIssueWorklogs,
   getUpdatedWorklogIds,
   getWorklogsByIds,
+  isIssueDoesNotExistError,
   searchIssues,
+  JiraHttpError,
   type JiraChangelogEntry,
   type JiraClient,
   type JiraIssue,
@@ -33,7 +35,24 @@ export interface EpicTree {
   readonly subtasks: readonly JiraIssue[];
   /** Key của MỌI issue Jira đang trả về — dùng để phát hiện issue đã biến mất. */
   readonly liveKeys: ReadonlySet<string>;
+  /**
+   * CHÍNH Epic đã bị XOÁ khỏi Jira (không còn key này trên Jira nữa).
+   *
+   * Khác hẳn "Epic còn sống nhưng rỗng Task": ở đây không có gì để đọc, và mọi
+   * cổng đọc theo key (worklog/changelog của issue con) cũng sẽ trả 404. Nơi gọi
+   * dựa vào cờ này để xoá mềm toàn bộ Epic thay vì đổ job (xem `syncEpic`).
+   */
+  readonly epicGone: boolean;
 }
+
+/** Cây rỗng cho Epic đã bị xoá khỏi Jira — `liveKeys` rỗng ⇒ xoá mềm mọi issue. */
+const GONE_TREE: EpicTree = {
+  epic: null,
+  tasks: [],
+  subtasks: [],
+  liveKeys: new Set<string>(),
+  epicGone: true,
+};
 
 /**
  * Định dạng mốc thời gian cho JQL: `"yyyy-MM-dd HH:mm"`.
@@ -108,13 +127,30 @@ export async function fetchEpicTree(
   }
 
   // (1) Bản thân Epic + các Task con. KHÔNG lọc theo `updated` — xem chú thích.
-  const top = await searchIssues(client, {
-    jql: `key = ${quote(args.epicKey)} OR parent = ${quote(args.epicKey)}`,
-    fields: issueFields,
-  });
+  //
+  // Epic ĐÃ BỊ XOÁ khỏi Jira: JQL tra `key = "X"` bị trả HTTP 400 "does not
+  // exist" (KHÔNG phải 404 — xem `getIssue`). Bắt đúng lỗi đó và trả về cây rỗng
+  // `epicGone` để nơi gọi xoá mềm cả Epic, thay vì để job đổ với lỗi 400 khó hiểu
+  // và kẹt Epic ở trạng thái ERROR mãi mãi.
+  let top: readonly JiraIssue[];
+  try {
+    top = await searchIssues(client, {
+      jql: `key = ${quote(args.epicKey)} OR parent = ${quote(args.epicKey)}`,
+      fields: issueFields,
+    });
+  } catch (err) {
+    if (isIssueDoesNotExistError(err)) return GONE_TREE;
+    throw err;
+  }
 
   const epic = top.find((i) => i.key === args.epicKey) ?? null;
   const tasks = top.filter((i) => i.key !== args.epicKey);
+
+  // Lưới an toàn cho biến thể IM LẶNG: một số cấu hình/tình huống Jira trả DANH
+  // SÁCH RỖNG thay vì 400 khi key không còn (ví dụ tài khoản đồng bộ mất quyền
+  // đọc). Không có cả Epic lẫn Task nghĩa là không còn gì để đồng bộ — cũng coi
+  // như Epic đã biến mất, tránh bước đọc lịch sử theo key rồi vấp 404.
+  if (epic === null && tasks.length === 0) return GONE_TREE;
 
   // (2) Sub-task, CÓ lọc theo `updated` khi đồng bộ tăng dần.
   const taskKeys = tasks.map((t) => t.key);
@@ -154,6 +190,7 @@ export async function fetchEpicTree(
     tasks,
     subtasks,
     liveKeys: new Set([...top.map((i) => i.key), ...liveSubtaskKeys]),
+    epicGone: false,
   };
 }
 
@@ -177,7 +214,8 @@ async function fetchQueryScope(
 ): Promise<EpicTree> {
   const trimmed = jql.trim();
   if (trimmed === '') {
-    return { epic: null, tasks: [], subtasks: [], liveKeys: new Set() };
+    // Scope QUERY không có Epic nền nên không bao giờ "epic bị xoá".
+    return { epic: null, tasks: [], subtasks: [], liveKeys: new Set(), epicGone: false };
   }
 
   const leaves = await searchIssues(client, {
@@ -190,7 +228,7 @@ async function fetchQueryScope(
       ? leaves.map((i) => i.key)
       : (await searchIssues(client, { jql: `(${trimmed})`, fields: ['summary'] })).map((i) => i.key);
 
-  return { epic: null, tasks: [], subtasks: leaves, liveKeys: new Set(liveKeys) };
+  return { epic: null, tasks: [], subtasks: leaves, liveKeys: new Set(liveKeys), epicGone: false };
 }
 
 export interface FetchedHistory {
@@ -229,7 +267,7 @@ export async function fetchHistory(
 
   const changelogTask = Promise.all(
     issueKeys.map(async (key) => {
-      changelogByIssue.set(key, await getIssueChangelog(client, key));
+      changelogByIssue.set(key, await historyOrEmptyOn404(() => getIssueChangelog(client, key)));
     }),
   );
 
@@ -237,7 +275,7 @@ export async function fetchHistory(
     ? fetchWorklogsIncrementally(client, args.issueIdToKey, args.since, worklogsByIssue)
     : Promise.all(
         issueKeys.map(async (key) => {
-          worklogsByIssue.set(key, await getIssueWorklogs(client, key));
+          worklogsByIssue.set(key, await historyOrEmptyOn404(() => getIssueWorklogs(client, key)));
         }),
       );
 
@@ -250,6 +288,25 @@ export async function fetchHistory(
   const [, , deletedWorklogIds] = await Promise.all([changelogTask, worklogTask, deletedTask]);
 
   return { worklogsByIssue, changelogByIssue, deletedWorklogIds };
+}
+
+/**
+ * Đọc lịch sử của MỘT issue, coi 404 là "issue vừa biến mất" → trả về rỗng.
+ *
+ * Một Task/Sub-task có thể bị xoá ĐÚNG vào lúc job đang chạy — giữa lần lấy cây
+ * và lần lấy lịch sử. Khi đó `/issue/{key}/changelog` và `/worklog` trả 404 (không
+ * thuộc diện thử lại). Nuốt đúng 404 ở đây để MỘT issue biến mất không làm đổ cả
+ * lượt đồng bộ Epic; `markRemoved` sẽ gỡ nó ở lượt kế tiếp khi nó rời khỏi kết
+ * quả tìm kiếm. 403 (thiếu quyền) và mọi lỗi khác vẫn ném lên như cũ — chúng KHÔNG
+ * phải "issue đã biến mất" nên không được nuốt.
+ */
+async function historyOrEmptyOn404<T>(fn: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof JiraHttpError && err.status === 404) return [];
+    throw err;
+  }
 }
 
 /**

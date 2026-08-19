@@ -51,6 +51,7 @@ describe('AppLayout — thanh bên hai nhóm theo demo đã chốt', () => {
       '📉Burndown chart',
       '🗂️Signboard',
       '🧾Phase sub-tasks',
+      '⏱️Log work',
       '🩺Monitoring',
       // ② Cấu hình dự án
       '🏗️Cấu trúc tầng',

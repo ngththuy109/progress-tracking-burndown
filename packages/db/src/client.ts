@@ -8,6 +8,34 @@ export { PrismaClient };
 export { Prisma } from '@prisma/client';
 
 /**
+ * Hạn chót ở tầng driver `pg`, để một database chậm/chập chờn KHÔNG treo lời gọi
+ * mãi mãi — nguồn gốc của "job đang chạy mà không bao giờ kết thúc".
+ *
+ * `pg` (và `fetch`, và mọi socket) KHÔNG có hạn mặc định: nếu Postgres bắt tay
+ * TCP nhưng ngừng trả lời, mọi `await prisma.*` nằm chờ VÔ HẠN — job "RUNNING"
+ * vĩnh viễn, BullMQ cứ gia hạn khoá nên không coi là stalled, và dòng `sync_run`
+ * kẹt ở RUNNING. Bốn hạn dưới đây chặn đủ mọi chỗ có thể treo:
+ *
+ *   • `connectionTimeoutMillis` — không lấy nổi kết nối (server sập / pool cạn).
+ *   • `query_timeout` — client chờ kết quả một query quá lâu (server treo giữa chừng).
+ *   • `statement_timeout` — server tự huỷ query chạy quá lâu (khoá/quét bảng lớn).
+ *   • `idle_in_transaction_session_timeout` — transaction mở rồi bỏ đó (JS treo giữa 2 câu).
+ *
+ * `keepAlive` để OS phát hiện socket chết nhanh hơn thay vì chờ tới hạn trên.
+ * Mọi hạn đều là lưới chắn cho ca BẤT THƯỜNG (chỉnh nới qua env cho DB chậm),
+ * KHÔNG phải hạn cho tải bình thường — 30s dư sức cho query một-Epic.
+ */
+function readDbTimeoutMs(name: string, fallback: number): number {
+  const raw = Number(process.env[name]);
+  return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+}
+
+export const DB_CONNECT_TIMEOUT_MS = readDbTimeoutMs('DB_CONNECT_TIMEOUT_MS', 10_000);
+export const DB_QUERY_TIMEOUT_MS = readDbTimeoutMs('DB_QUERY_TIMEOUT_MS', 30_000);
+export const DB_STATEMENT_TIMEOUT_MS = readDbTimeoutMs('DB_STATEMENT_TIMEOUT_MS', 30_000);
+export const DB_IDLE_TX_TIMEOUT_MS = readDbTimeoutMs('DB_IDLE_TX_TIMEOUT_MS', 30_000);
+
+/**
  * Tạo một `PrismaClient` chạy qua **driver adapter `pg`** thay cho native query
  * engine.
  *
@@ -32,7 +60,21 @@ export function createPrismaClient(): PrismaClient {
   // Engine native của Prisma đọc `?schema=` trong URL để đặt search_path; driver
   // `pg` lại bỏ qua tham số đó. Tự bóc ra rồi truyền vào adapter để giữ NGUYÊN
   // hành vi cũ (mặc định `public` khi URL không ghi).
-  const adapter = new PrismaPg({ connectionString }, { schema: schemaFromUrl(connectionString) });
+  //
+  // `PrismaPg` nhận nguyên `pg.PoolConfig` và chuyển thẳng cho `new pg.Pool(...)`,
+  // nên đây là chỗ gắn hạn chót cấp driver (xem chú thích khối trên). `0` = tắt
+  // hạn đó (Number.isFinite && >= 0 ở readDbTimeoutMs cho phép ai cần thì bỏ).
+  const adapter = new PrismaPg(
+    {
+      connectionString,
+      connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,
+      query_timeout: DB_QUERY_TIMEOUT_MS,
+      statement_timeout: DB_STATEMENT_TIMEOUT_MS,
+      idle_in_transaction_session_timeout: DB_IDLE_TX_TIMEOUT_MS,
+      keepAlive: true,
+    },
+    { schema: schemaFromUrl(connectionString) },
+  );
   return new PrismaClient({ adapter });
 }
 

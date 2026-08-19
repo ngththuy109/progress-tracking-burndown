@@ -161,10 +161,10 @@ Nên toàn bộ service nói chuyện qua **cổng**: `PhaseConfigStore`, `Issue
 - **Xem thử trả về CẢ lỗi chặn lẫn cảnh báo.** PM cần biết mình sắp không lưu được ngay lúc xem thử, chứ không phải sau khi bấm Lưu rồi mới nhận HTTP 400.
 - **Cảnh báo gom theo mã, không lặp theo Task.** Một luật nhập nhằng sẽ sinh cảnh báo trên cả nghìn dòng và làm ngập danh sách.
 
-### Xác thực & phân quyền — ĐÃ CẬP NHẬT (lắp SSO, 2026-08-09)
+### Xác thực & phân quyền — ĐÃ CẬP NHẬT (2026-08-09)
 
-> **Bản gốc của card này** để `resolvePrincipalFromHeaders` tin cả `x-user-id` **lẫn** `x-user-role` từ header — chỉ là cổng thay thế cho GĐ 1, kèm cảnh báo "quên xoá header client thì ai cũng tự xưng ADMIN".
+> **Bản gốc của card này** để `resolvePrincipalFromHeaders` tin cả `x-user-id` **lẫn** `x-user-role` từ header — kèm cảnh báo "quên xoá header client thì ai cũng tự xưng ADMIN".
 >
-> **Đã thay** bằng mô hình SSO **B1** (`createPrincipalResolver`): cổng chỉ đặt **danh tính** `x-user-id`, còn **vai trò tra bảng `app_user`** — API KHÔNG còn tin `x-user-role` từ header, nên header giả cũng vô hại. IdP đã chốt là **Microsoft Entra ID**. Danh tính được phân giải một lần mỗi request qua hook `onRequest` nên `resolvePrincipal(req)` ở tầng route vẫn đồng bộ như cũ.
+> **Đã thay** bằng `createPrincipalResolver`: nguồn danh tính (phiên đăng nhập LDAP, hoặc header cho dev/khôi phục) chỉ khẳng định **danh tính**, còn **vai trò tra bảng `app_user`** — API KHÔNG còn tin `x-user-role` từ header, nên header giả cũng vô hại. Danh tính được phân giải một lần mỗi request qua hook `onRequest` nên `resolvePrincipal(req)` ở tầng route vẫn đồng bộ như cũ.
 >
-> Chi tiết đầy đủ (vai trò, bảng `app_user`/`project`, `/api/users`, `/api/projects`, biến `AUTH_*`, cách cấp quyền): [../AUTH.md](../AUTH.md). Cấu hình cổng: `config/auth-proxy/`.
+> Chi tiết đầy đủ (vai trò, bảng `app_user`/`project`, `/api/users`, `/api/projects`, biến `AUTH_*`, cách cấp quyền): [../AUTH.md](../AUTH.md).
