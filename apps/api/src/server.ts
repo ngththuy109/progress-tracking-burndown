@@ -15,11 +15,13 @@ import { createPlanConflictReadPort } from './adapters/plan-conflicts.adapters.j
 import { registerEpicOpsRoutes } from './routes/epic-ops.routes.js';
 import { registerSignboardRoutes } from './routes/signboard.routes.js';
 import { registerPhaseSubtaskRoutes } from './routes/phase-subtasks.routes.js';
+import { registerLogworkRoutes } from './routes/logwork.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
 import { registerUsersRoutes } from './routes/users.routes.js';
 import { registerProjectsRoutes } from './routes/projects.routes.js';
 import { createSignboardReadPort } from './adapters/signboard.adapters.js';
 import { createPhaseSubtaskReadPort } from './adapters/phase-subtasks.adapters.js';
+import { createLogworkReadPort, createLogworkWritePort } from './adapters/logwork.adapters.js';
 import { createEpicOpsReadPort, createEpicOpsWritePort } from './adapters/epic-ops.adapters.js';
 import { createBurndownReadPort } from './adapters/burndown.adapters.js';
 import { createChartCache, type CacheRedis } from './adapters/chart-cache.js';
@@ -227,6 +229,15 @@ export function createServer(deps: ServerDeps): FastifyInstance {
   registerPhaseSubtaskRoutes(app, {
     reads: createPhaseSubtaskReadPort(deps.prisma),
     resolvePrincipal: getPrincipal,
+  });
+
+  // Theo dõi việc log work của member — TOÀN ĐỘI. Đồng hồ đi qua cổng để test
+  // đóng băng được ("kỳ này" phụ thuộc hôm nay).
+  registerLogworkRoutes(app, {
+    reads: createLogworkReadPort(deps.prisma),
+    writes: createLogworkWritePort(deps.prisma),
+    resolvePrincipal: getPrincipal,
+    now: () => new Date(),
   });
 
   // Kiểm tra plan rơi vào ngày nghỉ (T-37): báo cáo sau-sync, tính lúc đọc.
