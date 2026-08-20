@@ -56,6 +56,11 @@ describe('buildDataQualityCsv — file gửi cho đội sửa dữ liệu', () =
     const csv = buildDataQualityCsv([{ ...ISSUE, exempt: true, exemptBy: 'pm@x.vn' }]);
     expect(csv).toContain('yes');
   });
+
+  it('loại lỗi "plan vào ngày nghỉ" (T-37) hiện nhãn tiếng Anh đọc được', () => {
+    const csv = buildDataQualityCsv([{ ...ISSUE, problems: ['PLANNED_ON_DAY_OFF'] }]);
+    expect(csv).toContain('Planned on a day off');
+  });
 });
 
 describe('csvFileName', () => {

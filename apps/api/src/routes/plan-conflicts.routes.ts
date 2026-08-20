@@ -7,11 +7,14 @@ import type {
 } from '@app/shared';
 import { ApiError } from '../services/phase-config.service.js';
 import { assertCanRead } from './burndown.routes.js';
+import type { PlanCheckSubtask, SideCalendar } from '../services/plan-conflicts.service.js';
 import {
-  computePlanConflicts,
-  type PlanCheckSubtask,
-  type SideCalendar,
-} from '../services/plan-conflicts.service.js';
+  computeConflictsForEpics,
+  conflictsOf,
+} from '../services/plan-conflicts-report.service.js';
+
+// Giữ nguyên đường lấy hằng này từ module route cho test và nơi gọi cũ.
+export { JP_REVIEW_CALENDAR_ID } from '../services/plan-conflicts-report.service.js';
 
 /**
  * API kiểm tra plan rơi vào ngày nghỉ — T-37.
@@ -46,9 +49,6 @@ export interface PlanConflictRouteDeps {
   resolvePrincipal(req: FastifyRequest): Principal | null;
 }
 
-/** Lịch chuẩn phía khách hàng — phía JP review theo lịch này. */
-export const JP_REVIEW_CALENDAR_ID = 'JP_STANDARD';
-
 export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConflictRouteDeps): void {
   const handle = async (reply: FastifyReply, fn: () => Promise<unknown>): Promise<void> => {
     try {
@@ -69,28 +69,6 @@ export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConfl
     return p;
   };
 
-  const conflictsOf = async (epic: {
-    epicKey: string;
-    projectKey: string;
-    calendarId: string;
-  }): Promise<PlanConflictsResponse> => {
-    const [subtasks, columnSides, vn, jp] = await Promise.all([
-      deps.reads.subtasksForCheck(epic.epicKey),
-      deps.reads.columnSides(epic.projectKey),
-      // Phía VN làm theo lịch THỰC THI của chính Epic; phía JP review theo lịch
-      // chuẩn khách hàng. Hai phía nghỉ khác ngày — đó chính là lý do tồn tại
-      // của cả chức năng này.
-      deps.reads.sideCalendar(epic.calendarId),
-      deps.reads.sideCalendar(JP_REVIEW_CALENDAR_ID),
-    ]);
-    return computePlanConflicts({
-      epicKey: epic.epicKey,
-      subtasks,
-      columnSides,
-      calendars: { VN: vn, JP: jp },
-    });
-  };
-
   app.get('/api/epics/:epicKey/plan-conflicts', async (req, reply) =>
     handle(reply, async (): Promise<PlanConflictsResponse> => {
       const principal = requirePrincipal(req);
@@ -106,7 +84,7 @@ export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConfl
       }
       assertCanRead(principal, meta.projectKey);
 
-      return conflictsOf({ epicKey, ...meta });
+      return conflictsOf(deps.reads, { epicKey, ...meta });
     }),
   );
 
@@ -123,9 +101,7 @@ export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConfl
         (e) => principal.role !== 'PM' || principal.projects.includes(e.projectKey),
       );
 
-      // Tuần tự sẽ chậm khi có nhiều Epic; chạy đồng thời cả danh sách — mỗi
-      // Epic chỉ là vài query đọc.
-      const results = await Promise.all(epics.map((e) => conflictsOf(e)));
+      const results = await computeConflictsForEpics(deps.reads, epics);
       return {
         counts: results
           .filter((r) => r.summary.total > 0)

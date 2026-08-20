@@ -7,6 +7,9 @@ import {
   type RawPlanDrift,
   type RawRun,
 } from '../services/ops-health.service.js';
+import { computeConflictsForEpics } from '../services/plan-conflicts-report.service.js';
+import type { PlanConflictReadPort } from '../routes/plan-conflicts.routes.js';
+import { createPlanConflictReadPort } from './plan-conflicts.adapters.js';
 import { toPics } from './signboard.adapters.js';
 
 /**
@@ -44,6 +47,11 @@ export interface OpsHealthPort {
 export interface OpsHealthPortOptions {
   /** Đồng hồ đi qua cổng để test đóng băng được "bây giờ là lúc nào". */
   readonly now?: () => Date;
+  /**
+   * Cổng đọc kiểm tra plan-ngày nghỉ (T-37) — nguồn của loại lỗi Data quality
+   * thứ sáu. Mặc định dựng thẳng từ `prisma`; cho test thay được bằng fake.
+   */
+  readonly planConflictReads?: PlanConflictReadPort;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -55,6 +63,66 @@ function toNumber(v: bigint | number | null | undefined): number {
 
 export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPortOptions = {}): OpsHealthPort {
   const now = options.now ?? (() => new Date());
+  const planConflictReads = options.planConflictReads ?? createPlanConflictReadPort(prisma);
+
+  // Xung đột plan-ngày nghỉ trên MỌI Epic đang theo dõi. Dashboard là cấp vận
+  // hành nên không lọc theo project (khác endpoint `/summary` lọc theo PM).
+  const allEpicConflicts = async () => {
+    const epics = await planConflictReads.listEpics(null);
+    return computeConflictsForEpics(planConflictReads, epics);
+  };
+
+  // Sub-task đã đánh dấu "không cần sửa" — loại khỏi TỬ SỐ của số đo ngày-nghỉ
+  // để nhất quán với năm lỗi kia (đã loại exempt ngay trong SQL). Danh sách chi
+  // tiết thì VẪN giữ ticket exempt (kèm cờ) để còn gỡ đánh dấu được.
+  const exemptSubtaskKeys = async (): Promise<Set<string>> => {
+    const rows = await prisma.$queryRawUnsafe<{ issue_key: string }[]>(
+      `SELECT issue_key FROM jira_issue
+        WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = TRUE`,
+    );
+    return new Set(rows.map((r) => r.issue_key));
+  };
+
+  // Dựng dòng Data quality cho Sub-task CHỈ vướng lỗi plan-ngày-nghỉ (chưa nằm
+  // trong danh sách năm lỗi SQL) — nạp Epic/tên/PIC/cờ exempt theo tập issueKey.
+  const loadDayOffOnlyIssues = async (
+    issueKeys: readonly string[],
+  ): Promise<DataQualityIssue[]> => {
+    if (issueKeys.length === 0) return [];
+    const issues = await prisma.jiraIssue.findMany({
+      where: { issueKey: { in: [...issueKeys] } },
+      select: {
+        issueKey: true,
+        epicKey: true,
+        summary: true,
+        dqExempt: true,
+        dqExemptBy: true,
+        sbRequestParticipants: true,
+      },
+    });
+    const epicKeys = [
+      ...new Set(issues.map((i) => i.epicKey).filter((k): k is string => k !== null)),
+    ];
+    const epics = epicKeys.length
+      ? await prisma.trackedEpic.findMany({
+          where: { epicKey: { in: epicKeys } },
+          select: { epicKey: true, displayName: true },
+        })
+      : [];
+    const nameByEpic = new Map(epics.map((e) => [e.epicKey, e.displayName]));
+    return issues.map(
+      (i): DataQualityIssue => ({
+        issueKey: i.issueKey,
+        epicKey: i.epicKey ?? '',
+        epicDisplayName: i.epicKey === null ? '' : (nameByEpic.get(i.epicKey) ?? ''),
+        summary: i.summary,
+        problems: ['PLANNED_ON_DAY_OFF'],
+        pics: toPics(i.sbRequestParticipants),
+        exempt: i.dqExempt,
+        exemptBy: i.dqExemptBy,
+      }),
+    );
+  };
 
   return {
     async opsHealth(): Promise<OpsHealthResponse> {
@@ -62,7 +130,18 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
       const since24h = new Date(collectedAt.getTime() - DAY_MS);
 
       // Chạy song song: các truy vấn độc lập, không phụ thuộc kết quả của nhau.
-      const [nightlyRows, rateRows, snapRows, dataRows, dataByEpicRows, runRows, erroredRows, driftRows] = await Promise.all([
+      const [
+        nightlyRows,
+        rateRows,
+        snapRows,
+        dataRows,
+        dataByEpicRows,
+        runRows,
+        erroredRows,
+        driftRows,
+        conflictResponses,
+        exemptKeys,
+      ] = await Promise.all([
         // Thời lượng lần chạy job đêm (DAILY) gần nhất đã kết thúc.
         prisma.$queryRawUnsafe<{ duration_ms: number | null }[]>(
           `SELECT duration_ms
@@ -195,12 +274,30 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
             WHERE ps.shift_type = 'END_MOVED'
             GROUP BY ps.epic_key, ps.phase_code`,
         ),
+        // Lỗi thứ sáu: plan rơi ngày nghỉ (T-37) — không tính bằng SQL được (cần
+        // lịch VN/JP), tính ở tầng service rồi ghép vào đây.
+        allEpicConflicts(),
+        exemptSubtaskKeys(),
       ]);
 
       const durationMs = nightlyRows[0]?.duration_ms ?? null;
       const dataRow = dataRows[0];
       const total = toNumber(dataRow?.total);
       const ratio = (n: bigint | undefined): number => (total === 0 ? 0 : toNumber(n) / total);
+
+      // Đếm Sub-task vi phạm ngày-nghỉ theo Epic (đã loại ticket exempt), để vừa
+      // tính tỉ lệ toàn cục vừa tính theo từng Epic — cùng mẫu số với năm lỗi kia.
+      const dayOffByEpic = new Map<string, number>();
+      let dayOffTotal = 0;
+      for (const resp of conflictResponses) {
+        const n = resp.conflicts.reduce(
+          (acc, c) => (exemptKeys.has(c.issueKey) ? acc : acc + 1),
+          0,
+        );
+        dayOffByEpic.set(resp.epicKey, n);
+        dayOffTotal += n;
+      }
+      const dayOffRatio = total === 0 ? 0 : dayOffTotal / total;
 
       const recentRuns: RawRun[] = runRows.map((r) => ({
         runId: String(r.id),
@@ -216,7 +313,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         epicKey: r.epic_key,
         // Status = ERROR mà thiếu `last_error` là bất thường; vẫn phải nói được
         // gì đó thay vì để trống, và chỉ đường tới nơi có nguyên văn lỗi.
-        lastError: r.last_error ?? 'Không rõ lỗi — xem log worker',
+        lastError: r.last_error ?? 'Unknown error — check worker logs',
         // "Lỗi bao lâu rồi" = từ lần đồng bộ thành công gần nhất; chưa từng đồng
         // bộ thì tính từ lúc thêm Epic.
         since: r.last_synced_at ?? r.added_at,
@@ -242,6 +339,8 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           missingWbsDateRatio: epicRatio(r.no_wbs),
           unparsedSubtaskRatio: epicRatio(r.unparsed),
           closedNoWorklogRatio: epicRatio(r.closed_no_worklog),
+          plannedOnDayOffRatio:
+            epicTotal === 0 ? 0 : (dayOffByEpic.get(r.epic_key) ?? 0) / epicTotal,
         };
       });
 
@@ -258,6 +357,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           missingWbsDateRatio: ratio(dataRow?.no_wbs),
           unparsedSubtaskRatio: ratio(dataRow?.unparsed),
           closedNoWorklogRatio: ratio(dataRow?.closed_no_worklog),
+          plannedOnDayOffRatio: dayOffRatio,
         },
         dataByEpic,
         recentRuns,
@@ -366,13 +466,22 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
                      )))
           ORDER BY te.epic_key, ji.issue_key`,
       );
-      return rows.map((r) => {
+      // Loại lỗi thứ sáu (plan rơi ngày nghỉ) KHÔNG có trong WHERE của SQL trên
+      // (cần lịch VN/JP). Tính từ hệ plan-conflicts rồi GHÉP vào: ticket đã có
+      // lỗi khác thì thêm nhãn; ticket CHỈ vướng ngày-nghỉ thì bổ sung dòng mới.
+      const conflictResponses = await allEpicConflicts();
+      const conflictedKeys = new Set(
+        conflictResponses.flatMap((resp) => resp.conflicts.map((c) => c.issueKey)),
+      );
+
+      const base: DataQualityIssue[] = rows.map((r) => {
         const problems: DqProblem[] = [];
         if (r.no_estimate) problems.push('MISSING_ESTIMATE');
         if (r.no_wbs) problems.push('MISSING_WBS_DATE');
         if (r.unclassified) problems.push('UNCLASSIFIED_PHASE');
         if (r.unparsed) problems.push('UNPARSED_TITLE');
         if (r.closed_no_worklog) problems.push('CLOSED_NO_WORKLOG');
+        if (conflictedKeys.has(r.issue_key)) problems.push('PLANNED_ON_DAY_OFF');
         return {
           issueKey: r.issue_key,
           epicKey: r.epic_key,
@@ -385,6 +494,15 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
           exemptBy: r.dq_exempt_by,
         };
       });
+
+      // Ticket CHỈ vướng ngày-nghỉ, chưa nằm trong danh sách năm lỗi trên.
+      const baseKeys = new Set(base.map((i) => i.issueKey));
+      const extra = await loadDayOffOnlyIssues([...conflictedKeys].filter((k) => !baseKeys.has(k)));
+
+      // Cùng thứ tự ổn định như cũ (Epic, rồi ticket) sau khi trộn hai nguồn.
+      return [...base, ...extra].sort(
+        (a, b) => a.epicKey.localeCompare(b.epicKey) || a.issueKey.localeCompare(b.issueKey),
+      );
     },
 
     async issueProject(issueKey: string): Promise<{ projectKey: string } | null> {

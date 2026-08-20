@@ -70,14 +70,43 @@ function capMetric(args: {
   };
 }
 
-/** Năm số đo chất lượng dữ liệu, tính trên toàn bộ Sub-task đang hoạt động. */
+/**
+ * Năm số đo chất lượng dữ liệu tính bằng SQL trên toàn bộ Sub-task đang hoạt
+ * động. Số đo thứ SÁU — "plan rơi vào ngày nghỉ" — không tính được bằng SQL
+ * thuần (cần lịch nghỉ VN/JP) nên được ghép riêng ở `dataQualityMetrics` từ tỉ
+ * lệ do adapter tính sẵn (T-37), với ngưỡng RIÊNG để không đụng `HEALTH_THRESHOLD`
+ * dùng chung với màn Epic health.
+ */
 const DATA_METRICS: readonly { name: string; label: string; key: HealthMetricName }[] = [
-  { name: 'missingWbsDate', label: 'Sub-task thiếu ngày kế hoạch', key: 'missingWbsDateRatio' },
-  { name: 'missingEstimate', label: 'Sub-task thiếu ước lượng', key: 'missingEstimateRatio' },
-  { name: 'unclassifiedPhase', label: 'Task chưa phân loại', key: 'unclassifiedPhaseRatio' },
-  { name: 'unparsedSubtask', label: 'Sub-task sai định dạng', key: 'unparsedSubtaskRatio' },
-  { name: 'closedNoWorklog', label: 'Task đóng nhưng chưa log giờ', key: 'closedNoWorklogRatio' },
+  { name: 'missingWbsDate', label: 'Missing planned dates', key: 'missingWbsDateRatio' },
+  { name: 'missingEstimate', label: 'Missing estimate', key: 'missingEstimateRatio' },
+  { name: 'unclassifiedPhase', label: 'Unclassified phase', key: 'unclassifiedPhaseRatio' },
+  { name: 'unparsedSubtask', label: 'Title in wrong format', key: 'unparsedSubtaskRatio' },
+  { name: 'closedNoWorklog', label: 'Closed without logged work', key: 'closedNoWorklogRatio' },
 ];
+
+/**
+ * Số đo thứ sáu: % Sub-task có mốc plan rơi vào ngày nghỉ (T-37).
+ *
+ * WARN từ ngưỡng này, CRITICAL từ gấp đôi — cùng dạng bậc với `planDriftLevel`.
+ * Cố ý KHÔNG dùng `HEALTH_THRESHOLD`/`levelOf`: thêm key vào đó sẽ kéo số đo này
+ * lan sang màn Epic health (nơi map qua mọi key + cần message riêng).
+ */
+const PLANNED_ON_DAY_OFF = { name: 'plannedOnDayOff', label: 'Sub-tasks planned on a day off', warnPct: 10 } as const;
+
+function plannedOnDayOffMetric(total: number, ratio: number): OpsMetric {
+  const pct = round(ratio * 100);
+  const level: OpsLevel =
+    total <= 0 ? 'UNKNOWN' : pct >= PLANNED_ON_DAY_OFF.warnPct * 2 ? 'CRITICAL' : pct >= PLANNED_ON_DAY_OFF.warnPct ? 'WARN' : 'OK';
+  return {
+    name: PLANNED_ON_DAY_OFF.name,
+    label: PLANNED_ON_DAY_OFF.label,
+    value: total <= 0 ? null : pct,
+    threshold: PLANNED_ON_DAY_OFF.warnPct,
+    unit: '%',
+    level,
+  };
+}
 
 export interface RawRun {
   readonly runId: string;
@@ -111,6 +140,8 @@ export interface RawDataQualityRatios {
   readonly missingWbsDateRatio: number;
   readonly unparsedSubtaskRatio: number;
   readonly closedNoWorklogRatio: number;
+  /** % Sub-task có mốc plan rơi ngày nghỉ (T-37) — ghép từ hệ plan-conflicts. */
+  readonly plannedOnDayOffRatio: number;
 }
 
 export interface RawEpicDataQuality extends RawDataQualityRatios {
@@ -147,7 +178,7 @@ const HOUR_MS = 3_600_000;
  * thống đang tải nặng chính nó lại góp phần làm nặng thêm (T-33).
  */
 export function dataQualityMetrics(total: number, ratios: RawDataQualityRatios): OpsMetric[] {
-  return DATA_METRICS.map(({ name, label, key }) => {
+  const metrics: OpsMetric[] = DATA_METRICS.map(({ name, label, key }) => {
     const ratio = ratios[key];
     // Chưa có Sub-task nào thì "0%" là lời nói dối — trông y hệt dữ liệu sạch.
     // Nói "chưa đo được" thay vì hiện 0.
@@ -163,6 +194,9 @@ export function dataQualityMetrics(total: number, ratios: RawDataQualityRatios):
       level: levelOf(key, ratio),
     };
   });
+  // Số đo thứ sáu (plan vào ngày nghỉ) — ngưỡng riêng, không qua HEALTH_THRESHOLD.
+  metrics.push(plannedOnDayOffMetric(total, ratios.plannedOnDayOffRatio));
+  return metrics;
 }
 
 export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
@@ -222,24 +256,24 @@ export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
       metrics: [
         capMetric({
           name: 'nightlyDuration',
-          label: 'Thời lượng job đêm gần nhất',
+          label: 'Latest nightly job duration',
           value: input.nightlyDurationMinutes,
           threshold: OPS_THRESHOLD.nightlyDurationMinutes,
-          unit: 'phút',
+          unit: 'min',
         }),
         capMetric({
           name: 'snapshotBehind',
-          label: 'Epic trễ snapshot',
+          label: 'Epics behind on snapshots',
           value: input.snapshotBehindCount,
           threshold: OPS_THRESHOLD.missingSnapshotDays,
-          unit: 'Epic',
+          unit: 'Epics',
         }),
         capMetric({
           name: 'erroredEpics',
-          label: 'Epic đang lỗi',
+          label: 'Epics in error',
           value: input.erroredEpicCount,
           threshold: OPS_THRESHOLD.erroredEpics,
-          unit: 'Epic',
+          unit: 'Epics',
         }),
       ],
       recentRuns,
@@ -249,10 +283,10 @@ export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
       metrics: [
         capMetric({
           name: 'rateLimitHits',
-          label: 'Lần bị Jira chặn (24h)',
+          label: 'Jira rate-limit hits (24h)',
           value: input.rateLimitHits24h,
           threshold: OPS_THRESHOLD.rateLimitHits24h,
-          unit: 'lần',
+          unit: 'hits',
         }),
       ],
     },

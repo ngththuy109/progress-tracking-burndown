@@ -9,13 +9,14 @@ import { picLabel } from './data-quality-filter.js';
  * tự đứng được: ticket nào, thuộc Epic nào, lỗi gì, đã được bỏ qua chưa.
  */
 
-/** Nhãn người đọc được của bốn loại lỗi — dùng chung cho bảng chi tiết và CSV. */
+/** Nhãn người đọc được của sáu loại lỗi — dùng chung cho bảng chi tiết và CSV. */
 export const PROBLEM_LABEL: Record<DqProblem, string> = {
   MISSING_ESTIMATE: 'Missing estimate',
   MISSING_WBS_DATE: 'Missing planned dates',
   UNCLASSIFIED_PHASE: 'Unclassified phase',
   UNPARSED_TITLE: 'Title in wrong format',
   CLOSED_NO_WORKLOG: 'Closed without logged work',
+  PLANNED_ON_DAY_OFF: 'Planned on a day off',
 };
 
 /** Escape theo RFC 4180: bọc nháy kép khi có dấu phẩy/nháy/xuống dòng. */

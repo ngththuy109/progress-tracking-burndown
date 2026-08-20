@@ -38,6 +38,7 @@ const SAMPLE: OpsHealthResponse = buildOpsHealth({
     missingWbsDateRatio: 0.05,
     unparsedSubtaskRatio: 0.05,
     closedNoWorklogRatio: 0.05,
+    plannedOnDayOffRatio: 0.05,
   },
   dataByEpic: [],
   recentRuns: [],

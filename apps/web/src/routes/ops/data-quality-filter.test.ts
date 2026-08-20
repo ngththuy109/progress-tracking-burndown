@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DataQualityIssue } from '@app/shared';
-import { ALL, filterIssues, NO_PIC, picOptions } from './data-quality-filter.js';
+import { ALL, filterIssues, NO_PIC, picOptions, problemOptions } from './data-quality-filter.js';
 
 const pic = (accountId: string, displayName: string | null) => ({ accountId, displayName });
 
@@ -77,31 +77,72 @@ describe('picOptions', () => {
 
 describe('filterIssues', () => {
   const rows = [
-    issue({ issueKey: 'PAY-101', epicKey: 'PAY-1', pics: [pic('a1', 'An')] }),
-    issue({ issueKey: 'PAY-102', epicKey: 'PAY-1', pics: [pic('b2', 'Bình')] }),
-    issue({ issueKey: 'SHOP-9', epicKey: 'SHOP-1', pics: [pic('a1', 'An')] }),
-    issue({ issueKey: 'PAY-103', epicKey: 'PAY-1', pics: [] }),
+    issue({ issueKey: 'PAY-101', epicKey: 'PAY-1', pics: [pic('a1', 'An')], problems: ['MISSING_ESTIMATE'] }),
+    issue({ issueKey: 'PAY-102', epicKey: 'PAY-1', pics: [pic('b2', 'Bình')], problems: ['PLANNED_ON_DAY_OFF'] }),
+    issue({
+      issueKey: 'SHOP-9',
+      epicKey: 'SHOP-1',
+      pics: [pic('a1', 'An')],
+      problems: ['MISSING_ESTIMATE', 'PLANNED_ON_DAY_OFF'],
+    }),
+    issue({ issueKey: 'PAY-103', epicKey: 'PAY-1', pics: [], problems: ['UNCLASSIFIED_PHASE'] }),
   ];
 
   it('không chọn gì thì giữ nguyên cả danh sách', () => {
-    expect(filterIssues(rows, { epicKey: ALL, pic: ALL })).toHaveLength(4);
+    expect(filterIssues(rows, { epicKey: ALL, pic: ALL, problem: ALL })).toHaveLength(4);
   });
 
   it('lọc theo PIC lấy đúng ticket của người đó, xuyên nhiều Epic', () => {
-    const kept = filterIssues(rows, { epicKey: ALL, pic: 'a1' });
+    const kept = filterIssues(rows, { epicKey: ALL, pic: 'a1', problem: ALL });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-101', 'SHOP-9']);
   });
 
   it('hai bộ lọc chồng nhau: PIC đó, trong Epic đó', () => {
-    const kept = filterIssues(rows, { epicKey: 'PAY-1', pic: 'a1' });
+    const kept = filterIssues(rows, { epicKey: 'PAY-1', pic: 'a1', problem: ALL });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-101']);
   });
 
   it('chọn "chưa có PIC" ra đúng ticket không gán ai', () => {
-    const kept = filterIssues(rows, { epicKey: ALL, pic: NO_PIC });
+    const kept = filterIssues(rows, { epicKey: ALL, pic: NO_PIC, problem: ALL });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-103']);
+  });
+
+  it('lọc theo loại lỗi lấy MỌI ticket CÓ chứa lỗi đó (kể cả ticket nhiều lỗi)', () => {
+    const kept = filterIssues(rows, { epicKey: ALL, pic: ALL, problem: 'PLANNED_ON_DAY_OFF' });
+
+    expect(kept.map((i) => i.issueKey)).toEqual(['PAY-102', 'SHOP-9']);
+  });
+
+  it('ba bộ lọc chồng nhau: loại lỗi, PIC, trong Epic', () => {
+    const kept = filterIssues(rows, { epicKey: 'SHOP-1', pic: 'a1', problem: 'PLANNED_ON_DAY_OFF' });
+
+    expect(kept.map((i) => i.issueKey)).toEqual(['SHOP-9']);
+  });
+});
+
+describe('problemOptions', () => {
+  it('mỗi loại lỗi một mục kèm số ticket; ticket nhiều lỗi đếm ở TỪNG loại', () => {
+    const options = problemOptions([
+      issue({ issueKey: 'PAY-1', problems: ['MISSING_ESTIMATE', 'PLANNED_ON_DAY_OFF'] }),
+      issue({ issueKey: 'PAY-2', problems: ['MISSING_ESTIMATE'] }),
+    ]);
+
+    expect(options).toEqual([
+      { value: 'MISSING_ESTIMATE', count: 2 },
+      { value: 'PLANNED_ON_DAY_OFF', count: 1 },
+    ]);
+  });
+
+  it('sắp theo thứ tự DQ_PROBLEMS và chỉ hiện loại đang có ticket', () => {
+    const options = problemOptions([
+      issue({ issueKey: 'PAY-1', problems: ['PLANNED_ON_DAY_OFF'] }),
+      issue({ issueKey: 'PAY-2', problems: ['MISSING_WBS_DATE'] }),
+    ]);
+
+    // MISSING_WBS_DATE đứng trước PLANNED_ON_DAY_OFF trong DQ_PROBLEMS.
+    expect(options.map((o) => o.value)).toEqual(['MISSING_WBS_DATE', 'PLANNED_ON_DAY_OFF']);
   });
 });
