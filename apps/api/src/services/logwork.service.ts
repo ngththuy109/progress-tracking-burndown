@@ -142,6 +142,23 @@ export function buildLogworkReport(input: BuildLogworkInput): LogworkResponse {
   for (const s of subtasks) {
     const seenInTicket = new Set<string>();
     const epicMeta = perEpic[s.epicKey];
+
+    // Cờ "chưa log" xét ở MỨC TICKET theo NHÓM in-charge: một ticket nhiều người
+    // cùng ở "Request participants" chỉ cần MỘT participant log là coi như đã
+    // được theo dõi — khỏi nhắc những người còn lại (đồng đội đã log hộ ticket).
+    // (Trước đây cờ tính riêng từng người nên ai không tự tay log vẫn bị gắn cờ
+    // dù ticket đã có người trong nhóm log — chính là lỗi tab "By member" báo
+    // nhầm.) Chỉ giờ của CHÍNH participant mới gỡ cờ; người ngoài nhóm log (tác
+    // giả "logged, not assigned") vẫn cộng vào `totalLoggedHours` nhưng KHÔNG
+    // đại diện nhóm in-charge, nên không gỡ cờ.
+    let loggedByAnyParticipant = false;
+    for (const p of s.participants) {
+      if ((byIssueAuthor.get(memberAuthorKey(s.issueKey, p.accountId)) ?? 0) > 0) {
+        loggedByAnyParticipant = true;
+        break;
+      }
+    }
+
     for (const p of s.participants) {
       if (seenInTicket.has(p.accountId)) continue;
       seenInTicket.add(p.accountId);
@@ -163,8 +180,9 @@ export function buildLogworkReport(input: BuildLogworkInput): LogworkResponse {
         originalEstimateHours: s.originalEstimateSeconds / SECONDS_PER_HOUR,
         memberLoggedHours: memberSeconds / SECONDS_PER_HOUR,
         totalLoggedHours: totalSeconds / SECONDS_PER_HOUR,
-        // "Chưa log" = CHÍNH member đó chưa log; ticket đã exempt thì thôi gắn cờ.
-        notLogged: memberSeconds === 0 && !exempted,
+        // "Chưa log" = KHÔNG participant nào của ticket đã log; ticket đã exempt
+        // thì thôi gắn cờ.
+        notLogged: !loggedByAnyParticipant && !exempted,
         exempted,
         exemptedBy: exemption?.exemptedBy ?? null,
         exemptedAt: exemption?.exemptedAt ?? null,

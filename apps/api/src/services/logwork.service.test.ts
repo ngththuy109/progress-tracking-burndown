@@ -103,6 +103,60 @@ describe('buildLogworkReport', () => {
     expect(a.totalLoggedHours).toBe(3);
   });
 
+  it('ticket nhiều participant: MỘT người log là hết cờ cho cả nhóm', () => {
+    const res = build({
+      subtasks: [sub({ issueKey: 'PAY-1', participants: [P('a', 'A'), P('b', 'B'), P('c', 'C')] })],
+      // Chỉ 'a' log; 'b'/'c' không tự log nhưng ticket đã có người trong nhóm log.
+      worklogSums: [sum('PAY-1', 'a', 5)],
+    });
+    const ta = member(res, 'a').tickets[0]!;
+    const tb = member(res, 'b').tickets[0]!;
+    const tc = member(res, 'c').tickets[0]!;
+    // Không ai bị gắn cờ vì participant 'a' đã log hộ cả ticket.
+    expect(ta.notLogged).toBe(false);
+    expect(tb.notLogged).toBe(false);
+    expect(tc.notLogged).toBe(false);
+    // Giờ log RIÊNG từng người vẫn đúng: 'a' 5h; 'b'/'c' 0 (UI đọc "0 / 5").
+    expect(ta.memberLoggedHours).toBe(5);
+    expect(tb.memberLoggedHours).toBe(0);
+    expect(tb.totalLoggedHours).toBe(5);
+    expect(member(res, 'b').notLoggedCount).toBe(0);
+    expect(res.totalNotLogged).toBe(0);
+  });
+
+  it('ticket nhiều participant: KHÔNG ai trong nhóm log thì cả nhóm bị gắn cờ', () => {
+    const res = build({
+      subtasks: [sub({ issueKey: 'PAY-1', participants: [P('a'), P('b')] })],
+    });
+    expect(member(res, 'a').tickets[0]!.notLogged).toBe(true);
+    expect(member(res, 'b').tickets[0]!.notLogged).toBe(true);
+    expect(res.totalNotLogged).toBe(2);
+  });
+
+  it('ticket nhiều participant: người NGOÀI nhóm log KHÔNG gỡ cờ (chỉ tính participant)', () => {
+    const res = build({
+      subtasks: [sub({ issueKey: 'PAY-1', participants: [P('a'), P('b')] })],
+      // 'z' không phải participant → không đại diện nhóm in-charge, chỉ cộng total.
+      worklogSums: [sum('PAY-1', 'z', 4)],
+    });
+    const ta = member(res, 'a').tickets[0]!;
+    expect(ta.notLogged).toBe(true);
+    expect(ta.memberLoggedHours).toBe(0);
+    expect(ta.totalLoggedHours).toBe(4);
+  });
+
+  it('ticket nhiều participant: participant log được exempt KHÔNG che khuất việc nhóm đã log', () => {
+    // 'a' vừa log vừa được exempt; 'b' chưa log. Nhóm coi như đã log → 'b' hết cờ.
+    const res = build({
+      subtasks: [sub({ issueKey: 'PAY-1', participants: [P('a'), P('b')] })],
+      worklogSums: [sum('PAY-1', 'a', 3)],
+      exemptions: [exemption('PAY-1', 'a')],
+    });
+    expect(member(res, 'a').tickets[0]!.exempted).toBe(true);
+    expect(member(res, 'b').tickets[0]!.notLogged).toBe(false);
+    expect(res.totalNotLogged).toBe(0);
+  });
+
   it('người có log nhưng không in-charge: gộp khi bật cờ, bỏ khi tắt', () => {
     const withZ = build({
       subtasks: [sub({ issueKey: 'PAY-1', participants: [P('a', 'A')] })],
