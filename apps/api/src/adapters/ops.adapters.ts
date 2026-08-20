@@ -198,8 +198,14 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
              FROM jira_issue
             WHERE issue_type = 'SUBTASK' AND removed_at IS NULL AND dq_exempt = FALSE`,
         ),
-        // Cùng số đo, tách theo TỪNG Epic đang theo dõi — số toàn cục không nói
-        // được đội nào phải sửa dữ liệu.
+        // Cùng số đo, tách theo TỪNG Epic — nhưng CHỈ Epic đang ACTIVE, đúng như
+        // số "Epics behind on snapshots" ở trên và `listActiveEpics` ("job đêm
+        // chỉ chạy cho Epic ACTIVE"). Epic PENDING/BACKFILLING/PAUSED/ERROR không
+        // được đồng bộ nên dữ liệu cũ hoặc rỗng; để chúng lọt vào đây sinh ra
+        // dòng "ma" (LEFT JOIN vẫn phát 1 dòng dù 0 sub-task) làm số dòng Data
+        // quality nhiều hơn số Epic đang active. Epic ERROR đã có khu riêng ở
+        // "Epics in error". Lọc `te.status` (bảng TRÁI) nên Epic ACTIVE chưa có
+        // sub-task vẫn giữ được 1 dòng total=0 → UNKNOWN, không biến thành INNER JOIN.
         prisma.$queryRawUnsafe<
           {
             epic_key: string;
@@ -232,6 +238,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
               AND ji.issue_type = 'SUBTASK'
               AND ji.removed_at IS NULL
               AND ji.dq_exempt = FALSE
+            WHERE te.status = 'ACTIVE'
             GROUP BY te.epic_key, te.display_name
             ORDER BY te.epic_key`,
         ),
