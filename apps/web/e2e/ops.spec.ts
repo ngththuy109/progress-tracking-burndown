@@ -231,8 +231,24 @@ test('thứ tự section: Data quality đầu tiên, rồi Most recent job runs,
   expect(at('Jira calls')).toBeLessThan(at('Epics in error'));
 });
 
-test('Data quality hiện chip "planned on a day off" (loại lỗi thứ sáu)', async ({ page }) => {
-  await installApi(page);
+test('Data quality hiện chip "planned on a day off" (loại lỗi thứ sáu) trên dòng Epic', async ({ page }) => {
+  // Số đo hiện theo TỪNG Epic — đã bỏ dãy roll-up toàn cục vì con số gộp không
+  // nói được đội nào phải sửa nên không ai dùng.
+  await installApi(page, {
+    health: {
+      data: {
+        metrics: [],
+        byEpic: [
+          {
+            epicKey: 'PAY-1',
+            displayName: 'Thanh toán',
+            total: 12,
+            metrics: [metric('plannedOnDayOff', 'Sub-tasks planned on a day off', 8, 10, '%', 'OK')],
+          },
+        ],
+      },
+    },
+  });
   await page.goto('/ops');
 
   await expect(page.getByText('Sub-tasks planned on a day off: 8 / 10 %')).toBeVisible();
