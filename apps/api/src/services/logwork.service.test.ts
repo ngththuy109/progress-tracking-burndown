@@ -264,9 +264,17 @@ describe('buildLogworkReport', () => {
 
 const DATES = ['2026-08-10', '2026-08-11', '2026-08-12'] as const;
 
-const daily = (authorId: string | null, localDate: string, hours: number): WorklogDailyRow => ({
+const daily = (
+  authorId: string | null,
+  localDate: string,
+  hours: number,
+  issueKey = 'X-1',
+  summary: string | null = null,
+): WorklogDailyRow => ({
   authorId,
   localDate,
+  issueKey,
+  summary,
   seconds: hours * H,
 });
 
@@ -275,6 +283,10 @@ function buildByPic(over: Partial<BuildLogworkByPicInput> = {}) {
     from: '2026-08-10',
     to: '2026-08-12',
     dates: [...DATES],
+    // Mặc định: cả ba ngày là ngày làm việc và ĐÃ qua (today ở tương lai xa) — để
+    // các test cũ chỉ quan tâm số giờ không dính dấu missing/offday ngoài ý muốn.
+    workingDays: [true, true, true],
+    today: '2026-12-31',
     dailyRows: [],
     names: new Map(),
     warnings: [],
@@ -372,9 +384,11 @@ describe('buildLogworkByPicReport', () => {
       from: '2026-08-10',
       to: '2026-08-12',
       dates: [...DATES],
+      workingDays: [true, true, true],
+      today: '2026-12-31',
       names: new Map(),
       warnings: [],
-      dailyRows: [{ authorId: 'a', localDate: '2026-08-10', seconds: 10000 }],
+      dailyRows: [{ authorId: 'a', localDate: '2026-08-10', issueKey: 'X-1', summary: null, seconds: 10000 }],
     });
     const a = picRow(res, 'a');
     expect(a.hoursByDate[0]).toBe(2.78);
@@ -382,13 +396,84 @@ describe('buildLogworkByPicReport', () => {
     expect(a.warnCount).toBe(1); // 2.78 <= 4 → thiếu
   });
 
-  it('truyền qua from/to/dates/warnings + ngưỡng', () => {
-    const res = buildByPic({ warnings: ['w'] });
+  it('truyền qua from/to/dates/workingDays/today/warnings + ngưỡng', () => {
+    const res = buildByPic({ warnings: ['w'], workingDays: [true, false, true], today: '2026-08-11' });
     expect(res.from).toBe('2026-08-10');
     expect(res.to).toBe('2026-08-12');
     expect(res.dates).toEqual([...DATES]);
+    expect(res.workingDays).toEqual([true, false, true]);
+    expect(res.today).toBe('2026-08-11');
     expect(res.warnings).toEqual(['w']);
     expect(res.underLimitHours).toBe(4);
     expect(res.overLimitHours).toBe(8);
+  });
+
+  // --- Dấu theo LỊCH: missing (ngày làm việc trống) + offday (ngày nghỉ có log) --
+
+  it('missing: ngày làm việc ĐÃ QUA mà không log → đếm vào missingCount', () => {
+    // Ngày 10, 12 là ngày làm việc; 11 là ngày nghỉ. today = 13 → cả ba đã qua.
+    // 'a' chỉ log ngày 10 → ngày 12 (làm việc, đã qua, trống) là "missing".
+    const res = buildByPic({
+      workingDays: [true, false, true],
+      today: '2026-08-13',
+      dailyRows: [daily('a', '2026-08-10', 6)],
+    });
+    const a = picRow(res, 'a');
+    expect(a.missingCount).toBe(1); // chỉ ngày 12
+    expect(a.offdayCount).toBe(0);
+    expect(a.warnCount).toBe(0); // 6h là khoảng lành
+  });
+
+  it('missing chỉ tính ngày ĐÃ QUA: ngày làm việc hôm nay/tương lai trống KHÔNG bị đếm', () => {
+    // today = 11 → chỉ ngày 10 đã qua. Ngày 11 (hôm nay) và 12 (tương lai) tuy là
+    // ngày làm việc nhưng để trống thì bình thường (chưa tới hạn log).
+    const res = buildByPic({
+      workingDays: [true, true, true],
+      today: '2026-08-11',
+      dailyRows: [daily('a', '2026-08-12', 5)], // log tương lai để 'a' thành một hàng
+    });
+    const a = picRow(res, 'a');
+    // Ngày 10 (đã qua, làm việc, trống) = missing; ngày 11 (hôm nay) và 12 (đã log) không.
+    expect(a.missingCount).toBe(1);
+  });
+
+  it('offday: ngày NGHỈ mà có log → đếm offdayCount, KHÔNG rơi vào under/over', () => {
+    const res = buildByPic({
+      workingDays: [true, false, false],
+      today: '2026-08-13',
+      // 11 (nghỉ) log 2h — nếu tính như ngày làm sẽ là "under"; ở đây phải là offday.
+      // 12 (nghỉ) log 10h — nếu tính như ngày làm sẽ là "over"; ở đây phải là offday.
+      dailyRows: [daily('a', '2026-08-10', 8), daily('a', '2026-08-11', 2), daily('a', '2026-08-12', 10)],
+    });
+    const a = picRow(res, 'a');
+    expect(a.offdayCount).toBe(2);
+    expect(a.warnCount).toBe(0); // 8h ngày làm là lành; hai ô nghỉ không tính under/over
+    expect(a.missingCount).toBe(0);
+  });
+
+  it('ticketsByDate: gộp giờ theo ticket trong ô, sắp giờ giảm dần, giữ tiêu đề', () => {
+    const res = buildByPic({
+      dailyRows: [
+        daily('a', '2026-08-10', 2, 'PAY-1', 'Alpha'),
+        daily('a', '2026-08-10', 1, 'PAY-1', 'Alpha'), // cùng ticket cùng ngày → gộp = 3h
+        daily('a', '2026-08-10', 5, 'PAY-2', 'Beta'),
+      ],
+    });
+    const a = picRow(res, 'a');
+    expect(a.hoursByDate[0]).toBe(8);
+    // PAY-2 (5h) trước PAY-1 (3h) — giờ giảm dần.
+    expect(a.ticketsByDate[0]).toEqual([
+      { issueKey: 'PAY-2', summary: 'Beta', hours: 5 },
+      { issueKey: 'PAY-1', summary: 'Alpha', hours: 3 },
+    ]);
+    // Ô không log → danh sách rỗng, song song với dates.
+    expect(a.ticketsByDate).toHaveLength(3);
+    expect(a.ticketsByDate[1]).toEqual([]);
+    expect(a.ticketsByDate[2]).toEqual([]);
+  });
+
+  it('ticketsByDate: worklog mồ côi giữ summary null (issue không còn trong sổ)', () => {
+    const res = buildByPic({ dailyRows: [daily('a', '2026-08-10', 4, 'GONE-9', null)] });
+    expect(picRow(res, 'a').ticketsByDate[0]).toEqual([{ issueKey: 'GONE-9', summary: null, hours: 4 }]);
   });
 });

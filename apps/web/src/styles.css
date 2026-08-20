@@ -1284,3 +1284,74 @@ a.cell-card__key:hover {
   background: var(--tone-danger-bg);
   border: 1px solid var(--tone-danger);
 }
+
+/* Ngày LÀM VIỆC đã qua mà KHÔNG log — nền gạch chéo mờ để ô TRỐNG vẫn "kêu" rằng
+   đáng lẽ phải có log; dấu gạch ngang mờ ở giữa. Gạch chéo (không phải nền đặc)
+   để không lẫn với under (vàng đặc)/over (đỏ đặc). */
+.logwork-grid__cell--missing {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--tone-neutral-bg),
+    var(--tone-neutral-bg) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  color: var(--text-muted);
+  font-weight: 600;
+}
+/* Ngày NGHỈ mà LẠI có log — xanh dương "để ý", khác hẳn under (vàng)/over (đỏ). */
+.logwork-grid__cell--offday {
+  background: var(--tone-info-bg);
+  color: var(--tone-info);
+  font-weight: 600;
+}
+.logwork-grid__swatch--missing {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--tone-neutral-bg),
+    var(--tone-neutral-bg) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  border: 1px solid var(--tone-neutral);
+}
+.logwork-grid__swatch--offday {
+  background: var(--tone-info-bg);
+  border: 1px solid var(--tone-info);
+}
+
+/* Ô có log là điểm neo cho thẻ nổi (thẻ portal ra body nên không bắt buộc, nhưng
+   giữ position:relative cho nhất quán với ô Signboard). */
+.logwork-grid__cell--interactive {
+  position: relative;
+}
+/* Số giờ trong ô là NÚT mở thẻ nổi (Tab tới được); trông như chữ thường, gạch
+   chân chấm mờ khi rê/nhận focus để gợi ý bấm được. */
+.logwork-cell__trigger {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 2px;
+}
+.logwork-cell__trigger:hover,
+.logwork-cell__trigger:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+/* Một dòng ticket trong thẻ nổi của lưới: MÃ (link) · tiêu đề co giãn · số giờ. */
+.logwork-card__ticket {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+}
+.logwork-card__hours {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
