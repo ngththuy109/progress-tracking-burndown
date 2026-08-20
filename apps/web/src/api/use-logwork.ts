@@ -7,8 +7,10 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import {
+  logworkByPicResponseSchema,
   logworkResponseSchema,
   logworkSettingsResponseSchema,
+  type LogworkByPicResponse,
   type LogworkResponse,
   type LogworkSettingsResponse,
 } from '@app/shared';
@@ -24,6 +26,7 @@ import { apiClient, noContent, type ApiClient } from './client.js';
 export const logworkKeys = {
   all: ['logwork'] as const,
   report: (from: string, to: string) => ['logwork', 'report', from, to] as const,
+  byPic: (from: string, to: string) => ['logwork', 'by-pic', from, to] as const,
   settings: ['logwork', 'settings'] as const,
 };
 
@@ -41,6 +44,24 @@ export function useLogwork(
     // khung "đang tải", làm ô ngày Custom biến mất giữa lúc đang chọn. Giữ dữ liệu
     // kỳ trước trong lúc tải kỳ mới để bộ chọn ở nguyên chỗ; `isFetching` báo "đang
     // cập nhật".
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Báo cáo LƯỚI: PIC × ngày. Cùng bộ chọn kỳ với `useLogwork` (một endpoint riêng
+ * vì gom worklog theo NGÀY, khác cách gộp của báo cáo theo member). Giữ dữ liệu
+ * kỳ trước trong lúc tải kỳ mới để bộ chọn kỳ không nhấp nháy — như `useLogwork`.
+ */
+export function useLogworkByPic(
+  from: string | null,
+  to: string | null,
+  client: ApiClient = apiClient,
+): UseQueryResult<LogworkByPicResponse, Error> {
+  return useQuery({
+    queryKey: logworkKeys.byPic(from ?? '', to ?? ''),
+    queryFn: ({ signal }) =>
+      client.get('/logwork/by-pic', logworkByPicResponseSchema, { query: { from, to }, signal }),
     placeholderData: keepPreviousData,
   });
 }

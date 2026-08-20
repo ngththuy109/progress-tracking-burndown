@@ -24,15 +24,24 @@ import {
 } from '../../components/ui/index.js';
 import { PeriodPicker } from './period-picker.js';
 import { CapacitySettings } from './capacity-settings.js';
+import { PicDailyGrid } from './pic-daily-grid.js';
 import { EMPTY_FILTER, filterMembers, isFilterActive } from './filter-members.js';
 
 /**
  * Màn hình "Log work" — TOÀN ĐỘI.
  *
- * Ai chưa log work trong kỳ? Trên ticket đang mở nào họ đang in-charge (Request
- * participants của Jira)? Bấm mã ticket để sang Jira log. PM có thể "verify —
- * thôi theo dõi" một cặp (member, ticket) để tắt cờ.
+ * Hai cách nhìn cùng một kỳ, chọn bằng thanh "View":
+ *  - "By member": ai chưa log work trong kỳ? Trên ticket đang mở nào họ đang
+ *    in-charge (Request participants của Jira)? PM có thể "verify — thôi theo
+ *    dõi" một cặp (member, ticket) để tắt cờ.
+ *  - "By PIC / day": lưới PIC × ngày — số giờ mỗi người log MỖI NGÀY, tô cảnh
+ *    báo ô `<= 4h` (thiếu) hoặc `> 8h` (quá).
+ *
+ * Kỳ (`from`/`to`) và cách nhìn (`view`) đều nằm trên URL nên chia sẻ được và
+ * giữ nguyên khi đổi qua lại giữa hai tab.
  */
+
+type View = 'members' | 'grid';
 
 const STATUS_TONE: Record<StatusCategory, BadgeTone> = {
   new: 'neutral',
@@ -49,6 +58,64 @@ export function LogworkScreen() {
   const [params, setParams] = useSearchParams();
   const from = params.get('from');
   const to = params.get('to');
+  const view: View = params.get('view') === 'grid' ? 'grid' : 'members';
+
+  // Đổi kỳ giữ nguyên tab; đổi tab giữ nguyên kỳ. `setParams` thay TOÀN BỘ query
+  // nên phải tự chép lại tham số bên kia mỗi lần.
+  const applyPeriod = (f: string | null, t: string | null): void => {
+    const next: Record<string, string> = {};
+    if (f !== null) next.from = f;
+    if (t !== null) next.to = t;
+    if (view === 'grid') next.view = 'grid';
+    setParams(next);
+  };
+  const setView = (v: View): void => {
+    const next: Record<string, string> = {};
+    if (from !== null) next.from = from;
+    if (to !== null) next.to = to;
+    if (v === 'grid') next.view = 'grid';
+    setParams(next);
+  };
+
+  const viewTab = (key: View, label: string) => (
+    <button
+      type="button"
+      className={`tab${view === key ? ' tab--active' : ''}`}
+      aria-pressed={view === key}
+      onClick={() => setView(key)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="stack">
+      <div className="scope" role="group" aria-label="Report view">
+        <span className="scope__label">View:</span>
+        <div className="tabs">
+          {viewTab('members', 'By member')}
+          {viewTab('grid', 'By PIC / day')}
+        </div>
+      </div>
+
+      {view === 'grid' ? (
+        <PicDailyGrid from={from} to={to} onChangePeriod={applyPeriod} />
+      ) : (
+        <MembersView from={from} to={to} onChangePeriod={applyPeriod} />
+      )}
+    </div>
+  );
+}
+
+function MembersView({
+  from,
+  to,
+  onChangePeriod,
+}: {
+  readonly from: string | null;
+  readonly to: string | null;
+  readonly onChangePeriod: (from: string | null, to: string | null) => void;
+}) {
   const [filter, setFilter] = useState(EMPTY_FILTER);
 
   const query = useLogwork(from, to);
@@ -57,13 +124,6 @@ export function LogworkScreen() {
   const myProjects = me.data?.projects ?? [];
   const canVerify = (projectKey: string): boolean =>
     role === 'ADMIN' || (role === 'PM' && myProjects.includes(projectKey));
-
-  const applyPeriod = (f: string | null, t: string | null): void => {
-    const next: Record<string, string> = {};
-    if (f !== null) next.from = f;
-    if (t !== null) next.to = t;
-    setParams(next);
-  };
 
   if (query.isPending) return <LoadingState label="Loading log work…" rows={5} />;
   if (query.isError) {
@@ -84,14 +144,14 @@ export function LogworkScreen() {
   const refreshing = query.isFetching;
 
   return (
-    <div className="stack">
+    <>
       <PeriodPicker
         from={from}
         to={to}
         rangeFrom={data.from}
         rangeTo={data.to}
         partialPeriod={data.partialPeriod}
-        onChange={applyPeriod}
+        onChange={onChangePeriod}
       />
 
       <div className="scope">
@@ -153,7 +213,7 @@ export function LogworkScreen() {
       ) : (
         members.map((m) => <MemberCard key={m.accountId} member={m} canVerify={canVerify} />)
       )}
-    </div>
+    </>
   );
 }
 

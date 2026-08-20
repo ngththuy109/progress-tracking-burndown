@@ -66,6 +66,7 @@ export {
   findManyByKeys,
   listActiveEpics,
   listVisibleActiveEpics,
+  listAllEpicCalendars,
   updateEpic,
   removeEpic,
   listWithHealth,

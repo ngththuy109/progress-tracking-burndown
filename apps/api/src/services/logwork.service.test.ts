@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildLogworkByPicReport,
   buildLogworkReport,
+  type BuildLogworkByPicInput,
   type BuildLogworkInput,
   type LoadedLogworkSubtask,
+  type WorklogDailyRow,
   type WorklogSumRow,
   type LogworkExemptionRow,
 } from './logwork.service.js';
@@ -254,5 +257,138 @@ describe('buildLogworkReport', () => {
     expect(res.partialPeriod).toBe(true);
     expect(res.warnings).toEqual(['w1']);
     expect(res.visibleEpicCount).toBe(4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+const DATES = ['2026-08-10', '2026-08-11', '2026-08-12'] as const;
+
+const daily = (authorId: string | null, localDate: string, hours: number): WorklogDailyRow => ({
+  authorId,
+  localDate,
+  seconds: hours * H,
+});
+
+function buildByPic(over: Partial<BuildLogworkByPicInput> = {}) {
+  const base: BuildLogworkByPicInput = {
+    from: '2026-08-10',
+    to: '2026-08-12',
+    dates: [...DATES],
+    dailyRows: [],
+    names: new Map(),
+    warnings: [],
+  };
+  return buildLogworkByPicReport({ ...base, ...over });
+}
+
+const picRow = (res: ReturnType<typeof buildByPic>, accountId: string) => {
+  const r = res.rows.find((x) => x.accountId === accountId);
+  if (!r) throw new Error(`no pic ${accountId}`);
+  return r;
+};
+
+describe('buildLogworkByPicReport', () => {
+  it('bày giờ vào đúng cột ngày, cộng dồn nhiều dòng cùng ngày', () => {
+    const res = buildByPic({
+      dailyRows: [
+        daily('a', '2026-08-10', 3),
+        daily('a', '2026-08-10', 2), // cùng ngày → cộng dồn = 5
+        daily('a', '2026-08-12', 6),
+      ],
+    });
+    const a = picRow(res, 'a');
+    expect(a.hoursByDate).toEqual([5, 0, 6]);
+    expect(a.totalHours).toBe(11);
+  });
+
+  it('đếm warnCount theo ngưỡng <=4 (thiếu) và >8 (quá); 0h/khoảng lành không tính', () => {
+    const res = buildByPic({
+      dailyRows: [
+        daily('a', '2026-08-10', 4), // 4 chẵn = thiếu
+        daily('a', '2026-08-11', 6), // lành
+        daily('a', '2026-08-12', 8.5), // quá
+      ],
+    });
+    expect(picRow(res, 'a').warnCount).toBe(2);
+  });
+
+  it('8h chẵn KHÔNG cảnh báo; 0h (không log) để trống, không cảnh báo', () => {
+    const res = buildByPic({ dailyRows: [daily('a', '2026-08-10', 8)] });
+    const a = picRow(res, 'a');
+    expect(a.hoursByDate).toEqual([8, 0, 0]);
+    expect(a.warnCount).toBe(0);
+  });
+
+  it('tra tên từ names; thiếu tên → displayName null (web hiện accountId)', () => {
+    const res = buildByPic({
+      names: new Map([['a', 'Alice']]),
+      dailyRows: [daily('a', '2026-08-10', 5), daily('b', '2026-08-11', 5)],
+    });
+    expect(picRow(res, 'a').displayName).toBe('Alice');
+    expect(picRow(res, 'b').displayName).toBeNull();
+  });
+
+  it('xếp hàng theo tên (rồi accountId)', () => {
+    const res = buildByPic({
+      names: new Map([
+        ['x', 'An'],
+        ['y', 'Bình'],
+      ]),
+      dailyRows: [daily('y', '2026-08-10', 5), daily('x', '2026-08-10', 5), daily('z', '2026-08-10', 5)],
+    });
+    // An (x), Bình (y), rồi 'z' (không tên) — 'z' > 'A'/'B' theo locale.
+    expect(res.rows.map((r) => r.accountId)).toEqual(['x', 'y', 'z']);
+  });
+
+  it('tổng cột (dailyTotals) + tổng toàn kỳ (grandTotal)', () => {
+    const res = buildByPic({
+      dailyRows: [
+        daily('a', '2026-08-10', 3),
+        daily('b', '2026-08-10', 8),
+        daily('a', '2026-08-12', 9),
+      ],
+    });
+    expect(res.dailyTotals).toEqual([11, 0, 9]);
+    expect(res.grandTotal).toBe(20);
+  });
+
+  it('bỏ worklog tác giả null và worklog rơi ngoài dải cột (phòng thủ)', () => {
+    const res = buildByPic({
+      dailyRows: [
+        daily(null, '2026-08-10', 5), // không tác giả → bỏ
+        daily('a', '2026-08-09', 5), // ngoài cột → bỏ
+        daily('a', '2026-08-11', 4),
+      ],
+    });
+    expect(res.rows).toHaveLength(1);
+    expect(picRow(res, 'a').hoursByDate).toEqual([0, 4, 0]);
+    expect(res.grandTotal).toBe(4);
+  });
+
+  it('làm tròn ô về 2 số lẻ (giây / 3600 ra số lẻ dài)', () => {
+    // 10000 giây = 2.7777…h → 2.78; con số hiển thị = con số quyết định cảnh báo.
+    const res = buildLogworkByPicReport({
+      from: '2026-08-10',
+      to: '2026-08-12',
+      dates: [...DATES],
+      names: new Map(),
+      warnings: [],
+      dailyRows: [{ authorId: 'a', localDate: '2026-08-10', seconds: 10000 }],
+    });
+    const a = picRow(res, 'a');
+    expect(a.hoursByDate[0]).toBe(2.78);
+    expect(a.totalHours).toBe(2.78);
+    expect(a.warnCount).toBe(1); // 2.78 <= 4 → thiếu
+  });
+
+  it('truyền qua from/to/dates/warnings + ngưỡng', () => {
+    const res = buildByPic({ warnings: ['w'] });
+    expect(res.from).toBe('2026-08-10');
+    expect(res.to).toBe('2026-08-12');
+    expect(res.dates).toEqual([...DATES]);
+    expect(res.warnings).toEqual(['w']);
+    expect(res.underLimitHours).toBe(4);
+    expect(res.overLimitHours).toBe(8);
   });
 });
