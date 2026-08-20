@@ -216,7 +216,7 @@ export function createOpsHealthPort(prisma: PrismaClient, options: OpsHealthPort
         epicKey: r.epic_key,
         // Status = ERROR mà thiếu `last_error` là bất thường; vẫn phải nói được
         // gì đó thay vì để trống, và chỉ đường tới nơi có nguyên văn lỗi.
-        lastError: r.last_error ?? 'Không rõ lỗi — xem log worker',
+        lastError: r.last_error ?? 'Unknown error — check the worker logs',
         // "Lỗi bao lâu rồi" = từ lần đồng bộ thành công gần nhất; chưa từng đồng
         // bộ thì tính từ lúc thêm Epic.
         since: r.last_synced_at ?? r.added_at,

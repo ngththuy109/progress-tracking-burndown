@@ -233,20 +233,20 @@ export function AddQueryScopePanel() {
   return (
     <section className="panel" aria-labelledby="add-query-title">
       <h2 className="panel__title" id="add-query-title">
-        Theo dõi project phẳng (JQL)
+        Track a flat project (JQL)
       </h2>
       <p className="panel__hint">
-        Dự án không có Epic/Task cha — lá là ticket khớp JQL. Đặt một ID scope tuỳ ý; khoá
-        nhóm lấy từ tiêu đề ticket, nên hãy cấu hình tầng dùng <code>SELF_TITLE</code> ở màn
-        <strong> Tier structure</strong>.
+        For projects with no parent Epic/Task — the leaves are the tickets matching a JQL. Pick any
+        scope ID; group keys come from the ticket titles, so configure a tier that uses{' '}
+        <code>SELF_TITLE</code> on the <strong>Tier structure</strong> screen.
       </p>
 
       <label className="field">
-        <span>ID scope (tự đặt, ví dụ FLAT-PAY)</span>
+        <span>Scope ID (your choice, e.g. FLAT-PAY)</span>
         <input className="input input--code" value={scopeId} aria-label="Scope id" onChange={(e) => setScopeId(e.target.value)} />
       </label>
       <label className="field">
-        <span>JQL tìm lá</span>
+        <span>JQL that finds the leaves</span>
         <input
           className="input input--wide"
           value={jql}
@@ -256,7 +256,7 @@ export function AddQueryScopePanel() {
         />
       </label>
       <label className="field">
-        <span>Project key (để kế thừa cấu hình)</span>
+        <span>Project key (for config inheritance)</span>
         <input className="input input--code" value={projectKey} aria-label="Project key" onChange={(e) => setProjectKey(e.target.value)} />
       </label>
       <label className="field">
@@ -278,15 +278,15 @@ export function AddQueryScopePanel() {
           disabled={!ready || add.isPending}
           onClick={submit}
         >
-          {add.isPending ? 'Đang thêm…' : 'Thêm scope JQL'}
+          {add.isPending ? 'Adding…' : 'Add JQL scope'}
         </button>
       </div>
 
-      {add.isError && <ErrorState error={add.error} title="Không thêm được scope" />}
+      {add.isError && <ErrorState error={add.error} title="Could not add the scope" />}
       {add.isSuccess && (
         <p className="notice notice--ok" role="status">
-          Đã thêm {add.data.added.length} scope
-          {add.data.skipped.length > 0 && `, bỏ qua ${add.data.skipped.length} đã theo dõi`}.
+          Added {add.data.added.length} scope{add.data.added.length === 1 ? '' : 's'}
+          {add.data.skipped.length > 0 && `, skipped ${add.data.skipped.length} already tracked`}.
         </p>
       )}
     </section>

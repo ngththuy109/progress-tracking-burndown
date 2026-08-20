@@ -500,20 +500,20 @@ pnpm auth:grant --user ai@cty.com --role VIEWER
 
 Sửa luật làm trên giao diện: **Phase settings** → sửa mẫu tiêu đề / danh sách Phase / luật từ khoá → **Preview** (xem Task nào đổi phân loại và luật nào thắng) → **Confirm save**.
 
-Lưu xong, các Epic bị ảnh hưởng được đánh dấu vào `dirty:epics`; **job quét mỗi giờ (phút 15) tự đẩy backfill toàn bộ** cho từng Epic đó — `phase_code` được phân loại lại theo cấu hình mới mà không cần thao tác gì thêm. Muốn thấy kết quả **ngay** (không đợi tới lượt quét): bấm **Resync** ở màn hình Epic cho từng Epic liên quan, chọn mức **Toàn bộ**.
+Lưu xong, các Epic bị ảnh hưởng được đánh dấu vào `dirty:epics`; **job quét mỗi giờ (phút 15) tự đẩy backfill toàn bộ** cho từng Epic đó — `phase_code` được phân loại lại theo cấu hình mới mà không cần thao tác gì thêm. Muốn thấy kết quả **ngay** (không đợi tới lượt quét): bấm **Resync** ở màn hình Epic cho từng Epic liên quan, chọn mức **Full**.
 
 > **Cấu trúc tầng (phân tầng linh động):** đổi ở màn **Tier structure** (khai 1..N tầng, đánh
 > dấu đúng một tầng là Phase) lan truyền **y hệt** cơ chế trên (`dirty:epics` → backfill), vì
 > `tiers` nằm chung một `phase_config_set`. Đổi tầng làm `group_path` của lá được tính lại.
-> Trước khi Lưu, kiểm luật bằng khung **Xem thử** ngay trong màn (dán một tiêu đề Task →
+> Trước khi Lưu, kiểm luật bằng khung **Preview** ngay trong màn (dán một tiêu đề Task →
 > xem từng tầng bóc ra mã gì) — đỡ một vòng Lưu + Resync chỉ để phát hiện luật gõ sai.
 > Ca "một Epic chia 2+ giai đoạn" cấu hình một lần dùng chung mọi Epic: xem công thức ở
 > [DYNAMIC-TIERS-DESIGN.md](./DYNAMIC-TIERS-DESIGN.md) §9 (Vòng 5).
 
 ### 6b. Theo dõi một "project phẳng" bằng JQL (scope QUERY)
 
-Dự án không có Epic/Task cha: mở màn **Epics** → panel **"Theo dõi project phẳng (JQL)"** → đặt
-một **ID scope** tuỳ ý + **JQL** tìm lá + **project key** (để kế thừa cấu hình) → **Thêm scope JQL**.
+Dự án không có Epic/Task cha: mở màn **Epics** → panel **"Track a flat project (JQL)"** → đặt
+một **ID scope** tuỳ ý + **JQL** tìm lá + **project key** (để kế thừa cấu hình) → **Add JQL scope**.
 Worker đọc lá bằng JQL (không cần Epic trên Jira). Khoá nhóm của lá phẳng lấy từ **chính tiêu đề
 ticket**, nên cấu hình tầng của project đó nên dùng nguồn `SELF_TITLE` (màn **Tier structure**). Bỏ theo
 dõi / Resync dùng chung nút với Epic thường.

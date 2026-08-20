@@ -278,7 +278,7 @@ function MakeupWorkdaysSection({
     <>
       <section className="panel" aria-labelledby="makeup-title">
         <h2 className="panel__title" id="makeup-title">
-          🛠️ Make-up workdays (làm bù) — {year}
+          🛠️ Make-up workdays — {year}
         </h2>
         <p className="panel__hint">
           Weekend days the team works to make up for another day off (common around Tết). The Planned
@@ -333,7 +333,7 @@ function MakeupImportPanel({ calendarId, year }: { readonly calendarId: string; 
       </h2>
       <p className="panel__hint">
         Same format as holidays — one day per line: <code>2026-04-25</code> or{' '}
-        <code>2026-04-25, làm bù 30/4</code>.
+        <code>2026-04-25, make-up for Apr 30</code>.
       </p>
 
       <label className="field">
@@ -342,7 +342,7 @@ function MakeupImportPanel({ calendarId, year }: { readonly calendarId: string; 
           className="input input--wide"
           rows={5}
           value={raw}
-          placeholder={`${year}-04-25, làm bù 30/4`}
+          placeholder={`${year}-04-25, make-up for Apr 30`}
           aria-label="Make-up workdays, one per line"
           onChange={(e) => setRaw(e.target.value)}
         />

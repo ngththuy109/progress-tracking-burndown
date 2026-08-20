@@ -180,20 +180,20 @@ export const TIER_PRESETS: readonly {
 }[] = [
   {
     id: 'THREE',
-    label: '3 tầng (Epic → Phase → Sub-task)',
-    hint: 'Mặc định: một tầng Phase, khoá lấy từ tiêu đề Task cha.',
+    label: '3-level (Epic → Phase → Sub-task)',
+    hint: 'Default: one Phase tier, key parsed from the parent Task title.',
     build: () => [{ ...newTier('PHASE'), code: 'PHASE', labelVi: 'Phase', sourceType: 'PARENT_TASK_TITLE' }],
   },
   {
     id: 'TWO',
-    label: '2 tầng (Task → Sub-task)',
-    hint: 'Task đóng vai Project; Phase gom từ tiêu đề CHÍNH Sub-task.',
+    label: '2-level (Task → Sub-task)',
+    hint: 'Tasks act as the Project; Phase is parsed from the Sub-task’s OWN title.',
     build: () => [{ ...newTier('PHASE'), code: 'PHASE', labelVi: 'Phase', sourceType: 'SELF_TITLE' }],
   },
   {
     id: 'FLAT',
-    label: 'Phẳng (một rổ Task)',
-    hint: 'Không phân cấp: Project / Phase / Sub-phase đều bóc từ tiêu đề ticket.',
+    label: 'Flat (one basket of Tasks)',
+    hint: 'No hierarchy: Project / Phase / Sub-phase are all parsed from the ticket title.',
     build: () => [
       { ...newTier('GROUP'), code: 'PROJECT', labelVi: 'Project', sourceType: 'SELF_TITLE' },
       { ...newTier('PHASE'), code: 'PHASE', labelVi: 'Phase', sourceType: 'SELF_TITLE' },

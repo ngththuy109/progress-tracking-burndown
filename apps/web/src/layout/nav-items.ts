@@ -37,7 +37,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Epics',
     icon: '📋',
     summary: 'Add or remove Epics and check how each one is syncing.',
-    builtBy: 'GĐ 4',
+    builtBy: 'Stage 4',
     group: 'TRACK',
   },
   {
@@ -45,7 +45,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Burndown chart',
     icon: '📉',
     summary: 'Three views: whole Epic, a single Phase, or several Phases side by side.',
-    builtBy: 'GĐ 4',
+    builtBy: 'Stage 4',
     group: 'TRACK',
   },
   {
@@ -53,7 +53,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Signboard',
     icon: '🗂️',
     summary: 'Function × task type grid. Each cell shows one progress status.',
-    builtBy: 'GĐ 4',
+    builtBy: 'Stage 4',
     group: 'TRACK',
   },
   {

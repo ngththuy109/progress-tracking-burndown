@@ -33,7 +33,7 @@ type ScreenMode = 'EPIC' | 'PHASE' | 'TIER';
 const MODE_LABEL: Record<ScreenMode, string> = {
   EPIC: 'Whole Epic',
   PHASE: 'Single Phase',
-  TIER: 'Theo tầng',
+  TIER: 'By tier',
 };
 
 export function BurndownScreen() {
@@ -226,13 +226,13 @@ function TierDrillView({
 
   return (
     <div className="stack">
-      <div className="scope" role="group" aria-label="Đường drill theo tầng">
+      <div className="scope" role="group" aria-label="Tier drill path">
         <button
           type="button"
           className={`button${effectivePath.length === base.length ? ' button--primary' : ''}`}
           onClick={() => onPath([])}
         >
-          Toàn Epic
+          Whole Epic
         </button>
         {effectivePath.slice(base.length).map((code, i) => (
           <span key={i}>
@@ -249,11 +249,11 @@ function TierDrillView({
       </div>
 
       {children.length === 0 ? (
-        <EmptyState title="Nút lá" description="Nút này không còn tầng con để tách nhỏ hơn." />
+        <EmptyState title="Leaf node" description="This node has no child tiers to break down further." />
       ) : (
         <>
           <BurndownChart series={children} markers={markers} showPlanned onPointClick={onPointClick} />
-          <div className="scope" role="group" aria-label="Chọn nút con để drill xuống">
+          <div className="scope" role="group" aria-label="Pick a child node to drill into">
             {children.map((c) => {
               const drillable = hasChildren(tierSeries, c.groupPath);
               return (
@@ -262,7 +262,7 @@ function TierDrillView({
                   type="button"
                   className="button"
                   disabled={!drillable}
-                  title={drillable ? 'Bấm để mở tầng con' : 'Nút lá — không có tầng con'}
+                  title={drillable ? 'Click to open the child tier' : 'Leaf node — no child tiers'}
                   onClick={() => onPath([...c.groupPath])}
                 >
                   {c.label}

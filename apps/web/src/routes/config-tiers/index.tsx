@@ -35,18 +35,18 @@ import {
 
 /** Chỉ hiện nguồn khoá engine ĐÃ hỗ trợ (resolver Vòng 3). CUSTOM_FIELD để v2. */
 const SUPPORTED_SOURCES: readonly { readonly value: GroupSourceType; readonly label: string }[] = [
-  { value: 'PARENT_TASK_TITLE', label: 'Tiêu đề Task cha' },
-  { value: 'SELF_TITLE', label: 'Tiêu đề chính lá' },
-  { value: 'SUBTASK_TITLE_TOKEN', label: 'Token trong tiêu đề Sub-task' },
-  { value: 'LABEL', label: 'Nhãn Jira (label)' },
+  { value: 'PARENT_TASK_TITLE', label: 'Parent Task title' },
+  { value: 'SELF_TITLE', label: 'Leaf’s own title' },
+  { value: 'SUBTASK_TITLE_TOKEN', label: 'Sub-task title token' },
+  { value: 'LABEL', label: 'Jira label' },
 ];
 
-/** Ghi chú ngắn cạnh nguồn — đúng dòng "nguồn: … (chú thích)" của demo. */
+/** Ghi chú ngắn cạnh nguồn — đúng dòng "source: … (chú thích)" của demo. */
 const SOURCE_NOTE: Record<string, string> = {
-  PARENT_TASK_TITLE: 'bóc từ tiêu đề Task cha',
-  SELF_TITLE: 'bóc từ tiêu đề của CHÍNH lá',
-  SUBTASK_TITLE_TOKEN: 'lấy một token trong mẫu tiêu đề Sub-task',
-  LABEL: 'lấy từ nhãn Jira theo tiền tố',
+  PARENT_TASK_TITLE: 'parsed from the parent Task’s title',
+  SELF_TITLE: 'parsed from the leaf’s OWN title',
+  SUBTASK_TITLE_TOKEN: 'takes one token from the Sub-task title pattern',
+  LABEL: 'taken from a Jira label by prefix',
 };
 
 /** Token bóc được từ mẫu tiêu đề Sub-task chuẩn. */
@@ -68,10 +68,10 @@ function payloadFromConfig(c: EffectiveConfig): ConfigPayload {
 export function TierStructureScreen() {
   const query = useEffectiveConfig(null); // GLOBAL — single-tenant
 
-  if (query.isPending) return <LoadingState label="Đang tải cấu trúc tầng…" rows={3} />;
+  if (query.isPending) return <LoadingState label="Loading the tier structure…" rows={3} />;
   if (query.isError) {
     return (
-      <ErrorState error={query.error} title="Không tải được cấu trúc tầng" onRetry={() => void query.refetch()} />
+      <ErrorState error={query.error} title="Could not load the tier structure" onRetry={() => void query.refetch()} />
     );
   }
 
@@ -102,11 +102,11 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
       <div className="glbar">
         <span aria-hidden="true">📖</span>
         <span>
-          <strong>Chưa biết bắt đầu từ đâu?</strong> Xem hướng dẫn từng bước thiết lập cấu hình
-          phân tầng cho một dự án.
+          <strong>Not sure where to start?</strong> See the step-by-step guide to setting up the
+          tier configuration for a project.
         </span>
         <button type="button" className="glbar__open" onClick={() => setGuideOpen(true)}>
-          Mở hướng dẫn cấu hình →
+          Open the setup guide →
         </button>
       </div>
       {guideOpen && <GuideModal onClose={() => setGuideOpen(false)} />}
@@ -114,8 +114,8 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
       {!phaseOk && (
         <p className="notice notice--error" role="alert">
           {phaseCount === 0
-            ? 'Chưa có tầng nào là Phase. Đánh dấu đúng một tầng là Phase.'
-            : `Có ${phaseCount} tầng đang là Phase. Chỉ được đúng một.`}
+            ? 'No tier is marked as Phase yet. Mark exactly one tier as the Phase tier.'
+            : `${phaseCount} tiers are marked as Phase. Exactly one is allowed.`}
         </p>
       )}
 
@@ -125,14 +125,17 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
           <ScopeInfoCard />
 
           <section className="panel" aria-labelledby="tiers-list-title">
-            <p className="panel__eyebrow">Bước 2 · Các tầng nhóm</p>
+            <p className="panel__eyebrow">Step 2 · Grouping tiers</p>
             <h2 className="panel__title" id="tiers-list-title">
-              Cấu trúc phân tầng <span className="muted">· {state.tiers.length} tầng</span>
+              Tier structure{' '}
+              <span className="muted">
+                · {state.tiers.length} tier{state.tiers.length === 1 ? '' : 's'}
+              </span>
             </h2>
             <p className="panel__hint">
-              Mỗi tầng chọn <strong>nguồn khoá</strong> và đánh dấu <strong>đúng một</strong> tầng
-              là <em>Phase</em> — tầng gắn với Signboard và đường Kế hoạch. Bấm <strong>Sửa ✎</strong>{' '}
-              để mở trình sửa giá trị/luật/mẫu của tầng.
+              Each tier picks a <strong>key source</strong>, and <strong>exactly one</strong> tier
+              is marked as <em>Phase</em> — the tier behind the Signboard and the Planned line.
+              Click <strong>Edit ✎</strong> to open the tier’s values/rules/patterns editor.
             </p>
 
             <ol className="stack tier-list">
@@ -149,7 +152,7 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
             </ol>
 
             <button type="button" className="button" onClick={() => dispatch({ type: 'ADD_TIER' })}>
-              + Thêm tầng
+              + Add tier
             </button>
 
             <IssueList issues={errors.at('tiers')} />
@@ -161,11 +164,11 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
 
       <section className="panel">
         <label className="field">
-          <span>Ghi chú cho thay đổi này</span>
+          <span>Note for this change</span>
           <input
             className="input input--wide"
             value={note}
-            placeholder="Ví dụ: tách thêm tầng Stream"
+            placeholder="e.g. split out a Stream tier"
             onChange={(e) => setNote(e.target.value)}
           />
         </label>
@@ -173,20 +176,21 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
 
       {save.isSuccess && (
         <p className="notice notice--ok" role="status">
-          Đã lưu bản v{save.data.version}. {save.data.affectedEpics} Epic sẽ được tính lại.
+          Saved as version v{save.data.version}. {save.data.affectedEpics} Epics will be recomputed.
         </p>
       )}
       {save.isError && !errors.hasBlocking && (
-        <ErrorState error={save.error} title="Không lưu được cấu trúc tầng" />
+        <ErrorState error={save.error} title="Could not save the tier structure" />
       )}
       {errors.hasBlocking && (
         <p className="notice notice--error" role="alert">
-          Cấu hình chưa hợp lệ nên <strong>chưa lưu gì cả</strong>. Xem các dòng báo đỏ.
+          The configuration is not valid, so <strong>nothing was saved</strong>. Check the lines
+          marked in red.
         </p>
       )}
 
       <div className="actions actions--sticky">
-        <span className="muted">{isTierDirty(state) ? 'Có thay đổi chưa lưu' : 'Chưa thay đổi'}</span>
+        <span className="muted">{isTierDirty(state) ? 'Unsaved changes' : 'No changes yet'}</span>
         <button
           type="button"
           className="button button--primary"
@@ -202,7 +206,7 @@ function TierEditor({ config }: { readonly config: EffectiveConfig }) {
             )
           }
         >
-          {save.isPending ? 'Đang lưu…' : '💾 Lưu cấu trúc tầng'}
+          {save.isPending ? 'Saving…' : '💾 Save tier structure'}
         </button>
       </div>
     </>
@@ -238,13 +242,13 @@ function TiersPreviewCard({ tiers }: { readonly tiers: readonly GroupTier[] }) {
 
   return (
     <section className="panel tiers-preview" aria-labelledby="tiers-preview-title">
-      <p className="panel__eyebrow panel__eyebrow--plain">Xem thử · không cần chờ sync</p>
+      <p className="panel__eyebrow panel__eyebrow--plain">Preview · no sync needed</p>
       <h2 className="panel__title" id="tiers-preview-title">
-        Ticket mẫu → <code>group_path</code>
+        Sample tickets → <code>group_path</code>
       </h2>
       <p className="panel__hint">
-        Mỗi lá thành một <strong>vectơ khoá</strong> theo tầng. Ô có viền = phần tử tầng{' '}
-        <em>Phase</em>. Dán tiêu đề Task thật, mỗi dòng một ticket.
+        Each leaf becomes a <strong>key vector</strong>, one element per tier. The outlined chip is
+        the <em>Phase</em> tier element. Paste real Task titles, one ticket per line.
       </p>
 
       <textarea
@@ -252,7 +256,7 @@ function TiersPreviewCard({ tiers }: { readonly tiers: readonly GroupTier[] }) {
         rows={4}
         value={text}
         placeholder={'[PAY][offshore_P1]Design\n[PAY][offshore_P2]Development'}
-        aria-label="Tiêu đề Task để xem thử, mỗi dòng một ticket"
+        aria-label="Task titles to preview, one ticket per line"
         onChange={(e) => setText(e.target.value)}
       />
       <div className="row">
@@ -262,19 +266,19 @@ function TiersPreviewCard({ tiers }: { readonly tiers: readonly GroupTier[] }) {
           disabled={titles.length === 0 || preview.isPending}
           onClick={run}
         >
-          {preview.isPending ? 'Đang bóc…' : 'Xem thử'}
+          {preview.isPending ? 'Parsing…' : 'Preview'}
         </button>
-        {titles.length > 50 && <span className="muted">Chỉ bóc 50 dòng đầu.</span>}
+        {titles.length > 50 && <span className="muted">Only the first 50 lines are parsed.</span>}
       </div>
 
-      {preview.isError && <ErrorState error={preview.error} title="Không xem thử được" />}
+      {preview.isError && <ErrorState error={preview.error} title="Could not run the preview" />}
 
       {preview.data && (
         <div className="tbl-scroll" aria-live="polite">
           <table className="tiers-preview__table">
             <thead>
               <tr>
-                <th>Tiêu đề</th>
+                <th>Title</th>
                 <th>group_path</th>
               </tr>
             </thead>
@@ -290,8 +294,9 @@ function TiersPreviewCard({ tiers }: { readonly tiers: readonly GroupTier[] }) {
             </tbody>
           </table>
           <p className="panel__hint">
-            Ô "…" = tầng lấy nguồn từ dữ liệu LÁ (title lá / token / label) — không bóc được từ
-            tiêu đề Task. <code>UNCLASSIFIED</code> = không luật nào khớp, kiểm lại từ khoá.
+            A "…" cell = that tier takes its key from LEAF data (leaf title / token / label), so it
+            cannot be parsed from a Task title. <code>UNCLASSIFIED</code> = no rule matched — check
+            the keywords.
           </p>
         </div>
       )}
@@ -321,8 +326,8 @@ function PathChips({
               style={color === null ? undefined : { borderColor: color, color }}
               title={
                 e.resolved === null
-                  ? `Tầng ${e.labelVi || e.code}: nguồn "${e.sourceType}" cần dữ liệu lá`
-                  : `Tầng ${e.labelVi || e.code}`
+                  ? `Tier ${e.labelVi || e.code}: source "${e.sourceType}" needs leaf data`
+                  : `Tier ${e.labelVi || e.code}`
               }
             >
               {e.resolved ?? '…'}
@@ -342,52 +347,53 @@ function PathChips({
 function ScopeInfoCard() {
   return (
     <section className="panel" aria-labelledby="scope-info-title">
-      <p className="panel__eyebrow">Bước 1 · Phạm vi theo dõi</p>
+      <p className="panel__eyebrow">Step 1 · What to track</p>
       <h2 className="panel__title" id="scope-info-title">
         Tracked scope
       </h2>
       <p className="panel__hint">
-        Hệ thống tính số trên <strong>tập lá</strong> của mỗi scope. Hai cách khoanh tập lá:
+        All numbers are computed over each scope’s <strong>leaf set</strong>. Two ways to define
+        the leaf set:
       </p>
       <dl className="scope-kv">
         <dt>
           <Badge tone="info">CONTAINER</Badge>
         </dt>
         <dd>
-          Đăng ký một Epic/Task container — lá là <strong>Sub-task/hậu duệ</strong> của nó (mô hình
-          3 tầng gốc).
+          Register a container Epic/Task — the leaves are its <strong>Sub-tasks/descendants</strong>{' '}
+          (the original 3-level model).
         </dd>
         <dt>
           <Badge tone="neutral">QUERY</Badge>
         </dt>
         <dd>
-          Dự án phẳng không có ticket cha — khai một <strong>JQL</strong>, lá là ticket khớp truy
-          vấn.
+          A flat project with no parent ticket — declare a <strong>JQL</strong>; the leaves are the
+          tickets matching the query.
         </dd>
       </dl>
       <p className="panel__hint">
-        Đăng ký / sửa scope cho từng dự án ở màn <Link to="/epics">Epics</Link>. Cấu trúc tầng ở
-        trang này áp <strong>chung</strong> cho mọi scope.
+        Register or edit each project’s scope on the <Link to="/epics">Epics</Link> screen. The
+        tier structure on this page applies to <strong>every</strong> scope.
       </p>
     </section>
   );
 }
 
-/** Header "Chọn kiểu cấu trúc phân tầng" — đúng khối đầu trang của demo. */
+/** Header "Choose a tier structure type" — đúng khối đầu trang của demo. */
 function ConfigTypeHeader({ dispatch }: { readonly dispatch: (a: TierAction) => void }) {
   return (
     <section className="panel cfg-head" aria-labelledby="preset-title">
       <div>
-        <p className="panel__eyebrow">Cấu hình global · single-tenant</p>
+        <p className="panel__eyebrow">Global configuration · single-tenant</p>
         <h2 className="panel__title" id="preset-title">
-          Chọn kiểu cấu trúc phân tầng
+          Choose a tier structure type
         </h2>
         <p className="panel__hint">
-          Áp cho <strong>toàn hệ thống</strong> — mọi tracked scope dùng chung cấu trúc này. Chọn
-          một mẫu để bắt đầu nhanh, rồi tinh chỉnh bên dưới.
+          Applies to the <strong>whole system</strong> — every tracked scope shares this structure.
+          Pick a preset to start quickly, then fine-tune below.
         </p>
       </div>
-      <div className="scope" role="group" aria-label="Chọn kiểu cấu hình">
+      <div className="scope" role="group" aria-label="Choose a configuration preset">
         {TIER_PRESETS.map((p) => (
           <button
             key={p.id}
@@ -417,75 +423,81 @@ function GuideModal({ onClose }: { readonly onClose: () => void }) {
       <div className="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
         <div className="guide-modal__head">
           <div>
-            <p className="panel__eyebrow">Hướng dẫn</p>
+            <p className="panel__eyebrow">Guide</p>
             <h2 className="panel__title" id="guide-title">
-              Thiết lập cấu hình phân tầng cho một dự án
+              Setting up the tier configuration for a project
             </h2>
           </div>
-          <button type="button" className="button" aria-label="Đóng hướng dẫn" onClick={onClose}>
+          <button type="button" className="button" aria-label="Close the guide" onClick={onClose}>
             ×
           </button>
         </div>
         <div className="guide-modal__body">
           <p className="panel__hint">
-            Cấu hình trả lời 3 câu: <strong>theo dõi cái gì</strong>,{' '}
-            <strong>gom nhóm theo mấy tầng</strong>, và <strong>mỗi tầng lấy khoá từ đâu</strong>.
-            Làm lần lượt:
+            The configuration answers three questions: <strong>what to track</strong>,{' '}
+            <strong>how many tiers to group by</strong>, and{' '}
+            <strong>where each tier takes its key from</strong>. Work through them in order:
           </p>
 
           <div className="guide-myth">
-            <p className="guide-myth__head">⚠️ Đừng nhầm hai chữ "tầng"</p>
+            <p className="guide-myth__head">⚠️ Two different "levels" — don’t mix them up</p>
             <p>
-              🏢 <strong>Nhà Jira — 3 tầng CỐ ĐỊNH</strong> (Epic → Task = [Phase] → Sub-task):
-              chiều sâu cây issue, Jira định sẵn — "3 tầng" trong tên preset chính là cái này.
-              {' '}📏 <strong>Tầng nhóm — BẠN xếp (1..N)</strong>: số "lát cắt" để cộng dồn số
-              liệu; preset "3 tầng" chỉ đặt <strong>1</strong> lát = Phase. Muốn gom sâu hơn
-              (Giai đoạn, Stream…) bấm <strong>+ Thêm tầng</strong> — không giới hạn số lượng.
+              🏢 <strong>The Jira house — 3 FIXED levels</strong> (Epic → Task = [Phase] →
+              Sub-task): the issue-tree depth, fixed by Jira — the "3-level" in the preset name
+              refers to this. 📏 <strong>Grouping tiers — YOU define them (1..N)</strong>: the
+              number of "slices" the numbers roll up through; the "3-level" preset sets up just{' '}
+              <strong>1</strong> slice = Phase. To group deeper (Stage, Stream…), click{' '}
+              <strong>+ Add tier</strong> — there is no limit.
             </p>
           </div>
 
           <ol className="guide-steps">
             <li>
-              <strong>Chọn phạm vi theo dõi (tracked scope).</strong> Có ticket cha →{' '}
-              <code>CONTAINER</code> (dán key Epic/Task ở màn Epics). Dự án phẳng →{' '}
-              <code>QUERY</code> (viết JQL). Lá = tầng mang số liệu (estimate/worklog).
+              <strong>Choose the tracked scope.</strong> Has a parent ticket →{' '}
+              <code>CONTAINER</code> (paste the Epic/Task key on the Epics screen). Flat project →{' '}
+              <code>QUERY</code> (write a JQL). Leaves = the level carrying the numbers
+              (estimate/worklog).
             </li>
             <li>
-              <strong>Khai các tầng nhóm (1..N), từ trên xuống.</strong> Mỗi tầng đặt tên + chọn
-              nguồn khoá: title Task cha · title của lá · token tiêu đề · label. Ít nhất 1 tầng.
+              <strong>Declare the grouping tiers (1..N), top down.</strong> Each tier gets a name +
+              a key source: parent Task title · the leaf’s own title · a title token · a label. At
+              least 1 tier.
             </li>
             <li>
-              <strong>Đánh dấu đúng MỘT tầng là Phase.</strong> Tầng Phase giữ các tính năng theo
-              Phase: Signboard, đường Kế hoạch, cảnh báo dịch chuyển. Tầng khác chỉ nhóm & cộng dồn.
+              <strong>Mark exactly ONE tier as Phase.</strong> The Phase tier keeps every
+              Phase-based feature: Signboard, the Planned line, shift alerts. Other tiers only
+              group and roll numbers up.
             </li>
             <li>
-              <strong>Với tầng lấy từ tiêu đề: thêm mẫu & luật.</strong> Mẫu tiêu đề (VD{' '}
-              <code>{'[{project}][{name}]{task}'}</code>) + luật từ khoá → mã (VD{' '}
-              <code>offshore_P1 → GD1</code>). Dùng <strong>Xem thử</strong> bên phải để kiểm ngay.
+              <strong>For title-based tiers: add patterns & rules.</strong> Title patterns (e.g.{' '}
+              <code>{'[{project}][{name}]{task}'}</code>) + keyword → code rules (e.g.{' '}
+              <code>offshore_P1 → GD1</code>). Use <strong>Preview</strong> on the right to check
+              instantly.
             </li>
             <li>
-              <strong>Cấu hình Signboard columns (cho tầng Phase).</strong> Loại task
-              (Create/Review/Fix…), phía làm VN/JP, mẫu tiêu đề Sub-task, thứ tự Sub-phase.
+              <strong>Configure Signboard columns (for the Phase tier).</strong> Task types
+              (Create/Review/Fix…), the VN/JP side, Sub-task title patterns, Sub-phase order.
             </li>
             <li>
-              <strong>Gắn lịch làm việc.</strong> Chọn lịch VN/JP cho scope ở màn Days off — quyết
-              định cách tính đường Kế hoạch.
+              <strong>Attach a work calendar.</strong> Pick the VN/JP calendar for the scope on the
+              Days off screen — it decides how the Planned line is computed.
             </li>
             <li>
-              <strong>Xem thử → Lưu.</strong> Đối chiếu <code>group_path</code> ở khung Xem thử.
-              Lưu xong hệ thống tự backfill (tối đa ~1 giờ); muốn thấy ngay thì Resync mức Toàn bộ.
+              <strong>Preview → Save.</strong> Check <code>group_path</code> in the Preview panel.
+              After saving, the system backfills on its own (up to ~1 hour); to see the result
+              right away, run a Full resync.
             </li>
           </ol>
 
           <p className="guide-tip">
-            <strong>Nguyên tắc vàng:</strong> chỉ <strong>tầng lá</strong> mang số liệu thật
-            (estimate/worklog/ngày). Tầng nhóm — kể cả Phase — không tự có số; số của chúng là{' '}
-            <strong>tổng cộng dồn</strong> từ lá lên.
+            <strong>Golden rule:</strong> only the <strong>leaf level</strong> carries real numbers
+            (estimate/worklog/dates). Grouping tiers — Phase included — have no numbers of their
+            own; their numbers are <strong>roll-up totals</strong> from the leaves.
           </p>
 
           <p className="panel__hint">
-            Chi tiết kỹ thuật & công thức ca "Giai đoạn": <code>docs/DYNAMIC-TIERS-DESIGN.md</code>{' '}
-            §9. Bản demo tương tác: <code>docs/dynamic-tiers-demo.html</code>.
+            Technical details & the "Stage" recipe: <code>docs/DYNAMIC-TIERS-DESIGN.md</code> §9.
+            Interactive demo: <code>docs/dynamic-tiers-demo.html</code>.
           </p>
         </div>
       </div>
@@ -514,14 +526,14 @@ function TierRow({
   readonly errors: ReturnType<typeof indexIssues>;
   readonly dispatch: (a: TierAction) => void;
 }) {
-  const name = tier.code === '' ? `tầng ${index + 1}` : tier.code;
+  const name = tier.code === '' ? `tier ${index + 1}` : tier.code;
   const [open, setOpen] = useState(false);
   const editsInPhaseSettings = tier.role === 'PHASE' && tier.sourceType === 'PARENT_TASK_TITLE';
   const sourceLabel =
     SUPPORTED_SOURCES.find((s) => s.value === tier.sourceType)?.label ?? tier.sourceType;
 
   return (
-    <li className="tier-row" aria-label={`Tầng ${index + 1}`}>
+    <li className="tier-row" aria-label={`Tier ${index + 1}`}>
       <div className="row tier-row__head">
         <MoveButtons
           label={name}
@@ -535,16 +547,16 @@ function TierRow({
         <input
           className="input"
           value={tier.labelVi}
-          placeholder="Tên hiển thị"
-          aria-label={`Tên tầng ${index + 1}`}
+          placeholder="Display name"
+          aria-label={`Tier ${index + 1} name`}
           onChange={(e) => dispatch({ type: 'UPDATE_TIER', index, patch: { labelVi: e.target.value } })}
         />
         {tier.role === 'PHASE' ? <Badge tone="success">PHASE</Badge> : <Badge tone="neutral">GROUP</Badge>}
         <input
           className="input input--code"
           value={tier.code}
-          placeholder="Mã tầng"
-          aria-label={`Mã tầng ${index + 1}`}
+          placeholder="Tier code"
+          aria-label={`Tier ${index + 1} code`}
           onChange={(e) => dispatch({ type: 'UPDATE_TIER', index, patch: { code: e.target.value } })}
         />
         <label className="field field--inline">
@@ -552,24 +564,24 @@ function TierRow({
             type="radio"
             name="phase-tier"
             checked={tier.role === 'PHASE'}
-            aria-label={`Đặt tầng ${index + 1} là Phase`}
+            aria-label={`Mark tier ${index + 1} as the Phase tier`}
             onChange={() => dispatch({ type: 'SET_PHASE_TIER', index })}
           />
-          <span>Là tầng Phase</span>
+          <span>Phase tier</span>
         </label>
         {editsInPhaseSettings ? (
-          <Link className="button" to="/config/phase" title="Giá trị & luật của tầng Phase sửa ở Phase settings">
-            Sửa ✎
+          <Link className="button" to="/config/phase" title="The Phase tier’s values & rules are edited in Phase settings">
+            Edit ✎
           </Link>
         ) : (
           <button
             type="button"
             className="button"
             aria-expanded={open}
-            aria-label={`Sửa giá trị/luật/mẫu của tầng ${index + 1}`}
+            aria-label={`Edit values/rules/patterns of tier ${index + 1}`}
             onClick={() => setOpen((v) => !v)}
           >
-            {open ? 'Thu gọn ▴' : 'Sửa ✎'}
+            {open ? 'Collapse ▴' : 'Edit ✎'}
           </button>
         )}
         <DeleteButton label={name} onClick={() => dispatch({ type: 'REMOVE_TIER', index })} />
@@ -577,18 +589,18 @@ function TierRow({
 
       {/* Dòng tóm tắt như demo: "nguồn: X (chú thích)" + chips giá trị chuẩn. */}
       <div className="tier-row__src">
-        <span className="muted">nguồn:</span>
+        <span className="muted">source:</span>
         <select
           className="input input--sm"
           value={tier.sourceType}
-          aria-label={`Nguồn khoá tầng ${index + 1}`}
+          aria-label={`Tier ${index + 1} key source`}
           onChange={(e) =>
             dispatch({ type: 'UPDATE_TIER', index, patch: { sourceType: e.target.value as GroupSourceType } })
           }
         >
           {/* Nếu tầng đang mang nguồn CHƯA hỗ trợ (từ config cũ) vẫn hiện để không mất. */}
           {!SUPPORTED_SOURCES.some((s) => s.value === tier.sourceType) && (
-            <option value={tier.sourceType}>{tier.sourceType} (chưa hỗ trợ)</option>
+            <option value={tier.sourceType}>{tier.sourceType} (not supported yet)</option>
           )}
           {SUPPORTED_SOURCES.map((s) => (
             <option key={s.value} value={s.value}>
@@ -599,7 +611,7 @@ function TierRow({
         <span className="muted">{SOURCE_NOTE[tier.sourceType] ?? sourceLabel}</span>
         {editsInPhaseSettings ? (
           <span className="muted">
-            · giá trị & luật nằm ở <Link to="/config/phase">Phase settings</Link>
+            · values & rules live in <Link to="/config/phase">Phase settings</Link>
           </span>
         ) : (
           tier.definitions.length > 0 && (
@@ -651,10 +663,10 @@ function TierSourceParam({
         <select
           className="input"
           value={token}
-          aria-label={`Token nguồn tầng ${index + 1}`}
+          aria-label={`Tier ${index + 1} source token`}
           onChange={(e) => dispatch({ type: 'SET_SOURCE_CONFIG', index, key: 'token', value: e.target.value })}
         >
-          <option value="">(chọn token)</option>
+          <option value="">(pick a token)</option>
           {TOKEN_OPTIONS.map((t) => (
             <option key={t} value={t}>
               {t}
@@ -668,12 +680,12 @@ function TierSourceParam({
     const prefix = String(tier.sourceConfig?.['prefix'] ?? '');
     return (
       <label className="field field--inline">
-        <span>Tiền tố nhãn</span>
+        <span>Label prefix</span>
         <input
           className="input input--code"
           value={prefix}
           placeholder="team:"
-          aria-label={`Tiền tố nhãn tầng ${index + 1}`}
+          aria-label={`Tier ${index + 1} label prefix`}
           onChange={(e) => dispatch({ type: 'SET_SOURCE_CONFIG', index, key: 'prefix', value: e.target.value })}
         />
       </label>
@@ -693,37 +705,37 @@ function TierDefinitions({
 }) {
   return (
     <fieldset className="subsection">
-      <legend>Giá trị chuẩn của tầng</legend>
+      <legend>Canonical tier values</legend>
       <ul className="rows">
         {tier.definitions.map((d, j) => (
           <li className="row" key={j}>
             <input
               className="input input--code"
               value={d.groupCode}
-              placeholder="Mã"
-              aria-label={`Mã giá trị ${j + 1} của tầng ${index + 1}`}
+              placeholder="Code"
+              aria-label={`Value ${j + 1} code of tier ${index + 1}`}
               onChange={(e) => dispatch({ type: 'UPDATE_DEF', tier: index, index: j, patch: { groupCode: e.target.value } })}
             />
             <input
               className="input"
               value={d.labelVi}
-              placeholder="Tên"
-              aria-label={`Tên giá trị ${j + 1} của tầng ${index + 1}`}
+              placeholder="Name"
+              aria-label={`Value ${j + 1} name of tier ${index + 1}`}
               onChange={(e) => dispatch({ type: 'UPDATE_DEF', tier: index, index: j, patch: { labelVi: e.target.value } })}
             />
             <input
               className="input input--color"
               type="color"
               value={d.colorHex ?? '#888888'}
-              aria-label={`Màu giá trị ${j + 1} của tầng ${index + 1}`}
+              aria-label={`Value ${j + 1} color of tier ${index + 1}`}
               onChange={(e) => dispatch({ type: 'UPDATE_DEF', tier: index, index: j, patch: { colorHex: e.target.value } })}
             />
-            <DeleteButton label={d.groupCode || `giá trị ${j + 1}`} onClick={() => dispatch({ type: 'REMOVE_DEF', tier: index, index: j })} />
+            <DeleteButton label={d.groupCode || `value ${j + 1}`} onClick={() => dispatch({ type: 'REMOVE_DEF', tier: index, index: j })} />
           </li>
         ))}
       </ul>
       <button type="button" className="button button--small" onClick={() => dispatch({ type: 'ADD_DEF', tier: index })}>
-        + Thêm giá trị
+        + Add value
       </button>
     </fieldset>
   );
@@ -740,21 +752,21 @@ function TierRules({
 }) {
   return (
     <fieldset className="subsection">
-      <legend>Luật khớp từ khoá → mã</legend>
+      <legend>Keyword → code match rules</legend>
       <ul className="rows">
         {tier.rules.map((r, j) => (
           <li className="row" key={j}>
             <input
               className="input"
               value={r.keyword}
-              placeholder="Từ khoá"
-              aria-label={`Từ khoá luật ${j + 1} của tầng ${index + 1}`}
+              placeholder="Keyword"
+              aria-label={`Rule ${j + 1} keyword of tier ${index + 1}`}
               onChange={(e) => dispatch({ type: 'UPDATE_RULE', tier: index, index: j, patch: { keyword: e.target.value } })}
             />
             <select
               className="input"
               value={r.matchMode}
-              aria-label={`Chế độ khớp luật ${j + 1} của tầng ${index + 1}`}
+              aria-label={`Rule ${j + 1} match mode of tier ${index + 1}`}
               onChange={(e) =>
                 dispatch({
                   type: 'UPDATE_RULE',
@@ -764,32 +776,32 @@ function TierRules({
                 })
               }
             >
-              <option value="CONTAINS">Chứa</option>
+              <option value="CONTAINS">Contains</option>
               <option value="REGEX">Regex</option>
             </select>
             <span className="muted">→</span>
             <input
               className="input input--code"
               value={r.groupCode}
-              placeholder="Mã"
-              aria-label={`Mã đích luật ${j + 1} của tầng ${index + 1}`}
+              placeholder="Code"
+              aria-label={`Rule ${j + 1} target code of tier ${index + 1}`}
               onChange={(e) => dispatch({ type: 'UPDATE_RULE', tier: index, index: j, patch: { groupCode: e.target.value } })}
             />
             <input
               className="input input--number"
               type="number"
               value={r.matchPriority}
-              aria-label={`Ưu tiên luật ${j + 1} của tầng ${index + 1}`}
+              aria-label={`Rule ${j + 1} priority of tier ${index + 1}`}
               onChange={(e) =>
                 dispatch({ type: 'UPDATE_RULE', tier: index, index: j, patch: { matchPriority: Number(e.target.value) } })
               }
             />
-            <DeleteButton label={r.keyword || `luật ${j + 1}`} onClick={() => dispatch({ type: 'REMOVE_RULE', tier: index, index: j })} />
+            <DeleteButton label={r.keyword || `rule ${j + 1}`} onClick={() => dispatch({ type: 'REMOVE_RULE', tier: index, index: j })} />
           </li>
         ))}
       </ul>
       <button type="button" className="button button--small" onClick={() => dispatch({ type: 'ADD_RULE', tier: index })}>
-        + Thêm luật
+        + Add rule
       </button>
     </fieldset>
   );
@@ -806,7 +818,7 @@ function TierPatterns({
 }) {
   return (
     <fieldset className="subsection">
-      <legend>Mẫu tiêu đề (tuỳ chọn)</legend>
+      <legend>Title patterns (optional)</legend>
       <ul className="rows">
         {tier.titlePatterns.map((p, j) => (
           <li className="row" key={j}>
@@ -814,17 +826,17 @@ function TierPatterns({
               className="input input--wide"
               value={p.patternText}
               placeholder="[{name}] {rest}"
-              aria-label={`Mẫu tiêu đề ${j + 1} của tầng ${index + 1}`}
+              aria-label={`Title pattern ${j + 1} of tier ${index + 1}`}
               onChange={(e) =>
                 dispatch({ type: 'UPDATE_PATTERN', tier: index, index: j, patch: { patternText: e.target.value } })
               }
             />
-            <DeleteButton label={`mẫu ${j + 1}`} onClick={() => dispatch({ type: 'REMOVE_PATTERN', tier: index, index: j })} />
+            <DeleteButton label={`pattern ${j + 1}`} onClick={() => dispatch({ type: 'REMOVE_PATTERN', tier: index, index: j })} />
           </li>
         ))}
       </ul>
       <button type="button" className="button button--small" onClick={() => dispatch({ type: 'ADD_PATTERN', tier: index })}>
-        + Thêm mẫu
+        + Add pattern
       </button>
     </fieldset>
   );
