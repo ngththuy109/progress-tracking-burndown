@@ -293,11 +293,11 @@ test('lọc theo PIC để mỗi người thấy đúng phần việc của mìn
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  // Ô chọn CÓ TÌM KIẾM: gõ (kể cả KHÔNG dấu) để lọc nhanh rồi chọn.
-  const pic = page.getByRole('combobox', { name: 'Filter by PIC' });
-  await pic.click();
-  await pic.fill('nguyen');
-  await page.getByRole('option', { name: /Nguyễn An/ }).click();
+  // Ô lọc PIC là popover CHỌN NHIỀU có Ô TÌM: gõ (kể cả KHÔNG dấu) để lọc nhanh
+  // rồi tích. Số ticket hiện cạnh tên ("… (1)") — thấy khối lượng TRƯỚC khi tích.
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
+  await page.getByRole('textbox', { name: 'Search PIC' }).fill('nguyen');
+  await page.getByRole('checkbox', { name: 'Nguyễn An (1)' }).check();
 
   await expect(page.getByText('PAY-101')).toBeVisible();
   await expect(page.getByText('PAY-102')).toHaveCount(0);
@@ -305,20 +305,36 @@ test('lọc theo PIC để mỗi người thấy đúng phần việc của mìn
   await expect(page.getByRole('button', { name: /Download CSV report \(1 tickets\)/ })).toBeVisible();
 });
 
-test('PIC combobox: gõ để thu hẹp danh sách rồi chọn', async ({ page }) => {
+test('chọn NHIỀU PIC gom được phần việc của cả nhóm cùng lúc', async ({ page }) => {
+  // "Lọc hàng loạt": một quản lý tích cả An lẫn Bình để thấy chung một danh sách.
   await installApi(page, { dqIssues: DQ_ISSUES });
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  const pic = page.getByRole('combobox', { name: 'Filter by PIC' });
-  await pic.click();
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
+  await page.getByRole('checkbox', { name: 'Nguyễn An (1)' }).check();
+  await page.getByRole('checkbox', { name: 'Trần Bình (1)' }).check();
+
+  await expect(page.getByText('PAY-101')).toBeVisible();
+  await expect(page.getByText('PAY-102')).toBeVisible();
+  // PAY-103 chưa gán ai → không thuộc nhóm đã chọn.
+  await expect(page.getByText('PAY-103')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Download CSV report \(2 tickets\)/ })).toBeVisible();
+});
+
+test('ô tìm trong bộ lọc PIC thu hẹp danh sách (gõ KHÔNG dấu vẫn khớp)', async ({ page }) => {
+  await installApi(page, { dqIssues: DQ_ISSUES });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
   // Mở ra thấy đủ mọi người.
-  await expect(page.getByRole('option', { name: /Nguyễn An/ })).toBeVisible();
-  await expect(page.getByRole('option', { name: /Trần Bình/ })).toBeVisible();
-  // Gõ "tran" (không dấu) → chỉ còn Trần Bình.
-  await pic.fill('tran');
-  await expect(page.getByRole('option', { name: /Trần Bình/ })).toBeVisible();
-  await expect(page.getByRole('option', { name: /Nguyễn An/ })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Nguyễn An (1)' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Trần Bình (1)' })).toBeVisible();
+  // Gõ "tran" (không dấu) → danh sách tích chỉ còn Trần Bình.
+  await page.getByRole('textbox', { name: 'Search PIC' }).fill('tran');
+  await expect(page.getByRole('checkbox', { name: 'Trần Bình (1)' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Nguyễn An (1)' })).toHaveCount(0);
 });
 
 test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async ({ page }) => {
@@ -328,9 +344,8 @@ test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  const pic = page.getByRole('combobox', { name: 'Filter by PIC' });
-  await pic.click();
-  await page.getByRole('option', { name: /No PIC yet/ }).click();
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
+  await page.getByRole('checkbox', { name: 'No PIC yet (1)' }).check();
 
   await expect(page.getByText('PAY-103')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);
@@ -349,7 +364,9 @@ test('lọc theo LOẠI LỖI (kể cả "planned on a day off") để xử lý 
   // Badge loại lỗi hiện NGAY trên ticket (exact để không đụng mục "… (1)" trong ô chọn).
   await expect(page.getByText('Planned on a day off', { exact: true })).toBeVisible();
 
-  await page.getByLabel('Filter by problem type').selectOption({ label: 'Planned on a day off (1)' });
+  // Ô lọc loại lỗi là popover chọn NHIỀU — mở ra rồi tích loại cần xem.
+  await page.locator('summary[aria-label="Filter by problem type"]').click();
+  await page.getByRole('checkbox', { name: 'Planned on a day off (1)' }).check();
   await expect(page.getByText('PAY-201')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);
 });

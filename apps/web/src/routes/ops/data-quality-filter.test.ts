@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DataQualityIssue } from '@app/shared';
-import { ALL, filterIssues, NO_PIC, picOptions, problemOptions } from './data-quality-filter.js';
+import {
+  filterIssues,
+  keepAvailable,
+  NO_PIC,
+  picOptions,
+  problemOptions,
+} from './data-quality-filter.js';
 
 const pic = (accountId: string, displayName: string | null) => ({ accountId, displayName });
 
@@ -88,36 +94,69 @@ describe('filterIssues', () => {
     issue({ issueKey: 'PAY-103', epicKey: 'PAY-1', pics: [], problems: ['UNCLASSIFIED_PHASE'] }),
   ];
 
-  it('không chọn gì thì giữ nguyên cả danh sách', () => {
-    expect(filterIssues(rows, { epicKey: ALL, pic: ALL, problem: ALL })).toHaveLength(4);
+  it('mảng rỗng ở cả ba chiều thì giữ nguyên cả danh sách', () => {
+    expect(filterIssues(rows, { epicKeys: [], pics: [], problems: [] })).toHaveLength(4);
   });
 
   it('lọc theo PIC lấy đúng ticket của người đó, xuyên nhiều Epic', () => {
-    const kept = filterIssues(rows, { epicKey: ALL, pic: 'a1', problem: ALL });
+    const kept = filterIssues(rows, { epicKeys: [], pics: ['a1'], problems: [] });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-101', 'SHOP-9']);
   });
 
+  it('chọn NHIỀU PIC lấy ticket của BẤT KỲ người nào trong nhóm (HOẶC)', () => {
+    // Một quản lý gom nhóm mình phụ trách: An hoặc Bình.
+    const kept = filterIssues(rows, { epicKeys: [], pics: ['a1', 'b2'], problems: [] });
+
+    expect(kept.map((i) => i.issueKey)).toEqual(['PAY-101', 'PAY-102', 'SHOP-9']);
+  });
+
+  it('chọn NHIỀU Epic lấy ticket của bất kỳ Epic nào trong nhóm', () => {
+    const kept = filterIssues(rows, { epicKeys: ['PAY-1', 'SHOP-1'], pics: [], problems: [] });
+
+    expect(kept).toHaveLength(4);
+  });
+
   it('hai bộ lọc chồng nhau: PIC đó, trong Epic đó', () => {
-    const kept = filterIssues(rows, { epicKey: 'PAY-1', pic: 'a1', problem: ALL });
+    const kept = filterIssues(rows, { epicKeys: ['PAY-1'], pics: ['a1'], problems: [] });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-101']);
   });
 
   it('chọn "chưa có PIC" ra đúng ticket không gán ai', () => {
-    const kept = filterIssues(rows, { epicKey: ALL, pic: NO_PIC, problem: ALL });
+    const kept = filterIssues(rows, { epicKeys: [], pics: [NO_PIC], problems: [] });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-103']);
   });
 
+  it('"chưa có PIC" chọn CÙNG một người: cả hai nhóm cùng lọt (HOẶC)', () => {
+    const kept = filterIssues(rows, { epicKeys: [], pics: [NO_PIC, 'b2'], problems: [] });
+
+    expect(kept.map((i) => i.issueKey)).toEqual(['PAY-102', 'PAY-103']);
+  });
+
   it('lọc theo loại lỗi lấy MỌI ticket CÓ chứa lỗi đó (kể cả ticket nhiều lỗi)', () => {
-    const kept = filterIssues(rows, { epicKey: ALL, pic: ALL, problem: 'PLANNED_ON_DAY_OFF' });
+    const kept = filterIssues(rows, { epicKeys: [], pics: [], problems: ['PLANNED_ON_DAY_OFF'] });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['PAY-102', 'SHOP-9']);
   });
 
+  it('chọn NHIỀU loại lỗi lấy ticket có ÍT NHẤT MỘT loại (HOẶC), không nhân đôi', () => {
+    const kept = filterIssues(rows, {
+      epicKeys: [],
+      pics: [],
+      problems: ['UNCLASSIFIED_PHASE', 'PLANNED_ON_DAY_OFF'],
+    });
+
+    expect(kept.map((i) => i.issueKey)).toEqual(['PAY-102', 'SHOP-9', 'PAY-103']);
+  });
+
   it('ba bộ lọc chồng nhau: loại lỗi, PIC, trong Epic', () => {
-    const kept = filterIssues(rows, { epicKey: 'SHOP-1', pic: 'a1', problem: 'PLANNED_ON_DAY_OFF' });
+    const kept = filterIssues(rows, {
+      epicKeys: ['SHOP-1'],
+      pics: ['a1'],
+      problems: ['PLANNED_ON_DAY_OFF'],
+    });
 
     expect(kept.map((i) => i.issueKey)).toEqual(['SHOP-9']);
   });
@@ -136,7 +175,7 @@ describe('problemOptions', () => {
     ]);
   });
 
-  it('sắp theo thứ tự DQ_PROBLEMS và chỉ hiện loại đang có ticket', () => {
+  it('sắp theo thứ tự DQ_PROBLEMS và CHỈ hiện loại đang có ticket', () => {
     const options = problemOptions([
       issue({ issueKey: 'PAY-1', problems: ['PLANNED_ON_DAY_OFF'] }),
       issue({ issueKey: 'PAY-2', problems: ['MISSING_WBS_DATE'] }),
@@ -144,5 +183,19 @@ describe('problemOptions', () => {
 
     // MISSING_WBS_DATE đứng trước PLANNED_ON_DAY_OFF trong DQ_PROBLEMS.
     expect(options.map((o) => o.value)).toEqual(['MISSING_WBS_DATE', 'PLANNED_ON_DAY_OFF']);
+  });
+});
+
+describe('keepAvailable', () => {
+  it('bỏ lựa chọn không còn trong danh sách hiện có, giữ nguyên thứ tự phần còn lại', () => {
+    expect(keepAvailable(['a1', 'b2', 'c3'], ['b2', 'a1'])).toEqual(['a1', 'b2']);
+  });
+
+  it('danh sách hiện có rỗng thì không giữ lại gì', () => {
+    expect(keepAvailable(['a1', 'b2'], [])).toEqual([]);
+  });
+
+  it('mọi lựa chọn đều còn thì trả về đúng như cũ', () => {
+    expect(keepAvailable(['a1', NO_PIC], ['a1', 'b2', NO_PIC])).toEqual(['a1', NO_PIC]);
   });
 });

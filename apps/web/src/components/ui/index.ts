@@ -24,3 +24,4 @@ export { EmptyState, type EmptyStateProps } from './empty-state.js';
 export { ErrorBoundary } from './error-boundary.js';
 export { describeError, ErrorState, type ErrorDescription, type ErrorStateProps } from './error-state.js';
 export { LoadingState, type LoadingStateProps } from './loading-state.js';
+export { MultiSelect, type MultiSelectOption, type MultiSelectProps } from './multi-select.js';

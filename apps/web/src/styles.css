@@ -505,6 +505,53 @@ code {
   align-items: center;
   gap: 6px;
 }
+/* Xếp checkbox theo cột trong popover lọc — danh sách dài (PIC/Epic) thì cuộn
+   tại chỗ thay vì đẩy dài cả popover. */
+.checks--stack {
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* --- Ô lọc chọn nhiều (Data quality) ----------------------------------- */
+
+/* Nút mở một popover checkbox. Dùng `<details>` native (như capacity-settings)
+   nên không cần bắt "bấm ra ngoài" bằng JS. */
+.multi-select {
+  position: relative;
+  display: inline-block;
+}
+.multi-select__summary {
+  cursor: pointer;
+  white-space: nowrap;
+  /* Bỏ tam giác mặc định của <summary> — nút đã có mũi ▾ riêng. */
+  list-style: none;
+}
+.multi-select__summary::-webkit-details-marker {
+  display: none;
+}
+.multi-select__panel {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 20;
+  margin-top: 6px;
+  min-width: 220px;
+  max-width: 320px;
+}
+.multi-select__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+/* Ô gõ-để-lọc trong popover chọn nhiều (vd danh sách PIC dài). */
+.multi-select__search {
+  width: 100%;
+  margin-bottom: 8px;
+}
 
 .move {
   display: inline-flex;

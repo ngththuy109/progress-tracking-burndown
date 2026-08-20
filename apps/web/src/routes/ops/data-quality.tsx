@@ -1,19 +1,24 @@
 import { useState } from 'react';
-import type { DataQualityIssue, OpsHealthResponse } from '@app/shared';
+import type { DataQualityIssue, DqProblem, OpsHealthResponse } from '@app/shared';
 import { useDataQualityIssues, useSetDqExempt } from '../../api/use-ops.js';
 import {
   Badge,
-  Combobox,
   DataTable,
   EmptyState,
   ErrorState,
   LoadingState,
+  MultiSelect,
   type Column,
-  type ComboboxOption,
 } from '../../components/ui/index.js';
 import { IssueLink } from '../../components/issue-link/index.js';
 import { buildDataQualityCsv, csvFileName, PROBLEM_LABEL } from './data-quality-csv.js';
-import { ALL, filterIssues, picLabel, picOptions, problemOptions } from './data-quality-filter.js';
+import {
+  filterIssues,
+  keepAvailable,
+  picLabel,
+  picOptions,
+  problemOptions,
+} from './data-quality-filter.js';
 import { MetricChips } from './metric-chips.js';
 
 /**
@@ -25,23 +30,24 @@ import { MetricChips } from './metric-chips.js';
  *   1. Xuất CSV gửi cho đội sửa dữ liệu trên Jira.
  *   2. Đánh dấu ticket "không cần sửa" — cố ý thiếu dữ liệu thì đừng cảnh báo
  *      mãi; tiếng ồn lặp lại làm người ta bỏ qua luôn cả cảnh báo thật.
- *   3. Lọc theo LOẠI LỖI (kể cả "plan vào ngày nghỉ" — T-37, nay là loại lỗi thứ
- *      sáu hiện ngay trên từng ticket): danh sách trộn nhiều loại khó xử lý, lọc
- *      xuống một loại thì thành việc làm được ngay.
+ *   3. Lọc theo Epic / PIC / LOẠI LỖI, và cả ba đều CHỌN NHIỀU: một danh sách
+ *      trộn nhiều Epic, nhiều người và cả sáu loại lỗi (kể cả "plan vào ngày
+ *      nghỉ" — T-37) rất khó xử lý; thu về một TỔ HỢP đang quan tâm ("An với
+ *      Bình, chỉ hai loại lỗi này") thì thành việc làm được ngay.
  */
 
 export function DataQualitySection({ data }: { readonly data: OpsHealthResponse['data'] }) {
   const [showDetails, setShowDetails] = useState(false);
-  // 'ALL' = mọi Epic / mọi người. Lọc áp cho CẢ bảng lẫn file CSV — file tải về
-  // phải khớp với những gì đang nhìn thấy, không thì "sao file nhiều hơn màn
-  // hình?".
-  const [epicFilter, setEpicFilter] = useState<string>(ALL);
-  // Lọc theo NGƯỜI PHỤ TRÁCH: người đi sửa dữ liệu trên Jira chỉ sửa được
-  // ticket của chính mình, nên đây là bộ lọc biến danh sách thành việc làm được.
-  const [picFilter, setPicFilter] = useState<string>(ALL);
-  // Lọc theo LOẠI LỖI: bảng trộn cả sáu loại lỗi khó xử lý; thu về một loại thì
-  // xử lý gọn từng nhóm một (vd chỉ xem "Planned on a day off").
-  const [problemFilter, setProblemFilter] = useState<string>(ALL);
+  // Mảng rỗng = mọi Epic / mọi người / mọi loại lỗi. Lọc áp cho CẢ bảng lẫn file
+  // CSV — file tải về phải khớp với những gì đang nhìn thấy, không thì "sao file
+  // nhiều hơn màn hình?".
+  const [epicFilter, setEpicFilter] = useState<readonly string[]>([]);
+  // Lọc theo NGƯỜI PHỤ TRÁCH: người đi sửa dữ liệu trên Jira chỉ sửa được ticket
+  // của chính mình, nên đây là bộ lọc biến danh sách thành việc làm được. Chọn
+  // nhiều người để một quản lý gom được nhóm mình phụ trách.
+  const [picFilter, setPicFilter] = useState<readonly string[]>([]);
+  // Lọc theo LOẠI LỖI: chọn nhiều loại để xử lý một cụm ("chỉ hai loại ngày tháng").
+  const [problemFilter, setProblemFilter] = useState<readonly string[]>([]);
 
   const issuesQuery = useDataQualityIssues(showDetails);
 
@@ -96,12 +102,12 @@ function DataQualityDetails({
   epicOptions,
 }: {
   readonly query: ReturnType<typeof useDataQualityIssues>;
-  readonly epicFilter: string;
-  readonly onEpicFilter: (value: string) => void;
-  readonly picFilter: string;
-  readonly onPicFilter: (value: string) => void;
-  readonly problemFilter: string;
-  readonly onProblemFilter: (value: string) => void;
+  readonly epicFilter: readonly string[];
+  readonly onEpicFilter: (value: readonly string[]) => void;
+  readonly picFilter: readonly string[];
+  readonly onPicFilter: (value: readonly string[]) => void;
+  readonly problemFilter: readonly string[];
+  readonly onProblemFilter: (value: readonly string[]) => void;
   readonly epicOptions: readonly string[];
 }) {
   const setExempt = useSetDqExempt();
@@ -122,34 +128,46 @@ function DataQualityDetails({
 
   // Danh sách Epic trong bộ lọc lấy từ CẢ hai nguồn: byEpic (Epic sạch vẫn chọn
   // được) và danh sách ticket (phòng Epic có ticket lỗi mà thiếu trong byEpic).
-  const options = [...new Set([...epicOptions, ...all.map((i) => i.epicKey)])].sort();
+  const epicValues = [...new Set([...epicOptions, ...all.map((i) => i.epicKey)])].sort();
   // Hai ô chọn phụ (PIC, loại lỗi) tính TRONG phạm vi Epic đang chọn nhưng KHÔNG
-  // theo lẫn nhau — chọn một cái không làm rỗng danh sách của cái kia, và cũng
-  // không tự khoá vào chính lựa chọn đang chọn.
-  const epicScope = filterIssues(all, { epicKey: epicFilter, pic: ALL, problem: ALL });
+  // theo lẫn nhau — chọn một cái không làm rỗng danh sách của cái kia.
+  const epicScope = filterIssues(all, { epicKeys: epicFilter, pics: [], problems: [] });
   const pics = picOptions(epicScope);
   const problems = problemOptions(epicScope);
-  // Đổi Epic xong lựa chọn cũ có thể không còn ticket nào ở Epic mới. Khi đó quay
-  // về "All …" thay vì giữ ô chọn trỏ vào thứ không có trong danh sách — trông y
-  // hệt "Epic này sạch" trong khi thật ra chỉ là lọc trượt.
-  const activePic = picFilter === ALL || pics.some((p) => p.value === picFilter) ? picFilter : ALL;
-  const activeProblem =
-    problemFilter === ALL || problems.some((p) => p.value === problemFilter) ? problemFilter : ALL;
-  const filtered = filterIssues(all, { epicKey: epicFilter, pic: activePic, problem: activeProblem });
+  // Đổi Epic xong, một PIC (hoặc loại lỗi) đã chọn có thể không còn ticket nào ở
+  // Epic mới — cả hai danh sách đều CHỈ liệt kê thứ đang có ticket trong phạm vi.
+  // Khi đó cho lựa chọn ngoài phạm vi tạm ngưng tác dụng (lọc bằng phần giao) thay
+  // vì để bảng trống trông y hệt "Epic này sạch" — nhưng vẫn GIỮ lựa chọn gốc để
+  // quay lại Epic cũ thì hiện lại.
+  const picValues = pics.map((p) => p.value);
+  const problemValues: readonly string[] = problems.map((p) => p.value);
+  const activePics = keepAvailable(picFilter, picValues);
+  const activeProblems = keepAvailable(problemFilter, problemValues);
+  const filtered = filterIssues(all, {
+    epicKeys: epicFilter,
+    pics: activePics,
+    problems: activeProblems as readonly DqProblem[],
+  });
 
-  // "All PICs" luôn đứng đầu để xoá lọc; mỗi người kèm số ticket (`hint`) — chỉ để
-  // hiển thị, KHÔNG tính vào việc gõ tìm (gõ "1" không được khớp theo số lượng).
-  const picComboOptions: readonly ComboboxOption[] = [
-    { value: ALL, label: 'All PICs' },
-    ...pics.map((p) => ({ value: p.value, label: p.label, hint: `(${p.count})` })),
-  ];
+  // Giữ lại lựa chọn NGOÀI phạm vi Epic hiện tại (đang ẩn khỏi danh sách) rồi ghép
+  // với phần người dùng vừa đổi — nhờ đó chuyển Epic qua lại không đánh rơi những
+  // gì đã chọn ở Epic khác.
+  const changePics = (next: readonly string[]): void => {
+    const hidden = picFilter.filter((v) => !picValues.includes(v));
+    onPicFilter([...hidden, ...next]);
+  };
+  const changeProblems = (next: readonly string[]): void => {
+    const hidden = problemFilter.filter((v) => !problemValues.includes(v));
+    onProblemFilter([...hidden, ...next]);
+  };
 
   const download = () => {
     const csv = buildDataQualityCsv(filtered);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = csvFileName(query.data.collectedAt, epicFilter === ALL ? null : epicFilter);
+    // Tên file gắn Epic khi lọc đúng MỘT Epic; nhiều Epic thì để tên chung.
+    a.download = csvFileName(query.data.collectedAt, epicFilter.length === 1 ? epicFilter[0]! : null);
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -221,49 +239,42 @@ function DataQualityDetails({
   return (
     <div className="stack">
       <div className="statusbar">
-        <label className="check">
-          Epic
-          <select className="input" value={epicFilter} onChange={(e) => onEpicFilter(e.target.value)}>
-            <option value={ALL}>All epics</option>
-            {options.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="check">
-          PIC
-          {/* Ô chọn CÓ TÌM KIẾM: gõ tên (kể cả không dấu) để lọc nhanh khi đội
-              đông, thay cho `<select>` phải cuộn tay. Số ticket đi kèm mỗi tên để
-              thấy khối lượng TRƯỚC khi chọn. */}
-          <Combobox
-            ariaLabel="Filter by PIC"
-            placeholder="All PICs"
-            emptyText="No matching PIC"
-            value={activePic}
-            options={picComboOptions}
-            onChange={onPicFilter}
+        <div className="scope">
+          <MultiSelect
+            label="Epic"
+            allLabel="All epics"
+            ariaLabel="Filter by Epic"
+            options={epicValues.map((k) => ({ value: k, label: k }))}
+            selected={epicFilter}
+            onChange={onEpicFilter}
           />
-        </span>
-        <label className="check">
-          Problem
-          <select
-            className="input"
-            value={activeProblem}
-            aria-label="Filter by problem type"
-            onChange={(e) => onProblemFilter(e.target.value)}
-          >
-            <option value={ALL}>All problems</option>
-            {/* Số ticket mỗi loại lỗi ngay trong ô chọn — thấy khối lượng trước
-                khi lọc. Chỉ hiện loại đang có ticket, theo thứ tự số đo phía trên. */}
-            {problems.map((p) => (
-              <option key={p.value} value={p.value}>
-                {PROBLEM_LABEL[p.value]} ({p.count})
-              </option>
-            ))}
-          </select>
-        </label>
+          <MultiSelect
+            label="PIC"
+            allLabel="All PICs"
+            ariaLabel="Filter by PIC"
+            // Ô CHỌN NHIỀU kèm Ô TÌM: gõ tên (kể cả KHÔNG dấu) để lọc nhanh khi
+            // đội đông rồi tích nhiều người. Số ticket kèm mỗi tên — thấy khối
+            // lượng TRƯỚC khi chọn.
+            searchable
+            options={pics.map((p) => ({ value: p.value, label: p.label, count: p.count }))}
+            selected={activePics}
+            onChange={changePics}
+          />
+          <MultiSelect
+            label="Problem"
+            allLabel="All problems"
+            ariaLabel="Filter by problem type"
+            // Chỉ hiện loại đang có ticket, theo thứ tự số đo phía trên. Số ticket
+            // mỗi loại ngay trong ô chọn — thấy khối lượng trước khi lọc.
+            options={problems.map((p) => ({
+              value: p.value,
+              label: PROBLEM_LABEL[p.value],
+              count: p.count,
+            }))}
+            selected={activeProblems}
+            onChange={changeProblems}
+          />
+        </div>
         <button type="button" className="button" onClick={download} disabled={filtered.length === 0}>
           Download CSV report ({filtered.length} tickets)
         </button>
@@ -283,11 +294,11 @@ function DataQualityDetails({
             icon="✅"
             title="No data problems"
             description={
-              activePic === ALL && activeProblem === ALL
+              activePics.length === 0 && activeProblems.length === 0
                 ? 'Every active sub-task in this scope has an estimate, planned dates, a phase, a well-formed title, and no planned date on a day off.'
                 : // Rỗng vì BỘ LỌC chứ không phải vì dữ liệu sạch — nói rõ ra,
                   // không thì người dùng đóng màn hình và tin là hết việc.
-                  'Nothing matches the current filters in this scope. Clear the PIC or problem filter to see the rest.'
+                  'Nothing matches the current filters in this scope. Clear the PIC or problem filters to see the rest.'
             }
           />
         }

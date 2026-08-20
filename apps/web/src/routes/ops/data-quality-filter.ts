@@ -1,18 +1,19 @@
 import { DQ_PROBLEMS, type DataQualityIssue, type DqProblem, type SignboardPic } from '@app/shared';
 
 /**
- * Lọc danh sách ticket lỗi dữ liệu theo Epic và theo PIC — HÀM THUẦN.
+ * Lọc danh sách ticket lỗi dữ liệu theo Epic, PIC và loại lỗi — HÀM THUẦN.
  *
- * Vì sao lọc theo PIC: người đi sửa dữ liệu trên Jira chỉ sửa được ticket của
- * CHÍNH MÌNH. Một bảng 200 dòng của cả Epic là danh sách không ai nhận; lọc
- * xuống 12 dòng mang tên một người thì đó là việc làm được ngay trong buổi sáng.
+ * Ba chiều lọc đều CHỌN NHIỀU: một danh sách trộn nhiều Epic / nhiều người /
+ * nhiều loại lỗi cần lọc theo TỔ HỢP thì mới thành việc làm được. Người trực
+ * muốn xem "ticket của An HOẶC Bình", hoặc "thiếu ước lượng HOẶC sai định dạng"
+ * trong "Epic PAY HOẶC SHOP" — chọn một-lựa-chọn không diễn tả được.
+ *
+ * Ngữ nghĩa: HOẶC bên trong một chiều, VÀ giữa các chiều. Mảng rỗng = "không thu
+ * hẹp chiều đó" (giống ô "All …" cũ).
  *
  * Lọc ở CLIENT vì bảng chi tiết đã tải sẵn toàn bộ danh sách (một lần gọi) —
  * thêm tham số lọc cho API chỉ làm chậm mà không giúp gì thêm.
  */
-
-/** Không lọc gì. */
-export const ALL = 'ALL';
 
 /**
  * Ticket KHÔNG có người phụ trách.
@@ -72,12 +73,12 @@ export function picOptions(issues: readonly DataQualityIssue[]): readonly PicOpt
 }
 
 export interface IssueFilter {
-  /** Mã Epic, hoặc `ALL`. */
-  readonly epicKey: string;
-  /** `accountId` của PIC, `NO_PIC`, hoặc `ALL`. */
-  readonly pic: string;
-  /** Một loại lỗi (`DqProblem`), hoặc `ALL`. */
-  readonly problem: string;
+  /** Các mã Epic được chọn. Rỗng = mọi Epic. */
+  readonly epicKeys: readonly string[];
+  /** Các `accountId` (và/hoặc `NO_PIC`) được chọn. Rỗng = mọi PIC. */
+  readonly pics: readonly string[];
+  /** Các loại lỗi (`DqProblem`) được chọn. Rỗng = mọi loại lỗi. */
+  readonly problems: readonly DqProblem[];
 }
 
 export function filterIssues(
@@ -85,13 +86,18 @@ export function filterIssues(
   filter: IssueFilter,
 ): readonly DataQualityIssue[] {
   return issues.filter((i) => {
-    if (filter.epicKey !== ALL && i.epicKey !== filter.epicKey) return false;
+    // HOẶC trong từng chiều, VÀ giữa các chiều. Mảng rỗng = không thu hẹp.
+    if (filter.epicKeys.length > 0 && !filter.epicKeys.includes(i.epicKey)) return false;
     // Một ticket có thể mang nhiều lỗi — "lọc theo loại lỗi" nghĩa là "CÓ chứa
-    // loại này" (giống ngữ nghĩa multi-PIC bên dưới dùng `some`).
-    if (filter.problem !== ALL && !i.problems.includes(filter.problem as DqProblem)) return false;
-    if (filter.pic === ALL) return true;
-    if (filter.pic === NO_PIC) return i.pics.length === 0;
-    return i.pics.some((p) => p.accountId === filter.pic);
+    // ÍT NHẤT MỘT trong các loại đang chọn".
+    if (filter.problems.length > 0 && !filter.problems.some((p) => i.problems.includes(p))) {
+      return false;
+    }
+    if (filter.pics.length === 0) return true;
+    // Giữ ticket nếu nó khớp BẤT KỲ PIC nào đang chọn — kể cả nhóm "chưa có PIC".
+    return filter.pics.some((sel) =>
+      sel === NO_PIC ? i.pics.length === 0 : i.pics.some((p) => p.accountId === sel),
+    );
   });
 }
 
@@ -105,7 +111,7 @@ export interface ProblemOption {
  * Danh sách loại lỗi để đổ vào ô chọn, kèm số ticket mỗi loại.
  *
  * Một ticket nhiều lỗi được đếm ở TỪNG loại. Sắp theo thứ tự `DQ_PROBLEMS` để
- * khớp thứ tự chip số đo phía trên, và chỉ hiện loại lỗi đang thực sự có ticket
+ * khớp thứ tự chip số đo phía trên, và CHỈ hiện loại lỗi đang thực sự có ticket
  * (nhãn hiển thị do nơi gọi tra `PROBLEM_LABEL`, tránh phụ thuộc vòng vào CSV).
  */
 export function problemOptions(issues: readonly DataQualityIssue[]): readonly ProblemOption[] {
@@ -116,4 +122,21 @@ export function problemOptions(issues: readonly DataQualityIssue[]): readonly Pr
     }
   }
   return DQ_PROBLEMS.filter((p) => count.has(p)).map((p) => ({ value: p, count: count.get(p) ?? 0 }));
+}
+
+/**
+ * Giữ lại những lựa chọn CÒN nằm trong danh sách hiện có.
+ *
+ * Danh sách PIC được tính TRONG phạm vi Epic đang chọn, nên đổi Epic xong một PIC
+ * đã chọn có thể không còn ticket nào. Khi đó không được để nó âm thầm lọc (bảng
+ * trống trông y hệt "Epic này sạch"): lọc bằng phần giao này để PIC ngoài phạm vi
+ * tạm ngưng tác dụng, nhưng nơi gọi vẫn giữ lựa chọn gốc để khi quay lại Epic cũ
+ * thì nó hiện lại.
+ */
+export function keepAvailable(
+  selected: readonly string[],
+  available: readonly string[],
+): readonly string[] {
+  const set = new Set(available);
+  return selected.filter((v) => set.has(v));
 }
