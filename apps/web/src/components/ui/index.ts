@@ -6,6 +6,13 @@
  */
 export { Badge, BADGE_TONES, type BadgeProps, type BadgeTone } from './badge.js';
 export {
+  Combobox,
+  comboboxMatches,
+  foldText,
+  type ComboboxOption,
+  type ComboboxProps,
+} from './combobox.js';
+export {
   compareSortValues,
   DataTable,
   type Column,

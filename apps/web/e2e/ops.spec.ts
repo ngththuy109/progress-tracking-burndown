@@ -277,13 +277,32 @@ test('lọc theo PIC để mỗi người thấy đúng phần việc của mìn
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  // Số ticket hiện ngay trong ô chọn: thấy khối lượng TRƯỚC khi bấm.
-  await page.getByLabel('Filter by PIC').selectOption({ label: 'Nguyễn An (1)' });
+  // Ô chọn CÓ TÌM KIẾM: gõ (kể cả KHÔNG dấu) để lọc nhanh rồi chọn.
+  const pic = page.getByRole('combobox', { name: 'Filter by PIC' });
+  await pic.click();
+  await pic.fill('nguyen');
+  await page.getByRole('option', { name: /Nguyễn An/ }).click();
 
   await expect(page.getByText('PAY-101')).toBeVisible();
   await expect(page.getByText('PAY-102')).toHaveCount(0);
   // File tải về phải khớp với những gì đang nhìn thấy.
   await expect(page.getByRole('button', { name: /Download CSV report \(1 tickets\)/ })).toBeVisible();
+});
+
+test('PIC combobox: gõ để thu hẹp danh sách rồi chọn', async ({ page }) => {
+  await installApi(page, { dqIssues: DQ_ISSUES });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  const pic = page.getByRole('combobox', { name: 'Filter by PIC' });
+  await pic.click();
+  // Mở ra thấy đủ mọi người.
+  await expect(page.getByRole('option', { name: /Nguyễn An/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Trần Bình/ })).toBeVisible();
+  // Gõ "tran" (không dấu) → chỉ còn Trần Bình.
+  await pic.fill('tran');
+  await expect(page.getByRole('option', { name: /Trần Bình/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Nguyễn An/ })).toHaveCount(0);
 });
 
 test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async ({ page }) => {
@@ -293,7 +312,9 @@ test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  await page.getByLabel('Filter by PIC').selectOption({ label: 'No PIC yet (1)' });
+  const pic = page.getByRole('combobox', { name: 'Filter by PIC' });
+  await pic.click();
+  await page.getByRole('option', { name: /No PIC yet/ }).click();
 
   await expect(page.getByText('PAY-103')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);

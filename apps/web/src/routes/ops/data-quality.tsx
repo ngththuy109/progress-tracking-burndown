@@ -3,11 +3,13 @@ import type { DataQualityIssue, OpsHealthResponse } from '@app/shared';
 import { useDataQualityIssues, useSetDqExempt } from '../../api/use-ops.js';
 import {
   Badge,
+  Combobox,
   DataTable,
   EmptyState,
   ErrorState,
   LoadingState,
   type Column,
+  type ComboboxOption,
 } from '../../components/ui/index.js';
 import { IssueLink } from '../../components/issue-link/index.js';
 import { buildDataQualityCsv, csvFileName, PROBLEM_LABEL } from './data-quality-csv.js';
@@ -135,6 +137,13 @@ function DataQualityDetails({
     problemFilter === ALL || problems.some((p) => p.value === problemFilter) ? problemFilter : ALL;
   const filtered = filterIssues(all, { epicKey: epicFilter, pic: activePic, problem: activeProblem });
 
+  // "All PICs" luôn đứng đầu để xoá lọc; mỗi người kèm số ticket (`hint`) — chỉ để
+  // hiển thị, KHÔNG tính vào việc gõ tìm (gõ "1" không được khớp theo số lượng).
+  const picComboOptions: readonly ComboboxOption[] = [
+    { value: ALL, label: 'All PICs' },
+    ...pics.map((p) => ({ value: p.value, label: p.label, hint: `(${p.count})` })),
+  ];
+
   const download = () => {
     const csv = buildDataQualityCsv(filtered);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -223,24 +232,20 @@ function DataQualityDetails({
             ))}
           </select>
         </label>
-        <label className="check">
+        <span className="check">
           PIC
-          <select
-            className="input"
+          {/* Ô chọn CÓ TÌM KIẾM: gõ tên (kể cả không dấu) để lọc nhanh khi đội
+              đông, thay cho `<select>` phải cuộn tay. Số ticket đi kèm mỗi tên để
+              thấy khối lượng TRƯỚC khi chọn. */}
+          <Combobox
+            ariaLabel="Filter by PIC"
+            placeholder="All PICs"
+            emptyText="No matching PIC"
             value={activePic}
-            aria-label="Filter by PIC"
-            onChange={(e) => onPicFilter(e.target.value)}
-          >
-            <option value={ALL}>All PICs</option>
-            {/* Số ticket ngay trong ô chọn: người dùng thấy được khối lượng của
-                mình TRƯỚC khi bấm, không phải chọn rồi mới biết. */}
-            {pics.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label} ({p.count})
-              </option>
-            ))}
-          </select>
-        </label>
+            options={picComboOptions}
+            onChange={onPicFilter}
+          />
+        </span>
         <label className="check">
           Problem
           <select

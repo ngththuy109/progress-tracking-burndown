@@ -133,6 +133,58 @@ test('preset "Last week" đẩy from/to vào URL', async ({ page }) => {
   await expect(page).toHaveURL(/to=\d{4}-\d{2}-\d{2}/);
 });
 
+test('Custom: nhập khoảng ngày tuỳ ý rồi bấm Search mới đẩy vào URL', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('button', { name: 'Custom' }).click();
+  await page.getByLabel('From date').fill('2026-07-01');
+  await page.getByLabel('To date').fill('2026-08-16');
+
+  // Chạm ô chưa đổi URL — phải bấm Search.
+  await expect(page).not.toHaveURL(/from=2026-07-01/);
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page).toHaveURL(/from=2026-07-01/);
+  await expect(page).toHaveURL(/to=2026-08-16/);
+});
+
+test('Custom: khoảng ngược báo lỗi và không tìm', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('button', { name: 'Custom' }).click();
+  await page.getByLabel('From date').fill('2026-08-16');
+  await page.getByLabel('To date').fill('2026-07-01');
+  await page.getByRole('button', { name: 'Search' }).click();
+
+  await expect(page.getByRole('alert')).toContainText('on or after');
+  await expect(page).not.toHaveURL(/from=2026-08-16/);
+});
+
+test('search khớp mã/tiêu đề ticket; không khớp thì hiện empty-state', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  const box = page.getByRole('searchbox', { name: 'Search members and tickets' });
+  // Khớp tiêu đề ticket "Payout retry worker".
+  await box.fill('payout');
+  await expect(page.getByText('Nguyễn An').first()).toBeVisible();
+  // Khớp mã ticket.
+  await box.fill('PAY-11');
+  await expect(page.getByText('Nguyễn An').first()).toBeVisible();
+  // Không khớp gì.
+  await box.fill('nobody-here');
+  await expect(page.getByRole('heading', { name: 'No member matches those conditions' })).toBeVisible();
+});
+
+test('"Only not logged" giữ member còn ticket chưa log', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('checkbox', { name: 'Only not logged' }).check();
+  await expect(page.getByText('Nguyễn An').first()).toBeVisible();
+});
+
 test('không có participant thì nêu rõ hai khả năng trong empty-state', async ({ page }) => {
   await installApi(page, { role: 'PM', hasParticipantData: false, noMembers: true });
   await page.goto('/logwork');

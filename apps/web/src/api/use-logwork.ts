@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -35,6 +36,12 @@ export function useLogwork(
     queryKey: logworkKeys.report(from ?? '', to ?? ''),
     queryFn: ({ signal }) =>
       client.get('/logwork', logworkResponseSchema, { query: { from, to }, signal }),
+    // Đổi kỳ (from/to) là đổi queryKey. Không có placeholder thì query mới CHƯA có
+    // cache → `isPending` = true → cả màn hình (kể cả bộ chọn kỳ) bị thay bằng
+    // khung "đang tải", làm ô ngày Custom biến mất giữa lúc đang chọn. Giữ dữ liệu
+    // kỳ trước trong lúc tải kỳ mới để bộ chọn ở nguyên chỗ; `isFetching` báo "đang
+    // cập nhật".
+    placeholderData: keepPreviousData,
   });
 }
 

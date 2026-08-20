@@ -24,6 +24,7 @@ import {
 } from '../../components/ui/index.js';
 import { PeriodPicker } from './period-picker.js';
 import { CapacitySettings } from './capacity-settings.js';
+import { EMPTY_FILTER, filterMembers, isFilterActive } from './filter-members.js';
 
 /**
  * Màn hình "Log work" — TOÀN ĐỘI.
@@ -48,7 +49,7 @@ export function LogworkScreen() {
   const [params, setParams] = useSearchParams();
   const from = params.get('from');
   const to = params.get('to');
-  const [memberFilter, setMemberFilter] = useState('');
+  const [filter, setFilter] = useState(EMPTY_FILTER);
 
   const query = useLogwork(from, to);
   const me = useMe();
@@ -76,10 +77,11 @@ export function LogworkScreen() {
   }
 
   const data = query.data;
-  const filter = memberFilter.trim().toLowerCase();
-  const members = filter === ''
-    ? data.members
-    : data.members.filter((m) => (m.displayName ?? m.accountId).toLowerCase().includes(filter));
+  const members = filterMembers(data.members, filter);
+  const filtering = isFilterActive(filter);
+  // `isPending` đã thoát ở trên; còn `isFetching` ở đây là đang tải kỳ MỚI trong
+  // khi vẫn hiện dữ liệu kỳ trước (nhờ `keepPreviousData`).
+  const refreshing = query.isFetching;
 
   return (
     <div className="stack">
@@ -96,11 +98,24 @@ export function LogworkScreen() {
         <input
           className="input input--wide"
           type="search"
-          placeholder="Filter members…"
-          value={memberFilter}
-          aria-label="Filter members"
-          onChange={(e) => setMemberFilter(e.target.value)}
+          placeholder="Search member, ticket key, or summary…"
+          value={filter.term}
+          aria-label="Search members and tickets"
+          onChange={(e) => setFilter((f) => ({ ...f, term: e.target.value }))}
         />
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={filter.notLoggedOnly}
+            onChange={(e) => setFilter((f) => ({ ...f, notLoggedOnly: e.target.checked }))}
+          />
+          Only not logged
+        </label>
+        {refreshing && (
+          <span className="muted" role="status" aria-live="polite">
+            Updating…
+          </span>
+        )}
         <span style={{ marginLeft: 'auto' }}>
           <CapacitySettings />
         </span>
@@ -128,11 +143,11 @@ export function LogworkScreen() {
       {members.length === 0 ? (
         <EmptyState
           icon="🔍"
-          title={filter === '' ? 'No members in view' : 'No member matches that filter'}
+          title={filtering ? 'No member matches those conditions' : 'No members in view'}
           description={
-            filter === ''
-              ? 'No tracked Epic you can see has participants or worklog in this period.'
-              : 'Clear the filter to see everyone again.'
+            filtering
+              ? 'Clear the search box and the “Only not logged” filter to see everyone again.'
+              : 'No tracked Epic you can see has participants or worklog in this period.'
           }
         />
       ) : (
