@@ -179,6 +179,41 @@ describe('MultiSelect', () => {
 
     expect(screen.getByText('Nothing to filter here.')).toBeTruthy();
   });
+
+  it('mặc định KHÔNG có ô tìm; chỉ hiện khi bật searchable', () => {
+    const { rerender } = render(
+      <MultiSelect label="Problem" allLabel="All problems" options={OPTIONS} selected={[]} onChange={vi.fn()} />,
+    );
+    expect(screen.queryByRole('textbox')).toBeNull();
+
+    rerender(
+      <MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={[]} onChange={vi.fn()} searchable />,
+    );
+    expect(screen.getByRole('textbox', { name: 'Search PIC' })).toBeTruthy();
+  });
+
+  it('searchable: gõ để lọc danh sách, gõ KHÔNG dấu vẫn khớp tên có dấu', async () => {
+    render(<MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={[]} onChange={vi.fn()} searchable />);
+
+    // Trước khi gõ: đủ hai người.
+    expect(screen.getByRole('checkbox', { name: /Nguyễn An/ })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Trần Bình/ })).toBeTruthy();
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search PIC' }), 'tran');
+
+    // "tran" (không dấu) khớp "Trần Bình", loại "Nguyễn An" khỏi danh sách.
+    expect(screen.queryByRole('checkbox', { name: /Nguyễn An/ })).toBeNull();
+    expect(screen.getByRole('checkbox', { name: /Trần Bình/ })).toBeTruthy();
+  });
+
+  it('searchable: gõ không khớp ai thì báo "No match", không để trống', async () => {
+    render(<MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={[]} onChange={vi.fn()} searchable />);
+
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search PIC' }), 'zzz');
+
+    expect(screen.getByText('No match')).toBeTruthy();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
 });
 
 describe('compareSortValues', () => {

@@ -24,8 +24,9 @@ import { MetricChips } from './metric-chips.js';
 /**
  * Khu Data quality — tách theo TỪNG Epic đang theo dõi.
  *
- * Số toàn cục ("5% thiếu ước lượng") không nói được ĐỘI NÀO phải sửa. Mỗi Epic
- * có bộ số đo riêng, và bảng chi tiết chỉ ra đúng ticket lỗi gì để:
+ * CỐ Ý không hiện dãy số roll-up toàn cục ("5% thiếu ước lượng"): con số gộp đó
+ * không nói được ĐỘI NÀO phải sửa nên không ai dùng tới. Chỉ hiện số đo theo
+ * từng Epic, và bảng chi tiết chỉ ra đúng ticket lỗi gì để:
  *   1. Xuất CSV gửi cho đội sửa dữ liệu trên Jira.
  *   2. Đánh dấu ticket "không cần sửa" — cố ý thiếu dữ liệu thì đừng cảnh báo
  *      mãi; tiếng ồn lặp lại làm người ta bỏ qua luôn cả cảnh báo thật.
@@ -56,9 +57,8 @@ export function DataQualitySection({ data }: { readonly data: OpsHealthResponse[
         Data quality
       </h2>
 
-      <MetricChips metrics={data.metrics} />
-
-      {/* Tách theo Epic — Epic tệ nhất đã được API sắp lên trước. */}
+      {/* Tách theo Epic — Epic tệ nhất đã được API sắp lên trước. Không có dãy
+          số gộp toàn cục ở đây (xem chú thích đầu file). */}
       {data.byEpic.map((e) => (
         <div key={e.epicKey}>
           <h3 className="panel__title">
@@ -252,8 +252,10 @@ function DataQualityDetails({
             label="PIC"
             allLabel="All PICs"
             ariaLabel="Filter by PIC"
-            // Số ticket ngay trong ô chọn: người dùng thấy được khối lượng của
-            // mình TRƯỚC khi bấm, không phải chọn rồi mới biết.
+            // Ô CHỌN NHIỀU kèm Ô TÌM: gõ tên (kể cả KHÔNG dấu) để lọc nhanh khi
+            // đội đông rồi tích nhiều người. Số ticket kèm mỗi tên — thấy khối
+            // lượng TRƯỚC khi chọn.
+            searchable
             options={pics.map((p) => ({ value: p.value, label: p.label, count: p.count }))}
             selected={activePics}
             onChange={changePics}
