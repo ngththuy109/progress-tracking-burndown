@@ -506,17 +506,12 @@ code {
   gap: 6px;
 }
 /* Xếp checkbox theo cột trong popover lọc — danh sách dài (PIC/Epic) thì cuộn
-   tại chỗ thay vì đẩy dài cả popover. Ngưỡng cao đủ để SÁU loại lỗi hiện hết
-   trong một lần nhìn (khỏi tưởng "chỉ có mấy loại" như bản chọn-một cũ). */
+   tại chỗ thay vì đẩy dài cả popover. */
 .checks--stack {
   flex-direction: column;
   gap: 8px;
-  max-height: 340px;
+  max-height: 260px;
   overflow-y: auto;
-}
-/* Không để tên + số ("Closed without logged work (0)") gãy đôi dòng cho gọn. */
-.checks--stack .check {
-  align-items: baseline;
 }
 
 /* --- Ô lọc chọn nhiều (Data quality) ----------------------------------- */
@@ -542,8 +537,8 @@ code {
   top: 100%;
   z-index: 20;
   margin-top: 6px;
-  min-width: 260px;
-  max-width: 340px;
+  min-width: 220px;
+  max-width: 320px;
 }
 .multi-select__head {
   display: flex;

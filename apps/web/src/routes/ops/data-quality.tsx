@@ -134,24 +134,31 @@ function DataQualityDetails({
   const epicScope = filterIssues(all, { epicKeys: epicFilter, pics: [], problems: [] });
   const pics = picOptions(epicScope);
   const problems = problemOptions(epicScope);
-  // Đổi Epic xong, một PIC đã chọn có thể không còn ticket nào ở Epic mới. Khi đó
-  // cho nó tạm ngưng tác dụng (lọc bằng phần giao) thay vì để bảng trống trông y
-  // hệt "Epic này sạch" — nhưng vẫn GIỮ lựa chọn gốc để quay lại Epic cũ thì hiện
-  // lại. Loại lỗi luôn đủ sáu nên không cần xử lý này.
+  // Đổi Epic xong, một PIC (hoặc loại lỗi) đã chọn có thể không còn ticket nào ở
+  // Epic mới — cả hai danh sách đều CHỈ liệt kê thứ đang có ticket trong phạm vi.
+  // Khi đó cho lựa chọn ngoài phạm vi tạm ngưng tác dụng (lọc bằng phần giao) thay
+  // vì để bảng trống trông y hệt "Epic này sạch" — nhưng vẫn GIỮ lựa chọn gốc để
+  // quay lại Epic cũ thì hiện lại.
   const picValues = pics.map((p) => p.value);
+  const problemValues: readonly string[] = problems.map((p) => p.value);
   const activePics = keepAvailable(picFilter, picValues);
+  const activeProblems = keepAvailable(problemFilter, problemValues);
   const filtered = filterIssues(all, {
     epicKeys: epicFilter,
     pics: activePics,
-    problems: problemFilter as readonly DqProblem[],
+    problems: activeProblems as readonly DqProblem[],
   });
 
-  // Giữ lại lựa chọn PIC NGOÀI phạm vi Epic hiện tại (đang ẩn khỏi danh sách) rồi
-  // ghép với phần người dùng vừa đổi — nhờ đó chuyển Epic qua lại không đánh rơi
-  // những người đã chọn ở Epic khác.
+  // Giữ lại lựa chọn NGOÀI phạm vi Epic hiện tại (đang ẩn khỏi danh sách) rồi ghép
+  // với phần người dùng vừa đổi — nhờ đó chuyển Epic qua lại không đánh rơi những
+  // gì đã chọn ở Epic khác.
   const changePics = (next: readonly string[]): void => {
     const hidden = picFilter.filter((v) => !picValues.includes(v));
     onPicFilter([...hidden, ...next]);
+  };
+  const changeProblems = (next: readonly string[]): void => {
+    const hidden = problemFilter.filter((v) => !problemValues.includes(v));
+    onProblemFilter([...hidden, ...next]);
   };
 
   const download = () => {
@@ -255,14 +262,15 @@ function DataQualityDetails({
             label="Problem"
             allLabel="All problems"
             ariaLabel="Filter by problem type"
-            // Đủ cả sáu loại (kể cả loại 0 ticket), theo thứ tự số đo phía trên.
+            // Chỉ hiện loại đang có ticket, theo thứ tự số đo phía trên. Số ticket
+            // mỗi loại ngay trong ô chọn — thấy khối lượng trước khi lọc.
             options={problems.map((p) => ({
               value: p.value,
               label: PROBLEM_LABEL[p.value],
               count: p.count,
             }))}
-            selected={problemFilter}
-            onChange={onProblemFilter}
+            selected={activeProblems}
+            onChange={changeProblems}
           />
         </div>
         <button type="button" className="button" onClick={download} disabled={filtered.length === 0}>
@@ -284,7 +292,7 @@ function DataQualityDetails({
             icon="✅"
             title="No data problems"
             description={
-              activePics.length === 0 && problemFilter.length === 0
+              activePics.length === 0 && activeProblems.length === 0
                 ? 'Every active sub-task in this scope has an estimate, planned dates, a phase, a well-formed title, and no planned date on a day off.'
                 : // Rỗng vì BỘ LỌC chứ không phải vì dữ liệu sạch — nói rõ ra,
                   // không thì người dùng đóng màn hình và tin là hết việc.

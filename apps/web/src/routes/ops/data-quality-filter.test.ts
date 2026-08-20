@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DQ_PROBLEMS, type DataQualityIssue } from '@app/shared';
+import type { DataQualityIssue } from '@app/shared';
 import {
   filterIssues,
   keepAvailable,
@@ -163,30 +163,26 @@ describe('filterIssues', () => {
 });
 
 describe('problemOptions', () => {
-  it('hiện ĐỦ cả sáu loại lỗi theo thứ tự DQ_PROBLEMS, kèm số ticket mỗi loại', () => {
-    // Ô lọc phải liệt kê đủ sáu loại (kể cả loại 0 ticket) — trước đây chỉ hiện
-    // loại đang có ticket nên chỉ ra 4/6 khiến người trực tưởng thiếu.
+  it('mỗi loại lỗi một mục kèm số ticket; ticket nhiều lỗi đếm ở TỪNG loại', () => {
     const options = problemOptions([
       issue({ issueKey: 'PAY-1', problems: ['MISSING_ESTIMATE', 'PLANNED_ON_DAY_OFF'] }),
       issue({ issueKey: 'PAY-2', problems: ['MISSING_ESTIMATE'] }),
     ]);
 
-    expect(options.map((o) => o.value)).toEqual([...DQ_PROBLEMS]);
     expect(options).toEqual([
       { value: 'MISSING_ESTIMATE', count: 2 },
-      { value: 'MISSING_WBS_DATE', count: 0 },
-      { value: 'UNCLASSIFIED_PHASE', count: 0 },
-      { value: 'UNPARSED_TITLE', count: 0 },
-      { value: 'CLOSED_NO_WORKLOG', count: 0 },
       { value: 'PLANNED_ON_DAY_OFF', count: 1 },
     ]);
   });
 
-  it('danh sách rỗng vẫn trả về đủ sáu loại, tất cả count 0', () => {
-    const options = problemOptions([]);
+  it('sắp theo thứ tự DQ_PROBLEMS và CHỈ hiện loại đang có ticket', () => {
+    const options = problemOptions([
+      issue({ issueKey: 'PAY-1', problems: ['PLANNED_ON_DAY_OFF'] }),
+      issue({ issueKey: 'PAY-2', problems: ['MISSING_WBS_DATE'] }),
+    ]);
 
-    expect(options).toHaveLength(6);
-    expect(options.every((o) => o.count === 0)).toBe(true);
+    // MISSING_WBS_DATE đứng trước PLANNED_ON_DAY_OFF trong DQ_PROBLEMS.
+    expect(options.map((o) => o.value)).toEqual(['MISSING_WBS_DATE', 'PLANNED_ON_DAY_OFF']);
   });
 });
 

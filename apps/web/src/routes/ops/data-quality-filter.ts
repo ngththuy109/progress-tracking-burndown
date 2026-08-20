@@ -110,14 +110,9 @@ export interface ProblemOption {
 /**
  * Danh sách loại lỗi để đổ vào ô chọn, kèm số ticket mỗi loại.
  *
- * Hiện ĐỦ CẢ SÁU loại của `DQ_PROBLEMS` (kể cả loại đang có 0 ticket) theo đúng
- * thứ tự đó — khớp thứ tự chip số đo phía trên. Trước đây chỉ hiện loại đang có
- * ticket nên ô lọc chỉ ra 4/6 loại, khiến người trực tưởng thiếu; với ô chọn
- * NHIỀU thì hiện đủ sáu là đúng: chọn một loại đang 0 ticket chỉ đơn giản không
- * thêm dòng nào, không còn cảnh "chọn xong bảng trống" như hồi chọn-một.
- *
- * Một ticket nhiều lỗi được đếm ở TỪNG loại (nhãn hiển thị do nơi gọi tra
- * `PROBLEM_LABEL`, tránh phụ thuộc vòng vào CSV).
+ * Một ticket nhiều lỗi được đếm ở TỪNG loại. Sắp theo thứ tự `DQ_PROBLEMS` để
+ * khớp thứ tự chip số đo phía trên, và CHỈ hiện loại lỗi đang thực sự có ticket
+ * (nhãn hiển thị do nơi gọi tra `PROBLEM_LABEL`, tránh phụ thuộc vòng vào CSV).
  */
 export function problemOptions(issues: readonly DataQualityIssue[]): readonly ProblemOption[] {
   const count = new Map<DqProblem, number>();
@@ -126,7 +121,7 @@ export function problemOptions(issues: readonly DataQualityIssue[]): readonly Pr
       count.set(p, (count.get(p) ?? 0) + 1);
     }
   }
-  return DQ_PROBLEMS.map((p) => ({ value: p, count: count.get(p) ?? 0 }));
+  return DQ_PROBLEMS.filter((p) => count.has(p)).map((p) => ({ value: p, count: count.get(p) ?? 0 }));
 }
 
 /**

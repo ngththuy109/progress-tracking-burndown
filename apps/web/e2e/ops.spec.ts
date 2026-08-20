@@ -332,32 +332,9 @@ test('lọc theo LOẠI LỖI (kể cả "planned on a day off") để xử lý 
   // Badge loại lỗi hiện NGAY trên ticket (exact để không đụng mục "… (1)" trong ô chọn).
   await expect(page.getByText('Planned on a day off', { exact: true })).toBeVisible();
 
-  // Ô lọc loại lỗi giờ liệt kê ĐỦ cả sáu loại (kể cả loại 0 ticket) — chọn đúng
-  // loại cần xem.
+  // Ô lọc loại lỗi là popover chọn NHIỀU — mở ra rồi tích loại cần xem.
   await page.locator('summary[aria-label="Filter by problem type"]').click();
   await page.getByRole('checkbox', { name: 'Planned on a day off (1)' }).check();
   await expect(page.getByText('PAY-201')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);
-});
-
-test('ô lọc loại lỗi hiện ĐỦ CẢ SÁU loại, kể cả loại đang 0 ticket', async ({ page }) => {
-  // Trước đây ô lọc chỉ hiện loại đang có ticket nên chỉ ra 4/6 khiến người trực
-  // tưởng thiếu. Giờ đủ sáu: chỉ có MISSING_ESTIMATE có ticket, năm loại kia (0).
-  await installApi(page, {
-    dqIssues: [DQ_ISSUE({ issueKey: 'PAY-101', problems: ['MISSING_ESTIMATE'] })],
-  });
-  await page.goto('/ops');
-  await page.getByRole('button', { name: 'Show ticket details' }).click();
-
-  await page.locator('summary[aria-label="Filter by problem type"]').click();
-  for (const label of [
-    'Missing estimate (1)',
-    'Missing planned dates (0)',
-    'Unclassified phase (0)',
-    'Title in wrong format (0)',
-    'Closed without logged work (0)',
-    'Planned on a day off (0)',
-  ]) {
-    await expect(page.getByRole('checkbox', { name: label })).toBeVisible();
-  }
 });
