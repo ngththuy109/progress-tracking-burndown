@@ -1,9 +1,10 @@
 import {
   LOGWORK_OVER_LIMIT_HOURS,
   LOGWORK_UNDER_LIMIT_HOURS,
-  logworkDayWarning,
+  logworkCellFlag,
   type LogworkByPicResponse,
   type LogworkByPicRow,
+  type LogworkCellTicket,
   type LogworkMember,
   type LogworkResponse,
   type LogworkTicket,
@@ -273,12 +274,16 @@ const nameKey = (m: LogworkMember): string => m.displayName ?? m.accountId;
 // trận. Thuần nên test bằng mảng thường, không cần Postgres.
 // ===========================================================================
 
-/** Một dòng worklog đã gộp theo (tác giả, ngày địa phương) trong cửa sổ. */
+/** Một dòng worklog đã gộp theo (tác giả, ngày địa phương, TICKET) trong cửa sổ. */
 export interface WorklogDailyRow {
   /** `null` = worklog không rõ tác giả — không quy được cho PIC nào, bỏ qua. */
   readonly authorId: string | null;
   /** Ngày ĐỊA PHƯƠNG 'YYYY-MM-DD' (theo múi giờ tham chiếu) worklog thuộc về. */
   readonly localDate: string;
+  /** Ticket đã log — để bày danh sách ticket theo từng ô ngày (rê chuột mở link). */
+  readonly issueKey: string;
+  /** Tiêu đề ticket (LEFT JOIN); `null` nếu issue không còn trong sổ (worklog mồ côi). */
+  readonly summary: string | null;
   readonly seconds: number;
 }
 
@@ -287,6 +292,10 @@ export interface BuildLogworkByPicInput {
   readonly to: string;
   /** Các CỘT: mọi ngày lịch trong `[from, to]`, tăng dần (route dựng bằng engine). */
   readonly dates: readonly string[];
+  /** Mỗi cột có phải NGÀY LÀM VIỆC không (song song `dates`) — route tính từ lịch tham chiếu. */
+  readonly workingDays: readonly boolean[];
+  /** HÔM NAY ở múi giờ tham chiếu — ngày `< today` là đã qua (để đánh dấu `missing`). */
+  readonly today: string;
   readonly dailyRows: readonly WorklogDailyRow[];
   /** accountId → tên hiển thị (từ participant JSON); thiếu thì web hiện accountId. */
   readonly names: ReadonlyMap<string, string>;
@@ -296,10 +305,12 @@ export interface BuildLogworkByPicInput {
 interface PicAccum {
   /** Giờ theo chỉ số cột (song song với `dates`). */
   readonly hoursByDate: number[];
+  /** Theo cột: issueKey → (giây, tiêu đề). Gộp nhiều dòng log cùng ticket cùng ngày. */
+  readonly ticketsByDate: Array<Map<string, { seconds: number; summary: string | null }>>;
 }
 
 export function buildLogworkByPicReport(input: BuildLogworkByPicInput): LogworkByPicResponse {
-  const { from, to, dates, dailyRows, names, warnings } = input;
+  const { from, to, dates, workingDays, today, dailyRows, names, warnings } = input;
 
   // Vị trí cột của mỗi ngày; worklog rơi ngoài khoảng cột thì bỏ (phòng thủ —
   // cửa sổ đọc vốn đã kẹp trong [from, to] nên bình thường không xảy ra).
@@ -313,10 +324,24 @@ export function buildLogworkByPicReport(input: BuildLogworkByPicInput): LogworkB
     if (col === undefined) continue;
     let acc = byPic.get(r.authorId);
     if (acc === undefined) {
-      acc = { hoursByDate: new Array<number>(dates.length).fill(0) };
+      acc = {
+        hoursByDate: new Array<number>(dates.length).fill(0),
+        ticketsByDate: Array.from({ length: dates.length }, () => new Map()),
+      };
       byPic.set(r.authorId, acc);
     }
     acc.hoursByDate[col] = (acc.hoursByDate[col] ?? 0) + r.seconds / SECONDS_PER_HOUR;
+    // Gộp giờ theo ticket trong ô (một người có thể có nhiều lần log cùng ticket
+    // trong ngày); giữ tiêu đề KHÔNG rỗng đầu tiên thấy được.
+    const cellTickets = acc.ticketsByDate[col];
+    if (cellTickets !== undefined) {
+      const prev = cellTickets.get(r.issueKey);
+      if (prev === undefined) cellTickets.set(r.issueKey, { seconds: r.seconds, summary: r.summary });
+      else {
+        prev.seconds += r.seconds;
+        if (prev.summary === null && r.summary !== null) prev.summary = r.summary;
+      }
+    }
   }
 
   const rows: LogworkByPicRow[] = [];
@@ -324,7 +349,10 @@ export function buildLogworkByPicReport(input: BuildLogworkByPicInput): LogworkB
   let grandRaw = 0;
   for (const [accountId, acc] of byPic) {
     let warnCount = 0;
+    let missingCount = 0;
+    let offdayCount = 0;
     let rowRaw = 0;
+    const ticketsByDate: LogworkCellTicket[][] = [];
     // Làm tròn TỪNG ô về 2 số lẻ để con số HIỂN THỊ đúng bằng con số quyết định
     // tô cảnh báo (giây / 3600 có thể ra số lẻ dài). Tổng cộng từ ô đã tròn nên
     // "tổng hàng = tổng các ô nhìn thấy".
@@ -332,7 +360,24 @@ export function buildLogworkByPicReport(input: BuildLogworkByPicInput): LogworkB
       const r = round2(h);
       dailyTotalsRaw[i] = (dailyTotalsRaw[i] ?? 0) + r;
       rowRaw += r;
-      if (logworkDayWarning(r) !== null) warnCount += 1;
+      // Cùng NGUỒN CHÂN LÝ với web: ngày làm việc? đã qua? → dấu của ô.
+      const flag = logworkCellFlag(r, workingDays[i] ?? true, (dates[i] ?? '') < today);
+      if (flag === 'under' || flag === 'over') warnCount += 1;
+      else if (flag === 'missing') missingCount += 1;
+      else if (flag === 'offday') offdayCount += 1;
+
+      // Danh sách ticket của ô: giờ giảm dần rồi mã tăng dần (đóng góp lớn lên trước).
+      const cellTickets = acc.ticketsByDate[i];
+      const list: LogworkCellTicket[] =
+        cellTickets === undefined
+          ? []
+          : [...cellTickets.entries()].map(([issueKey, v]) => ({
+              issueKey,
+              summary: v.summary,
+              hours: round2(v.seconds / SECONDS_PER_HOUR),
+            }));
+      list.sort((a, b) => b.hours - a.hours || a.issueKey.localeCompare(b.issueKey));
+      ticketsByDate.push(list);
       return r;
     });
     grandRaw += rowRaw;
@@ -340,8 +385,11 @@ export function buildLogworkByPicReport(input: BuildLogworkByPicInput): LogworkB
       accountId,
       displayName: names.get(accountId) ?? null,
       hoursByDate: cells,
+      ticketsByDate,
       totalHours: round2(rowRaw),
       warnCount,
+      missingCount,
+      offdayCount,
     });
   }
 
@@ -352,6 +400,8 @@ export function buildLogworkByPicReport(input: BuildLogworkByPicInput): LogworkB
     from,
     to,
     dates: [...dates],
+    workingDays: [...workingDays],
+    today,
     rows,
     dailyTotals: dailyTotalsRaw.map(round2),
     grandTotal: round2(grandRaw),

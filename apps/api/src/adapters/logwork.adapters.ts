@@ -232,25 +232,39 @@ export function createLogworkReadPort(prisma: PrismaClient): LogworkReadPort {
     },
 
     async worklogDailyByAuthor(startMs, endMs, timezone): Promise<readonly WorklogDailyRow[]> {
-      // Gộp theo (tác giả, NGÀY ĐỊA PHƯƠNG) trên TOÀN bảng worklog — KHÔNG lọc
-      // epic_key (bắt cả Epic PAUSED/ERROR và worklog mồ côi). Prisma groupBy
+      // Gộp theo (tác giả, NGÀY ĐỊA PHƯƠNG, TICKET) trên TOÀN bảng worklog — KHÔNG
+      // lọc epic_key (bắt cả Epic PAUSED/ERROR và worklog mồ côi). Prisma groupBy
       // không truncate được timestamp về ngày ở một múi giờ, nên dùng SQL thô:
       // `AT TIME ZONE` đổi timestamptz sang giờ địa phương rồi ::date; `to_char`
       // trả thẳng chuỗi 'YYYY-MM-DD' để khỏi phụ thuộc cách driver parse kiểu
       // `date`. Ngày này khớp cột do engine `listCalendarDays` sinh (cùng chuỗi
       // IANA `timezone`). Lọc cửa sổ theo started_at dùng index `idx_worklog_started`.
+      //
+      // LEFT JOIN `jira_issue` để lấy tiêu đề cho hovercard (rê vào ô xem đã log
+      // ticket nào) — worklog mồ côi (issue đã gỡ/không sync) vẫn giữ, `summary` NULL.
+      // `MAX(summary)` chỉ để khỏi phải thêm cột vào GROUP BY (issue_key → summary
+      // là hàm, mọi dòng cùng key có cùng tiêu đề).
       const rows = await prisma.$queryRawUnsafe<
-        { author_id: string | null; local_date: string; seconds: bigint | number | null }[]
+        {
+          author_id: string | null;
+          local_date: string;
+          issue_key: string;
+          summary: string | null;
+          seconds: bigint | number | null;
+        }[]
       >(
-        `SELECT author_id,
-                to_char((started_at AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS local_date,
-                SUM(time_spent_s)::bigint AS seconds
-           FROM worklog_entry
-          WHERE is_deleted = FALSE
-            AND author_id IS NOT NULL
-            AND started_at >= $2
-            AND started_at <= $3
-          GROUP BY author_id, local_date`,
+        `SELECT w.author_id,
+                to_char((w.started_at AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS local_date,
+                w.issue_key,
+                MAX(i.summary) AS summary,
+                SUM(w.time_spent_s)::bigint AS seconds
+           FROM worklog_entry w
+           LEFT JOIN jira_issue i ON i.issue_key = w.issue_key
+          WHERE w.is_deleted = FALSE
+            AND w.author_id IS NOT NULL
+            AND w.started_at >= $2
+            AND w.started_at <= $3
+          GROUP BY w.author_id, local_date, w.issue_key`,
         timezone,
         new Date(startMs),
         new Date(endMs),
@@ -258,6 +272,8 @@ export function createLogworkReadPort(prisma: PrismaClient): LogworkReadPort {
       return rows.map((r) => ({
         authorId: r.author_id,
         localDate: r.local_date,
+        issueKey: r.issue_key,
+        summary: typeof r.summary === 'string' ? r.summary : null,
         seconds: n(r.seconds),
       }));
     },

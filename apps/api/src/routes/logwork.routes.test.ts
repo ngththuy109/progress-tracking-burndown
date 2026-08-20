@@ -226,7 +226,18 @@ interface ByPicBody {
   from: string;
   to: string;
   dates: string[];
-  rows: { accountId: string; displayName: string | null; hoursByDate: number[]; totalHours: number; warnCount: number }[];
+  workingDays: boolean[];
+  today: string;
+  rows: {
+    accountId: string;
+    displayName: string | null;
+    hoursByDate: number[];
+    ticketsByDate: { issueKey: string; summary: string | null; hours: number }[][];
+    totalHours: number;
+    warnCount: number;
+    missingCount: number;
+    offdayCount: number;
+  }[];
   dailyTotals: number[];
   grandTotal: number;
   underLimitHours: number;
@@ -258,6 +269,10 @@ describe('GET /api/logwork/by-pic', () => {
     ]);
     expect(body.underLimitHours).toBe(4);
     expect(body.overLimitHours).toBe(8);
+    // Lịch VN mask 31 = T2–T6 → hai ngày cuối (T7/CN) là ngày nghỉ.
+    expect(body.workingDays).toEqual([true, true, true, true, true, false, false]);
+    // today theo múi giờ VN của NOW (2026-08-19T03:00Z = 10:00 VN) = 2026-08-19.
+    expect(body.today).toBe('2026-08-19');
   });
 
   it('cửa sổ worklog theo NGÀY tính đúng múi giờ Epic', async () => {
@@ -285,10 +300,10 @@ describe('GET /api/logwork/by-pic', () => {
       },
     ];
     reads.daily = [
-      { authorId: 'a', localDate: '2026-08-17', seconds: 3 * 3600 }, // thiếu (<=4)
-      { authorId: 'a', localDate: '2026-08-18', seconds: 6 * 3600 }, // ổn
-      { authorId: 'a', localDate: '2026-08-19', seconds: 9 * 3600 }, // quá (>8)
-      { authorId: 'b', localDate: '2026-08-17', seconds: 8 * 3600 }, // 8 chẵn = ổn
+      { authorId: 'a', localDate: '2026-08-17', issueKey: 'PAY-11', summary: 'Retry worker', seconds: 3 * 3600 }, // thiếu (<=4)
+      { authorId: 'a', localDate: '2026-08-18', issueKey: 'PAY-11', summary: 'Retry worker', seconds: 6 * 3600 }, // ổn
+      { authorId: 'a', localDate: '2026-08-19', issueKey: 'PAY-11', summary: 'Retry worker', seconds: 9 * 3600 }, // quá (>8)
+      { authorId: 'b', localDate: '2026-08-17', issueKey: 'PAY-11', summary: 'Retry worker', seconds: 8 * 3600 }, // 8 chẵn = ổn
     ];
 
     const { body } = await getByPic('/api/logwork/by-pic');
@@ -300,25 +315,42 @@ describe('GET /api/logwork/by-pic', () => {
     expect(alice.hoursByDate).toEqual([3, 6, 9, 0, 0, 0, 0]);
     expect(alice.totalHours).toBe(18);
     expect(alice.warnCount).toBe(2); // 17 (thiếu) + 19 (quá)
+    // Ticket của ô ngày 17 (rê chuột thấy được).
+    expect(alice.ticketsByDate[0]).toEqual([{ issueKey: 'PAY-11', summary: 'Retry worker', hours: 3 }]);
 
     const bob = body.rows[1]!;
     expect(bob.hoursByDate).toEqual([8, 0, 0, 0, 0, 0, 0]);
     expect(bob.warnCount).toBe(0);
+    // Bob không log ngày 18 (T3, ngày làm việc, đã qua so với today=19) → missing.
+    expect(bob.missingCount).toBe(1);
 
     expect(body.dailyTotals).toEqual([11, 6, 9, 0, 0, 0, 0]);
     expect(body.grandTotal).toBe(26);
   });
 
   it('worklog không rõ tác giả (authorId=null) không tạo hàng', async () => {
-    reads.daily = [{ authorId: null, localDate: '2026-08-17', seconds: 5 * 3600 }];
+    reads.daily = [{ authorId: null, localDate: '2026-08-17', issueKey: 'PAY-11', summary: null, seconds: 5 * 3600 }];
     const { body } = await getByPic('/api/logwork/by-pic');
     expect(body.rows).toEqual([]);
     expect(body.grandTotal).toBe(0);
   });
 
+  it('log vào ngày NGHỈ (cuối tuần) → đánh dấu offday, không tính under/over', async () => {
+    // 2026-08-23 là Chủ Nhật (ngày nghỉ theo lịch VN). Log 2h vào đó.
+    reads.daily = [
+      { authorId: 'a', localDate: '2026-08-23', issueKey: 'PAY-9', summary: 'Weekend hotfix', seconds: 2 * 3600 },
+    ];
+    const { body } = await getByPic('/api/logwork/by-pic');
+    const a = body.rows[0]!;
+    expect(a.offdayCount).toBe(1);
+    expect(a.warnCount).toBe(0); // 2h là "under" NẾU ngày làm, nhưng đây là ngày nghỉ
+    // Rê chuột vào ô Chủ Nhật thấy ticket đã log.
+    expect(a.ticketsByDate[6]).toEqual([{ issueKey: 'PAY-9', summary: 'Weekend hotfix', hours: 2 }]);
+  });
+
   it('KHÔNG lọc quyền: PM project khác vẫn thấy toàn bộ (không gọi visibleEpics)', async () => {
     principal = { userId: 'pm', role: 'PM', projects: ['OTHER'] };
-    reads.daily = [{ authorId: 'a', localDate: '2026-08-19', seconds: 6 * 3600 }];
+    reads.daily = [{ authorId: 'a', localDate: '2026-08-19', issueKey: 'PAY-11', summary: null, seconds: 6 * 3600 }];
     const { status, body } = await getByPic('/api/logwork/by-pic');
     expect(status).toBe(200);
     expect(body.rows.map((r) => r.accountId)).toEqual(['a']);
@@ -328,7 +360,7 @@ describe('GET /api/logwork/by-pic', () => {
 
   it('không Epic đang theo dõi nhưng còn worklog mồ côi → vẫn hiện', async () => {
     reads.allEpics = [];
-    reads.daily = [{ authorId: 'a', localDate: '2026-08-19', seconds: 5 * 3600 }];
+    reads.daily = [{ authorId: 'a', localDate: '2026-08-19', issueKey: 'PAY-11', summary: null, seconds: 5 * 3600 }];
     const { status, body } = await getByPic('/api/logwork/by-pic');
     expect(status).toBe(200);
     // Không Epic → múi giờ mặc định (Asia/Ho_Chi_Minh), tuần chứa hôm nay.

@@ -176,16 +176,73 @@ export function logworkDayWarning(hours: number): LogworkDayWarning {
   return null;
 }
 
+/**
+ * Bốn dấu của một ô (PIC, ngày), gộp cả cảnh báo số giờ (`under`/`over`) lẫn hai
+ * dấu MỚI cần biết ngày đó là ngày làm việc hay ngày nghỉ:
+ *   - `'under'` / `'over'`: ngày LÀM VIỆC nhưng log lệch ngưỡng (`logworkDayWarning`).
+ *   - `'missing'`: ngày LÀM VIỆC đã QUA mà không có worklog nào.
+ *   - `'offday'`: ngày NGHỈ (cuối tuần/lễ) mà LẠI có worklog.
+ *   - `null`: bình thường (log đủ trong ngày làm, HOẶC ngày nghỉ không log, HOẶC
+ *     ngày làm việc hôm nay/tương lai chưa tới lúc log).
+ */
+export type LogworkCellFlag = 'under' | 'over' | 'missing' | 'offday' | null;
+
+/**
+ * Phân loại một ô để tô màu — NGUỒN CHÂN LÝ DUY NHẤT cho web (tô ô) và API (đếm
+ * số ô cần soát), khỏi lệch. Mở rộng `logworkDayWarning` bằng lịch:
+ *
+ *  - Có log (`hours > 0`) vào ngày NGHỈ → `'offday'` (bất kể ít/nhiều giờ: bất
+ *    thường nằm ở việc log vào ngày nghỉ). Ngày làm thì theo ngưỡng cũ `<=4h`/`>8h`.
+ *  - Không log (`hours <= 0`) vào ngày LÀM VIỆC đã QUA → `'missing'`. Chỉ tính
+ *    ngày đã qua (`isPastDay`): ngày làm việc hôm nay/tương lai để trống là bình
+ *    thường, chưa tới hạn log nên KHÔNG đánh dấu (tránh cả tuần đỏ giữa kỳ).
+ */
+export function logworkCellFlag(
+  hours: number,
+  isWorkingDay: boolean,
+  isPastDay: boolean,
+): LogworkCellFlag {
+  if (hours > 0) {
+    if (!isWorkingDay) return 'offday';
+    return logworkDayWarning(hours);
+  }
+  return isWorkingDay && isPastDay ? 'missing' : null;
+}
+
+/** Một ticket đã log trong MỘT ô (PIC, ngày) — để rê chuột mở link sang Jira. */
+export const logworkCellTicketSchema = z.object({
+  issueKey: z.string(),
+  /** Tiêu đề ticket (LEFT JOIN `jira_issue`); `null` với worklog mồ côi (issue không còn trong sổ). */
+  summary: z.string().nullable(),
+  /** Giờ người này log lên ticket này TRONG ngày của ô. */
+  hours: z.number(),
+});
+
+export interface LogworkCellTicket {
+  readonly issueKey: string;
+  readonly summary: string | null;
+  readonly hours: number;
+}
+
 export const logworkByPicRowSchema = z.object({
   accountId: z.string(),
   /** Tên hiển thị lấy từ participant JSON; `null` → web hiện accountId thay thế. */
   displayName: z.string().nullable(),
   /** Giờ log MỖI NGÀY, song song với `dates`; `0` = ngày đó không log. */
   hoursByDate: z.array(z.number()),
+  /**
+   * Ticket đã log MỖI NGÀY, song song với `dates` — ô không log thì mảng rỗng.
+   * Web rê chuột vào ô để mở danh sách ticket (link sang Jira) đã log ngày đó.
+   */
+  ticketsByDate: z.array(z.array(logworkCellTicketSchema)),
   /** Tổng giờ người này log trong cả kỳ (tổng của `hoursByDate`). */
   totalHours: z.number(),
-  /** Số ngày bị cảnh báo (`logworkDayWarning` khác `null`) — để xếp hàng + tóm tắt. */
+  /** Số ô log lệch ngưỡng (`<=4h`/`>8h`) TRONG ngày làm việc — để tóm tắt "cần soát". */
   warnCount: z.number().int(),
+  /** Số ngày LÀM VIỆC đã qua mà người này KHÔNG log gì. */
+  missingCount: z.number().int(),
+  /** Số ngày NGHỈ (cuối tuần/lễ) mà người này LẠI có log. */
+  offdayCount: z.number().int(),
 });
 
 export const logworkByPicResponseSchema = z.object({
@@ -193,6 +250,14 @@ export const logworkByPicResponseSchema = z.object({
   to: z.string(),
   /** Mọi ngày lịch trong `[from, to]` (theo múi giờ tham chiếu), tăng dần — là các CỘT. */
   dates: z.array(z.string()),
+  /**
+   * Mỗi ngày có phải NGÀY LÀM VIỆC không (theo lịch tham chiếu — trừ cuối tuần và
+   * ngày lễ, tính cả ngày làm bù), song song với `dates`. Web tô mờ cột ngày nghỉ
+   * và quyết định dấu `missing`/`offday` từ đây.
+   */
+  workingDays: z.array(z.boolean()),
+  /** Ngày HÔM NAY ở múi giờ tham chiếu ('YYYY-MM-DD') — ranh giới "đã qua" để đánh dấu `missing`. */
+  today: z.string(),
   rows: z.array(logworkByPicRowSchema),
   /** Tổng giờ MỌI PIC theo từng ngày, song song với `dates` (hàng chân bảng). */
   dailyTotals: z.array(z.number()),
@@ -210,14 +275,19 @@ export interface LogworkByPicRow {
   readonly accountId: string;
   readonly displayName: string | null;
   readonly hoursByDate: readonly number[];
+  readonly ticketsByDate: readonly (readonly LogworkCellTicket[])[];
   readonly totalHours: number;
   readonly warnCount: number;
+  readonly missingCount: number;
+  readonly offdayCount: number;
 }
 
 export interface LogworkByPicResponse {
   readonly from: string;
   readonly to: string;
   readonly dates: readonly string[];
+  readonly workingDays: readonly boolean[];
+  readonly today: string;
   readonly rows: readonly LogworkByPicRow[];
   readonly dailyTotals: readonly number[];
   readonly grandTotal: number;

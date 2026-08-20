@@ -62,18 +62,47 @@ function report(opts: Opts, verified: boolean) {
   };
 }
 
-/** Lưới PIC × ngày: hai ngày, hai PIC — có ô thiếu (3h) và ô quá (9h) để kiểm tô màu. */
+/**
+ * Lưới PIC × ngày: bốn ngày (Fri làm, Sat/Sun nghỉ, Mon làm), hai PIC — đủ cả bốn
+ * dấu: under (3h), over (9h), offday (log ngày nghỉ), missing (ngày làm việc trống).
+ * `today` ở tương lai để mọi ngày đều "đã qua" (missing tính được).
+ */
 function byPicReport() {
   return {
-    from: '2026-08-10',
-    to: '2026-08-11',
-    dates: ['2026-08-10', '2026-08-11'],
+    from: '2026-08-07',
+    to: '2026-08-10',
+    dates: ['2026-08-07', '2026-08-08', '2026-08-09', '2026-08-10'],
+    workingDays: [true, false, false, true],
+    today: '2026-08-12',
     rows: [
-      { accountId: 'u1', displayName: 'Nguyễn An', hoursByDate: [3, 9], totalHours: 12, warnCount: 2 },
-      { accountId: 'u2', displayName: 'Trần Bình', hoursByDate: [6, 0], totalHours: 6, warnCount: 0 },
+      {
+        accountId: 'u1',
+        displayName: 'Nguyễn An',
+        hoursByDate: [3, 2, 0, 9],
+        ticketsByDate: [
+          [{ issueKey: 'PAY-1', summary: 'Fix payout bug', hours: 3 }],
+          [{ issueKey: 'PAY-8', summary: 'Weekend hotfix', hours: 2 }],
+          [],
+          [{ issueKey: 'PAY-11', summary: 'Payout retry worker', hours: 9 }],
+        ],
+        totalHours: 14,
+        warnCount: 2,
+        missingCount: 0,
+        offdayCount: 1,
+      },
+      {
+        accountId: 'u2',
+        displayName: 'Trần Bình',
+        hoursByDate: [0, 0, 5, 0],
+        ticketsByDate: [[], [], [{ issueKey: 'PAY-13', summary: 'Sunday work', hours: 5 }], []],
+        totalHours: 5,
+        warnCount: 0,
+        missingCount: 2,
+        offdayCount: 1,
+      },
     ],
-    dailyTotals: [9, 9],
-    grandTotal: 18,
+    dailyTotals: [3, 2, 5, 9],
+    grandTotal: 19,
     underLimitHours: 4,
     overLimitHours: 8,
     warnings: [],
@@ -229,6 +258,35 @@ test('tab "By PIC / day" hiện lưới giờ theo ngày, tô ô thiếu (<=4h) 
   // Đúng một ô "thiếu" (3h) và một ô "quá" (9h) được tô.
   await expect(page.locator('td.logwork-grid__cell--under')).toHaveText('3');
   await expect(page.locator('td.logwork-grid__cell--over')).toHaveText('9');
+});
+
+test('lưới đánh dấu ngày làm việc trống (missing) và ngày nghỉ có log (offday)', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork?view=grid');
+
+  await expect(page.getByText('Hours logged per PIC per day')).toBeVisible();
+
+  // Trần Bình bỏ trống hai ngày làm việc (Fri + Mon) → hai ô "missing".
+  await expect(page.locator('td.logwork-grid__cell--missing')).toHaveCount(2);
+  // Log vào ngày nghỉ: An (Sat 2h) và Bình (Sun 5h) → hai ô "offday".
+  const offday = page.locator('td.logwork-grid__cell--offday');
+  await expect(offday).toHaveCount(2);
+  await expect(offday.filter({ hasText: '2' })).toBeVisible();
+  await expect(offday.filter({ hasText: '5' })).toBeVisible();
+});
+
+test('rê vào ô có log mở thẻ liệt kê ticket đã log ngày đó (link sang Jira)', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork?view=grid');
+
+  await expect(page.getByText('Hours logged per PIC per day')).toBeVisible();
+
+  // Rê vào ô "quá" (9h, Mon của An) → thẻ nổi hiện ticket PAY-11 kèm tiêu đề.
+  await page.locator('td.logwork-grid__cell--over').hover();
+  const card = page.getByRole('dialog');
+  await expect(card).toBeVisible();
+  await expect(card.getByText('PAY-11')).toBeVisible();
+  await expect(card.getByText('Payout retry worker')).toBeVisible();
 });
 
 test('đổi qua lại hai tab giữ nguyên kỳ; By member vẫn hoạt động', async ({ page }) => {

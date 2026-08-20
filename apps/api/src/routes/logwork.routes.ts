@@ -15,6 +15,7 @@ import {
 import {
   countWorkdays,
   endOfDayUtcMs,
+  isWorkday,
   listCalendarDays,
   localDateOf,
   startOfDayUtcMs,
@@ -247,6 +248,16 @@ export function registerLogworkRoutes(app: FastifyInstance, deps: LogworkRouteDe
       const refTz = mostCommonTimezone(epics, calOf);
       const { from, to } = resolvePeriod(req, refTz, deps.now());
 
+      // Lịch tham chiếu (Epic dùng NHIỀU nhất) quyết định ngày nào là NGÀY LÀM VIỆC
+      // (trừ cuối tuần + ngày lễ, tính cả ngày làm bù). Đội nhiều lịch khác nhau →
+      // lấy lịch phổ biến nhất; đánh đổi giống việc chỉ chọn MỘT múi giờ tham chiếu
+      // (worklog sát nửa đêm/ngày lễ vùng khác có thể lệch — chấp nhận được). Không
+      // Epic nào (chỉ còn worklog mồ côi) → lịch mặc định T2–T6, không ngày lễ.
+      const refCal = mostCommonCalendar(epics, calOf) ?? fallbackCalendar('(default)');
+      const dates = listCalendarDays(from, to, refTz);
+      const workingDays = dates.map((d) => isWorkday(d, refCal));
+      const today = localDateOf(deps.now().getTime(), refTz);
+
       const warnings = new Set<string>();
       for (const e of epics) for (const w of calOf(e).warnings) warnings.add(w);
 
@@ -259,7 +270,9 @@ export function registerLogworkRoutes(app: FastifyInstance, deps: LogworkRouteDe
       return buildLogworkByPicReport({
         from,
         to,
-        dates: listCalendarDays(from, to, refTz),
+        dates,
+        workingDays,
+        today,
         dailyRows,
         names: resolveParticipantNames(subtasks),
         warnings: [...warnings],
@@ -442,6 +455,33 @@ function mostCommonTimezone(epics: readonly VisibleEpic[], calOf: (e: VisibleEpi
     }
   }
   return best;
+}
+
+/**
+ * Lịch phổ biến nhất trong các Epic (đếm theo `calendarId`); hoà thì lấy id nhỏ
+ * hơn cho ổn định. `null` khi không Epic nào — chỗ gọi tự hạ về lịch mặc định.
+ * Chỉ để suy ra tập NGÀY LÀM VIỆC tham chiếu cho báo cáo lưới (một bộ cột chung).
+ */
+function mostCommonCalendar(
+  epics: readonly VisibleEpic[],
+  calOf: (e: VisibleEpic) => WorkCalendar,
+): WorkCalendar | null {
+  const counts = new Map<string, number>();
+  const calById = new Map<string, WorkCalendar>();
+  for (const e of epics) {
+    const cal = calOf(e);
+    counts.set(cal.calendarId, (counts.get(cal.calendarId) ?? 0) + 1);
+    if (!calById.has(cal.calendarId)) calById.set(cal.calendarId, cal);
+  }
+  let bestId: string | null = null;
+  let bestCount = -1;
+  for (const [id, count] of counts) {
+    if (count > bestCount || (count === bestCount && bestId !== null && id < bestId)) {
+      bestId = id;
+      bestCount = count;
+    }
+  }
+  return bestId === null ? null : (calById.get(bestId) ?? null);
 }
 
 function fallbackCalendar(calendarId: string): WorkCalendar {
