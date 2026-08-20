@@ -68,9 +68,21 @@ export interface LogworkReadPort {
   calendars(calendarIds: readonly string[]): Promise<ReadonlyMap<string, WorkCalendar>>;
   /** MỘT truy vấn: mọi Sub-task đang mở của các Epic, kèm participant. */
   openSubtasks(epicKeys: readonly string[]): Promise<readonly LoadedLogworkSubtask[]>;
-  /** Tổng giây log theo (issue, tác giả) trong cửa sổ `[startMs, endMs]`, cho các Epic đã cho. */
+  /**
+   * Tổng giây log theo (issue, tác giả) trong cửa sổ `[startMs, endMs]`, lấy theo
+   * HAI tiêu chí (OR) để KHÔNG bỏ sót giờ đã log:
+   *   • `epic_key ∈ epicKeys` — mọi worklog thuộc các Epic thấy được (kể cả trên
+   *     Task / Sub-task đã đóng); nguồn cho tổng giờ mỗi người.
+   *   • `issue_key ∈ subtaskKeys` — worklog trên đúng các Sub-task ĐANG HIỂN THỊ,
+   *     BẮT cả trường hợp `epic_key` (ghi lúc đồng bộ) không còn nằm trong tập
+   *     thấy được: ticket đổi cha sang Epic khác, hoặc Epic cũ chuyển PAUSED/ERROR.
+   *     Thiếu nhánh này thì tab "By member" báo nhầm "chưa log" dù giờ vẫn có
+   *     trong DB (tab By PIC/day quét toàn bảng nên vẫn thấy).
+   * Mỗi dòng worklog chỉ tính MỘT lần dù khớp cả hai nhánh (một truy vấn, OR).
+   */
   worklogSums(
     epicKeys: readonly string[],
+    subtaskKeys: readonly string[],
     startMs: number,
     endMs: number,
   ): Promise<readonly WorklogSumRow[]>;
@@ -184,25 +196,24 @@ export function registerLogworkRoutes(app: FastifyInstance, deps: LogworkRouteDe
 
       const epicKeys = epics.map((e) => e.epicKey);
 
-      // Cửa sổ worklog tính theo múi giờ TỪNG Epic: gom Epic theo múi giờ, mỗi
-      // nhóm một truy vấn (issue key toàn cục là duy nhất nên ghép không đụng nhau).
-      const byTz = new Map<string, string[]>();
-      for (const e of epics) {
-        const tz = calOf(e).timezone;
-        const list = byTz.get(tz);
-        if (list) list.push(e.epicKey);
-        else byTz.set(tz, [e.epicKey]);
-      }
-      const worklogSums: WorklogSumRow[] = [];
-      for (const [tz, keys] of byTz) {
-        const rows = await deps.reads.worklogSums(keys, startOfDayUtcMs(from, tz), endOfDayUtcMs(to, tz));
-        worklogSums.push(...rows);
-      }
-
       const [subtasks, exemptions] = await Promise.all([
         deps.reads.openSubtasks(epicKeys),
         deps.reads.exemptionsForEpics(epicKeys),
       ]);
+
+      // Worklog của kỳ, gộp theo (issue, tác giả). Lấy theo Epic thấy được HOẶC
+      // theo đúng các Sub-task đang hiển thị (xem `worklogSums`): nhánh issue_key
+      // bắt cả giờ mà `epic_key` đã ghi không còn nằm trong tập thấy được (ticket
+      // đổi cha, hoặc Epic cũ PAUSED/ERROR) — nếu không, tab "By member" báo nhầm
+      // "chưa log". Cửa sổ theo MỘT múi giờ tham chiếu (giống tab By PIC/day) nên
+      // chỉ một truy vấn, mỗi dòng worklog tính đúng một lần dù khớp cả hai nhánh.
+      const subtaskKeys = subtasks.map((s) => s.issueKey);
+      const worklogSums = await deps.reads.worklogSums(
+        epicKeys,
+        subtaskKeys,
+        startOfDayUtcMs(from, refTz),
+        endOfDayUtcMs(to, refTz),
+      );
 
       return buildLogworkReport({
         from,

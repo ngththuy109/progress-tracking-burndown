@@ -41,7 +41,12 @@ class FakeReads implements LogworkReadPort {
   exempt: LogworkExemptionRow[] = [];
   projectHoursMap = new Map<string, number | null>();
   visibleArg: readonly string[] | null | undefined = undefined;
-  worklogCalls: { keys: readonly string[]; startMs: number; endMs: number }[] = [];
+  worklogCalls: {
+    keys: readonly string[];
+    subtaskKeys: readonly string[];
+    startMs: number;
+    endMs: number;
+  }[] = [];
   dailyCalls: { startMs: number; endMs: number; tz: string }[] = [];
 
   async visibleEpics(projectKeys: readonly string[] | null) {
@@ -59,8 +64,13 @@ class FakeReads implements LogworkReadPort {
   async openSubtasks() {
     return this.subs;
   }
-  async worklogSums(keys: readonly string[], startMs: number, endMs: number) {
-    this.worklogCalls.push({ keys, startMs, endMs });
+  async worklogSums(
+    keys: readonly string[],
+    subtaskKeys: readonly string[],
+    startMs: number,
+    endMs: number,
+  ) {
+    this.worklogCalls.push({ keys, subtaskKeys, startMs, endMs });
     return this.sums;
   }
   async worklogDailyByAuthor(startMs: number, endMs: number, tz: string) {
@@ -162,12 +172,44 @@ describe('GET /api/logwork', () => {
     expect(body.members.map((m) => m.accountId)).toContain('a');
   });
 
-  it('cửa sổ worklog tính đúng theo múi giờ Epic', async () => {
+  it('cửa sổ worklog tính đúng theo múi giờ tham chiếu, một truy vấn', async () => {
     await get('/api/logwork');
     expect(reads.worklogCalls).toHaveLength(1);
     expect(reads.worklogCalls[0]?.keys).toEqual(['PAY-1']);
     expect(reads.worklogCalls[0]?.startMs).toBe(startOfDayUtcMs('2026-08-17', TZ));
     expect(reads.worklogCalls[0]?.endMs).toBe(endOfDayUtcMs('2026-08-23', TZ));
+  });
+
+  it('truyền KEY các Sub-task đang hiển thị vào worklogSums (bắt worklog epic_key đã cũ)', async () => {
+    // Hai Sub-task đang mở: route phải chuyển đúng key của chúng xuống cổng đọc để
+    // nhánh `issue_key ∈ subtaskKeys` bắt được cả worklog mà `epic_key` không còn
+    // nằm trong tập Epic thấy được (ticket đổi cha / Epic cũ PAUSED). Không có bước
+    // này thì tab "By member" báo nhầm "chưa log" dù giờ vẫn có trong DB.
+    reads.subs = [
+      {
+        issueKey: 'PAY-11',
+        epicKey: 'PAY-1',
+        summary: 'x',
+        parentKey: null,
+        phaseCode: 'DEV',
+        statusCategory: 'indeterminate',
+        originalEstimateSeconds: 3600,
+        participants: [{ accountId: 'a', displayName: 'Alice' }],
+      },
+      {
+        issueKey: 'PAY-12',
+        epicKey: 'PAY-1',
+        summary: 'y',
+        parentKey: null,
+        phaseCode: 'DEV',
+        statusCategory: 'indeterminate',
+        originalEstimateSeconds: 3600,
+        participants: [{ accountId: 'b', displayName: 'Bob' }],
+      },
+    ];
+    await get('/api/logwork');
+    expect(reads.worklogCalls).toHaveLength(1);
+    expect(reads.worklogCalls[0]?.subtaskKeys).toEqual(['PAY-11', 'PAY-12']);
   });
 
   it('kỳ đã kết thúc (from/to trong quá khứ) → không prorate', async () => {

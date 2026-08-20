@@ -213,14 +213,18 @@ export function createLogworkReadPort(prisma: PrismaClient): LogworkReadPort {
       }));
     },
 
-    async worklogSums(epicKeys, startMs, endMs): Promise<readonly WorklogSumRow[]> {
-      if (epicKeys.length === 0) return [];
+    async worklogSums(epicKeys, subtaskKeys, startMs, endMs): Promise<readonly WorklogSumRow[]> {
+      if (epicKeys.length === 0 && subtaskKeys.length === 0) return [];
       const groups = await prisma.worklogEntry.groupBy({
         by: ['issueKey', 'authorId'],
         where: {
-          epicKey: { in: [...epicKeys] },
           isDeleted: false,
           startedAt: { gte: new Date(startMs), lte: new Date(endMs) },
+          // Epic thấy được HOẶC đúng Sub-task đang hiển thị. Nhánh issue_key bắt cả
+          // worklog có `epic_key` đã cũ (ticket đổi cha, hoặc Epic cũ PAUSED/ERROR)
+          // — dùng index `idx_worklog_issue_started`. `in: []` khớp rỗng nên khi
+          // một trong hai tập trống, OR tự thu về nhánh còn lại.
+          OR: [{ epicKey: { in: [...epicKeys] } }, { issueKey: { in: [...subtaskKeys] } }],
         },
         _sum: { timeSpentS: true },
       });

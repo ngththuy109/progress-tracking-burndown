@@ -14,14 +14,10 @@ import { STATUS_CATEGORY } from './enums.js';
  *   - "In charge": `jira_issue.sb_request_participants` (chỉ có ở Sub-task).
  *   - Ticket "chưa đóng": `status_category <> 'done'` (C-4: KHÔNG so `status.name`).
  *
- * "Chưa log" (`notLogged`) xét ở MỨC TICKET theo NHÓM in-charge: một ticket bị
- * gắn cờ khi KHÔNG participant nào của nó log giờ trong kỳ. Ticket có nhiều
- * người cùng ở "Request participants" chỉ cần MỘT người trong nhóm log là hết
- * cờ cho cả nhóm (đồng đội log hộ thì không nhắc những người còn lại). Vẫn giữ
- * `memberLoggedHours` RIÊNG từng người: ai chưa tự log mà đồng đội đã log thì
- * `memberLoggedHours = 0` còn `totalLoggedHours > 0`, UI đọc thành "0 / X".
- * Ticket đã được PM "verify — thôi theo dõi" thì `exempted = true` và KHÔNG còn
- * tính vào `notLogged`/`notLoggedCount`.
+ * "Chưa log" nghĩa là CHÍNH member đó chưa log giờ nào lên ticket trong kỳ — dù
+ * người khác có thể đã log (khi đó `totalLoggedHours > 0` còn `memberLoggedHours`
+ * = 0, UI đọc thành "0 / X"). Ticket đã được PM "verify — thôi theo dõi" thì
+ * `exempted = true` và KHÔNG còn tính vào `notLogged`/`notLoggedCount`.
  */
 
 export const logworkTicketSchema = z.object({
@@ -39,7 +35,7 @@ export const logworkTicketSchema = z.object({
   memberLoggedHours: z.number(),
   /** Tổng giờ MỌI người log lên ticket này, trong kỳ (0 / X → người khác đã cover). */
   totalLoggedHours: z.number(),
-  /** `true` khi KHÔNG participant nào của ticket đã log && `!exempted`. */
+  /** `memberLoggedHours === 0 && !exempted`. */
   notLogged: z.boolean(),
   /** PM đã "verify — thôi theo dõi" cặp (member, ticket) này. */
   exempted: z.boolean(),
@@ -58,7 +54,7 @@ export const logworkMemberSchema = z.object({
   /** `false` = có log giờ nhưng không in-charge ticket mở nào ("logged, not assigned"). */
   hasOpenAssignments: z.boolean(),
   tickets: z.array(logworkTicketSchema),
-  /** Số ticket in-charge đang mở mà CHƯA participant nào của ticket log (đã trừ ticket exempt). */
+  /** Số ticket đang mở mà member này chưa log (đã trừ ticket exempt). */
   notLoggedCount: z.number().int(),
   /** Số ticket đã được PM "verify — thôi theo dõi". */
   exemptedCount: z.number().int(),
