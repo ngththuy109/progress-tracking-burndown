@@ -7,6 +7,7 @@ import { compareSortValues, DataTable, type Column } from './data-table.js';
 import { EmptyState } from './empty-state.js';
 import { describeError, ErrorState } from './error-state.js';
 import { LoadingState } from './loading-state.js';
+import { MultiSelect, type MultiSelectOption } from './multi-select.js';
 
 describe('ErrorState', () => {
   it('hiện nút Try again và gọi lại hàm khi bấm', async () => {
@@ -100,6 +101,83 @@ describe('Badge', () => {
     // Người mù màu và bản in đen trắng đều mất sạch nghĩa nếu chỉ có màu.
     render(<Badge tone="danger">Trễ kết thúc</Badge>);
     expect(screen.getByText('Trễ kết thúc')).toBeTruthy();
+  });
+});
+
+describe('MultiSelect', () => {
+  const OPTIONS: readonly MultiSelectOption[] = [
+    { value: 'a1', label: 'Nguyễn An', count: 2 },
+    { value: 'b2', label: 'Trần Bình', count: 1 },
+  ];
+
+  it('chưa chọn gì thì nút hiện chữ "tất cả"', () => {
+    render(<MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={[]} onChange={vi.fn()} />);
+
+    expect(screen.getByText('All PICs')).toBeTruthy();
+  });
+
+  it('chọn đúng một mục thì nút hiện TÊN mục đó, không phải "1 selected"', () => {
+    // `<details>` luôn dựng cả nội dung trong DOM, nên tên còn xuất hiện ở ô
+    // checkbox — nhắm riêng phần tóm tắt trên nút để khỏi bắt nhầm.
+    const { container } = render(
+      <MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={['a1']} onChange={vi.fn()} />,
+    );
+
+    expect(container.querySelector('.multi-select__summary')?.textContent).toContain('Nguyễn An');
+  });
+
+  it('chọn nhiều mục thì nút gộp thành "N selected"', () => {
+    render(
+      <MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={['a1', 'b2']} onChange={vi.fn()} />,
+    );
+
+    expect(screen.getByText('2 selected')).toBeTruthy();
+  });
+
+  it('tích một ô CHECKBOX thì THÊM giá trị đó (chọn nhiều, không thay thế)', async () => {
+    const onChange = vi.fn();
+    render(<MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={['a1']} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /Trần Bình/ }));
+
+    expect(onChange).toHaveBeenCalledWith(['a1', 'b2']);
+  });
+
+  it('bỏ tích một ô đang chọn thì GỠ đúng giá trị đó', async () => {
+    const onChange = vi.fn();
+    render(
+      <MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={['a1', 'b2']} onChange={onChange} />,
+    );
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /Nguyễn An/ }));
+
+    expect(onChange).toHaveBeenCalledWith(['b2']);
+  });
+
+  it('nút Clear đưa về rỗng (= tất cả), và bị khoá khi chưa chọn gì', async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={['a1']} onChange={onChange} />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(onChange).toHaveBeenCalledWith([]);
+
+    rerender(<MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={[]} onChange={onChange} />);
+    expect(screen.getByRole('button', { name: 'Clear' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('hiện số ticket cạnh mỗi mục — thấy khối lượng trước khi lọc', () => {
+    render(<MultiSelect label="PIC" allLabel="All PICs" options={OPTIONS} selected={[]} onChange={vi.fn()} />);
+
+    expect(screen.getByText('(2)')).toBeTruthy();
+    expect(screen.getByText('(1)')).toBeTruthy();
+  });
+
+  it('không có mục nào thì nói rõ, không để popover trống trơn', () => {
+    render(<MultiSelect label="PIC" allLabel="All PICs" options={[]} selected={[]} onChange={vi.fn()} />);
+
+    expect(screen.getByText('Nothing to filter here.')).toBeTruthy();
   });
 });
 

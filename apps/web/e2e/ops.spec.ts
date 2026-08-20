@@ -277,13 +277,32 @@ test('lọc theo PIC để mỗi người thấy đúng phần việc của mìn
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  // Số ticket hiện ngay trong ô chọn: thấy khối lượng TRƯỚC khi bấm.
-  await page.getByLabel('Filter by PIC').selectOption({ label: 'Nguyễn An (1)' });
+  // Ô lọc là popover chọn NHIỀU: mở ra rồi tích người cần xem. Số ticket hiện
+  // ngay cạnh tên ("… (1)") — thấy khối lượng TRƯỚC khi tích.
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
+  await page.getByRole('checkbox', { name: 'Nguyễn An (1)' }).check();
 
   await expect(page.getByText('PAY-101')).toBeVisible();
   await expect(page.getByText('PAY-102')).toHaveCount(0);
   // File tải về phải khớp với những gì đang nhìn thấy.
   await expect(page.getByRole('button', { name: /Download CSV report \(1 tickets\)/ })).toBeVisible();
+});
+
+test('chọn NHIỀU PIC gom được phần việc của cả nhóm cùng lúc', async ({ page }) => {
+  // "Lọc hàng loạt": một quản lý tích cả An lẫn Bình để thấy chung một danh sách.
+  await installApi(page, { dqIssues: DQ_ISSUES });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
+  await page.getByRole('checkbox', { name: 'Nguyễn An (1)' }).check();
+  await page.getByRole('checkbox', { name: 'Trần Bình (1)' }).check();
+
+  await expect(page.getByText('PAY-101')).toBeVisible();
+  await expect(page.getByText('PAY-102')).toBeVisible();
+  // PAY-103 chưa gán ai → không thuộc nhóm đã chọn.
+  await expect(page.getByText('PAY-103')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Download CSV report \(2 tickets\)/ })).toBeVisible();
 });
 
 test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async ({ page }) => {
@@ -293,7 +312,8 @@ test('lọc được riêng nhóm ticket CHƯA có người phụ trách', async
   await page.goto('/ops');
   await page.getByRole('button', { name: 'Show ticket details' }).click();
 
-  await page.getByLabel('Filter by PIC').selectOption({ label: 'No PIC yet (1)' });
+  await page.locator('summary[aria-label="Filter by PIC"]').click();
+  await page.getByRole('checkbox', { name: 'No PIC yet (1)' }).check();
 
   await expect(page.getByText('PAY-103')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);
@@ -312,7 +332,32 @@ test('lọc theo LOẠI LỖI (kể cả "planned on a day off") để xử lý 
   // Badge loại lỗi hiện NGAY trên ticket (exact để không đụng mục "… (1)" trong ô chọn).
   await expect(page.getByText('Planned on a day off', { exact: true })).toBeVisible();
 
-  await page.getByLabel('Filter by problem type').selectOption({ label: 'Planned on a day off (1)' });
+  // Ô lọc loại lỗi giờ liệt kê ĐỦ cả sáu loại (kể cả loại 0 ticket) — chọn đúng
+  // loại cần xem.
+  await page.locator('summary[aria-label="Filter by problem type"]').click();
+  await page.getByRole('checkbox', { name: 'Planned on a day off (1)' }).check();
   await expect(page.getByText('PAY-201')).toBeVisible();
   await expect(page.getByText('PAY-101')).toHaveCount(0);
+});
+
+test('ô lọc loại lỗi hiện ĐỦ CẢ SÁU loại, kể cả loại đang 0 ticket', async ({ page }) => {
+  // Trước đây ô lọc chỉ hiện loại đang có ticket nên chỉ ra 4/6 khiến người trực
+  // tưởng thiếu. Giờ đủ sáu: chỉ có MISSING_ESTIMATE có ticket, năm loại kia (0).
+  await installApi(page, {
+    dqIssues: [DQ_ISSUE({ issueKey: 'PAY-101', problems: ['MISSING_ESTIMATE'] })],
+  });
+  await page.goto('/ops');
+  await page.getByRole('button', { name: 'Show ticket details' }).click();
+
+  await page.locator('summary[aria-label="Filter by problem type"]').click();
+  for (const label of [
+    'Missing estimate (1)',
+    'Missing planned dates (0)',
+    'Unclassified phase (0)',
+    'Title in wrong format (0)',
+    'Closed without logged work (0)',
+    'Planned on a day off (0)',
+  ]) {
+    await expect(page.getByRole('checkbox', { name: label })).toBeVisible();
+  }
 });
