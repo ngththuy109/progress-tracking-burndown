@@ -61,9 +61,9 @@ export function computePhaseRollups(args: ComputeRollupArgs): PhaseRollup[] {
       statusIdMap,
       asOfMs,
       (planStart, planEnd) =>
-        `Phase ${phaseCode}: ngày bắt đầu kế hoạch (${planStart}) muộn hơn ngày kết thúc ` +
-        `(${planEnd}). Nhiều khả năng có Sub-task điền nhầm wbs_*. ` +
-        `Tạm coi Phase dài 1 ngày; hãy sửa trên Jira.`,
+        `Phase ${phaseCode}: the planned start (${planStart}) is after the planned end ` +
+        `(${planEnd}). Most likely a Sub-task has wbs_* filled in wrong. ` +
+        `Treating the Phase as 1 day long for now; fix it in Jira.`,
     );
     out.push({ phaseCode, ...reduced });
   }

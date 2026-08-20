@@ -25,7 +25,7 @@ export function registerHttpMetrics(app: FastifyInstance, registry: MetricsRegis
   app.addHook('onResponse', async (req: FastifyRequest, reply: FastifyReply) => {
     registry.observe(
       METRIC.httpRequestDuration,
-      'Thời gian xử lý request HTTP, tính bằng giây',
+      'HTTP request processing time, in seconds',
       // `elapsedTime` của Fastify tính bằng mili-giây.
       reply.elapsedTime / 1000,
       {
@@ -41,6 +41,6 @@ export function registerHttpMetrics(app: FastifyInstance, registry: MetricsRegis
 export function recordCacheOutcome(registry: MetricsRegistry, hit: boolean): void {
   // Ghi sẵn tỉ lệ thì mất khả năng cộng dồn giữa nhiều tiến trình; Prometheus
   // muốn hai bộ đếm thô rồi tự chia.
-  if (hit) registry.increment(METRIC.chartCacheHits, 'Số lần trúng cache biểu đồ');
-  else registry.increment(METRIC.chartCacheMisses, 'Số lần trượt cache biểu đồ');
+  if (hit) registry.increment(METRIC.chartCacheHits, 'Chart cache hits');
+  else registry.increment(METRIC.chartCacheMisses, 'Chart cache misses');
 }

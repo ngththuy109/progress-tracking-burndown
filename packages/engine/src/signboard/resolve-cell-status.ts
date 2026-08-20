@@ -23,7 +23,7 @@ import {
 
 export class InvalidSignboardDateError extends Error {
   constructor(field: string, value: string) {
-    super(`Trường "${field}" phải có dạng YYYY-MM-DD, nhận được "${value}".`);
+    super(`Field "${field}" must look like YYYY-MM-DD; got "${value}".`);
     this.name = 'InvalidSignboardDateError';
   }
 }

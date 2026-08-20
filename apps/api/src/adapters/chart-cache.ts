@@ -58,7 +58,7 @@ export function createChartCache(deps: ChartCacheDeps): ChartCache {
         return raw === null ? null : (JSON.parse(raw) as T);
       } catch (err) {
         // Redis chết HOẶC dữ liệu cache hỏng đều lùi về đọc database.
-        warn('CACHE_READ_FAILED', `Không đọc được cache biểu đồ (${key}): ${String(err)}`);
+        warn('CACHE_READ_FAILED', `Could not read the chart cache (${key}): ${String(err)}`);
         return null;
       }
     },
@@ -67,7 +67,7 @@ export function createChartCache(deps: ChartCacheDeps): ChartCache {
       try {
         await deps.redis.set(key, JSON.stringify(value), 'EX', ttl);
       } catch (err) {
-        warn('CACHE_WRITE_FAILED', `Không ghi được cache biểu đồ (${key}): ${String(err)}`);
+        warn('CACHE_WRITE_FAILED', `Could not write the chart cache (${key}): ${String(err)}`);
       }
     },
 
@@ -87,7 +87,7 @@ export function createChartCache(deps: ChartCacheDeps): ChartCache {
           if (keys.length > 0) removed += await deps.redis.del(...keys);
         } while (cursor !== '0');
       } catch (err) {
-        warn('CACHE_INVALIDATE_FAILED', `Không xoá được cache của ${epicKey}: ${String(err)}`);
+        warn('CACHE_INVALIDATE_FAILED', `Could not invalidate the cache for ${epicKey}: ${String(err)}`);
       }
 
       return removed;

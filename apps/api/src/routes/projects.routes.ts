@@ -43,7 +43,7 @@ export function registerProjectsRoutes(app: FastifyInstance, deps: ProjectsRoute
         });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API danh mục Project');
+      app.log.error({ err }, 'Unexpected error in the Project catalog API group');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };

@@ -45,15 +45,15 @@ export class SecretBoxError extends Error {
 export function parseEncryptionKey(raw: string | undefined): Buffer {
   if (!raw || raw.trim() === '') {
     throw new SecretBoxError(
-      'APP_ENCRYPTION_KEY chưa được đặt. Sinh khóa mới bằng: ' +
+      'APP_ENCRYPTION_KEY is not set. Generate a new key with: ' +
         `node -e "console.log(require('crypto').randomBytes(${SECRET_KEY_BYTES}).toString('base64'))"`,
     );
   }
   const key = Buffer.from(raw.trim(), 'base64');
   if (key.length !== SECRET_KEY_BYTES) {
     throw new SecretBoxError(
-      `APP_ENCRYPTION_KEY phải là ${SECRET_KEY_BYTES} byte ở dạng base64 ` +
-        `(nhận được ${key.length} byte sau giải mã).`,
+      `APP_ENCRYPTION_KEY must be ${SECRET_KEY_BYTES} bytes in base64 ` +
+        `(got ${key.length} bytes after decoding).`,
     );
   }
   return key;
@@ -62,7 +62,7 @@ export function parseEncryptionKey(raw: string | undefined): Buffer {
 /** Mã hóa plaintext → chuỗi "v1:<iv>:<tag>:<ct>" (các phần base64). */
 export function seal(plaintext: string, key: Buffer): string {
   if (key.length !== SECRET_KEY_BYTES) {
-    throw new SecretBoxError(`Khóa phải đúng ${SECRET_KEY_BYTES} byte.`);
+    throw new SecretBoxError(`The key must be exactly ${SECRET_KEY_BYTES} bytes.`);
   }
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -82,20 +82,20 @@ export function seal(plaintext: string, key: Buffer): string {
  */
 export function open(sealed: string, key: Buffer): string {
   if (key.length !== SECRET_KEY_BYTES) {
-    throw new SecretBoxError(`Khóa phải đúng ${SECRET_KEY_BYTES} byte.`);
+    throw new SecretBoxError(`The key must be exactly ${SECRET_KEY_BYTES} bytes.`);
   }
   const parts = sealed.split(':');
   if (parts.length !== 4) {
-    throw new SecretBoxError('Chuỗi token mã hóa sai định dạng (cần 4 phần "v1:iv:tag:ct").');
+    throw new SecretBoxError('The encrypted token is malformed (expected 4 parts "v1:iv:tag:ct").');
   }
   const [version, ivB64, tagB64, ctB64] = parts as [string, string, string, string];
   if (version !== SECRET_BOX_VERSION) {
-    throw new SecretBoxError(`Phiên bản token mã hóa không hỗ trợ: "${version}".`);
+    throw new SecretBoxError(`Unsupported encrypted token version: "${version}".`);
   }
   const iv = Buffer.from(ivB64, 'base64');
   const tag = Buffer.from(tagB64, 'base64');
   if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
-    throw new SecretBoxError('Chuỗi token mã hóa sai định dạng (IV/tag sai độ dài).');
+    throw new SecretBoxError('The encrypted token is malformed (IV/tag has the wrong length).');
   }
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
@@ -106,6 +106,6 @@ export function open(sealed: string, key: Buffer): string {
   } catch {
     // Node ném lỗi chung chung khi tag mismatch — dịch thành thông điệp rõ ràng,
     // KHÔNG kèm ciphertext hay khóa vào message/log.
-    throw new SecretBoxError('Giải mã thất bại: khóa sai hoặc dữ liệu đã bị sửa.');
+    throw new SecretBoxError('Decryption failed: wrong key or the data was tampered with.');
   }
 }

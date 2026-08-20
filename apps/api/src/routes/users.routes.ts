@@ -46,7 +46,7 @@ export function registerUsersRoutes(app: FastifyInstance, deps: UsersRouteDeps):
         });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API quản lý người dùng');
+      app.log.error({ err }, 'Unexpected error in the user management API group');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };

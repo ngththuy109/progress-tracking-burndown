@@ -75,7 +75,7 @@ export function registerCalendarRoutes(app: FastifyInstance, deps: CalendarRoute
         });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API lịch làm việc');
+      app.log.error({ err }, 'Unexpected error in the work calendar API group');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };

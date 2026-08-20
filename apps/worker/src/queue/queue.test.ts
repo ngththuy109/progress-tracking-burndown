@@ -209,7 +209,7 @@ describe('dispatchJob', () => {
       (e: unknown) => e as Error,
     );
     expect(err.message).toContain('job-cu');
-    expect(err.message).toContain('Kiểm tra hàng đợi');
+    expect(err.message).toContain('Check the queue');
   });
 });
 

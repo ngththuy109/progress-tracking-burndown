@@ -129,9 +129,9 @@ export class TaskTitleParser {
       warnings.push({
         code: 'AMBIGUOUS_PHASE_RULE',
         message:
-          `Tiêu đề "${title}" khớp nhiều luật cùng mức ưu tiên và cùng độ dài: ` +
+          `Title "${title}" matches several rules with the same priority and length: ` +
           winners.map((w) => `"${w.keyword}"→${w.phaseCode}`).join(', ') +
-          `. Đã lấy luật đầu tiên. Chỉnh matchPriority để quyết định rõ ràng.`,
+          `. Took the first rule. Adjust matchPriority to make the winner explicit.`,
       });
     }
 

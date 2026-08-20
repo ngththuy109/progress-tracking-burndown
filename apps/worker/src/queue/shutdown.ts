@@ -65,8 +65,8 @@ export function createShutdown(deps: ShutdownDeps): ShutdownHandle {
       log({
         event: 'shutdown.timeout',
         message:
-          `Job đang chạy chưa xong sau ${timeoutMs}ms. Thoát cưỡng bức. ` +
-          'Khoá Redis của Epic đang xử lý sẽ tự hết hạn; kiểm tra sync_run còn dòng nào kẹt ở RUNNING.',
+          `The running job did not finish within ${timeoutMs}ms. Forcing exit. ` +
+          'The Redis lock of the Epic being processed will expire on its own; check sync_run for rows stuck in RUNNING.',
       });
     }
 

@@ -13,7 +13,7 @@ import type { PrismaClient } from '../client.js';
  * là dọn TỰ ĐỘNG chứ không phải lỗi nghiệp vụ, để người trực khỏi đi tìm stack.
  */
 export const STALE_RUN_ERROR_MESSAGE =
-  'Worker dừng giữa chừng — lần chạy không kết thúc (dọn tự động).';
+  'The worker stopped mid-run — the run never finished (cleaned up automatically).';
 
 /**
  * Dọn các lần chạy KẸT ở `RUNNING` — trả về số dòng đã dọn.

@@ -80,7 +80,7 @@ export function registerOpsRoutes(app: FastifyInstance, deps: OpsRouteDeps): voi
           } catch (err) {
             // Một thành phần ném lỗi nghĩa là nó KHÔNG khoẻ, không phải là chưa
             // biết. Nuốt lỗi rồi báo OK là kiểu nói dối tệ nhất ở endpoint này.
-            app.log.warn({ component: c.name, err }, 'Kiểm tra sức khoẻ thất bại');
+            app.log.warn({ component: c.name, err }, 'Health check failed');
             return { name: c.name, ok: false };
           }
         }),

@@ -223,7 +223,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         await reply.status(err.statusCode).send({ error: err.code, message: err.message });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API xác thực');
+      app.log.error({ err }, 'Unexpected error in the auth API group');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };
@@ -300,7 +300,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
         clientFactory: deps.clientFactory,
         // Chi tiết (DN, số entry khớp…) CHỈ vào log server. KHÔNG BAO GIỜ log
         // mật khẩu — hàm authenticate không đưa password vào detail.
-        log: (detail) => app.log.warn({ event: 'auth.ldap', detail }, 'Đăng nhập LDAP'),
+        log: (detail) => app.log.warn({ event: 'auth.ldap', detail }, 'LDAP sign-in'),
       });
 
       if ('error' in result) {

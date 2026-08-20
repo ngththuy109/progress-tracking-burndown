@@ -78,9 +78,9 @@ export async function getCalendar(
           holidays: new Set<string>(),
           makeupWorkdays: new Set<string>(),
           warnings: [
-            `Không tìm thấy lịch làm việc "${calendarId}". Đang dùng mặc định ` +
-              `Thứ Hai–Thứ Sáu, múi giờ ${FALLBACK_TIMEZONE}, không có ngày lễ. ` +
-              `Ngày nghỉ lễ sẽ bị tính như ngày làm việc.`,
+            `Work calendar "${calendarId}" was not found. Using the default ` +
+              `Monday–Friday, timezone ${FALLBACK_TIMEZONE}, with no holidays. ` +
+              `Public holidays will be counted as working days.`,
           ],
         }
       : {
@@ -107,8 +107,8 @@ export async function getCalendar(
               : [workdaysMaskWarning(row.workdaysMask)!]),
             ...(row.holidays.length === 0
               ? [
-                  `Lịch "${calendarId}" chưa khai ngày lễ nào. Nếu Epic vắt qua Tết ` +
-                    `thì đường Kế hoạch sẽ giảm đều trong cả tuần nghỉ (E-14).`,
+                  `Calendar "${calendarId}" has no holidays registered. If an Epic spans Tết, ` +
+                    `the Planned line will burn steadily through the whole break week (E-14).`,
                 ]
               : []),
           ],

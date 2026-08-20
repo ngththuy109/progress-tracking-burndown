@@ -70,8 +70,8 @@ function minusDays(date: DateOnly, days: number, timezone: string): DateOnly {
   const dt = DateTime.fromISO(date, { zone: timezone });
   if (!dt.isValid) {
     throw new RebuildRangeError(
-      `Không đọc được ngày "${date}" ở múi giờ "${timezone}". ` +
-        'Ngày phải có dạng YYYY-MM-DD và múi giờ phải là tên IANA, ví dụ Asia/Ho_Chi_Minh.',
+      `Cannot parse the date "${date}" in timezone "${timezone}". ` +
+        'The date must look like YYYY-MM-DD and the timezone must be an IANA name, e.g. Asia/Ho_Chi_Minh.',
     );
   }
   return dt.minus({ days }).toFormat('yyyy-MM-dd');
@@ -93,7 +93,7 @@ export function resolveRebuildRange(input: RebuildRangeInput): RebuildRange {
     // ra bản sao của hôm nay đội lốt tương lai, và biểu đồ sẽ có một đoạn phẳng
     // trông như "đã đứng yên nhiều ngày".
     notes.push(
-      `Kẹp ngày cuối từ ${to} về ${input.today}: không dựng snapshot cho ngày chưa tới.`,
+      `Clamped the end date from ${to} to ${input.today}: snapshots are not built for days that have not arrived yet.`,
     );
     to = input.today;
   }
@@ -106,10 +106,10 @@ export function resolveRebuildRange(input: RebuildRangeInput): RebuildRange {
   } else if (input.full) {
     if (input.earliestDataDate === null) {
       throw new RebuildRangeError(
-        'Không dựng lại được toàn bộ lịch sử vì Epic này chưa có dữ liệu nào — ' +
-          'không có mốc nào để bắt đầu, và hệ thống KHÔNG đoán bừa ngày. ' +
-          'Chạy đồng bộ lần đầu cho Epic (thêm nó ở màn hình danh sách Epic) rồi thử lại, ' +
-          'hoặc gọi lại kèm ngày đầu cụ thể: {"from":"2026-01-01","full":true}.',
+        'Cannot rebuild the full history because this Epic has no data yet — ' +
+          'there is no point in time to start from, and the system does NOT guess dates. ' +
+          'Run the first sync for the Epic (add it on the Epics screen) and retry, ' +
+          'or call again with an explicit start date: {"from":"2026-01-01","full":true}.',
       );
     }
     from = input.earliestDataDate;
@@ -121,15 +121,15 @@ export function resolveRebuildRange(input: RebuildRangeInput): RebuildRange {
     // lại" để vá lỗ thủng, mà lỗ thủng cũ hơn bảy ngày sẽ không bao giờ được vá.
     const missing = input.earliestMissingSnapshotDate;
     if (missing !== null && missing < from) {
-      notes.push(`Nới ngày đầu từ ${from} về ${missing} để bù ngày thiếu snapshot (E-12).`);
+      notes.push(`Widened the start date from ${from} to ${missing} to fill missing snapshot days (E-12).`);
       from = missing;
     }
   }
 
   if (from > to) {
     throw new RebuildRangeError(
-      `Dải ngày ngược: ngày đầu ${from} nằm sau ngày cuối ${to}. ` +
-        'Kiểm tra lại hai tham số `from` và `to`; bỏ trống cả hai thì hệ thống tự chọn.',
+      `Reversed date range: the start ${from} is after the end ${to}. ` +
+        'Check the `from` and `to` parameters; leave both empty and the system picks them itself.',
     );
   }
 

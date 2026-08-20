@@ -167,7 +167,7 @@ describe('đối soát một Epic', () => {
     expect(h.backfills).toEqual(['PAY-1']);
     expect(h.alerts[0]?.code).toBe('DATA_DRIFT');
     expect(h.alerts[0]?.message).toContain('0.60%');
-    expect(h.alerts[0]?.message).toContain('chạy bù');
+    expect(h.alerts[0]?.message).toContain('catch-up');
   });
 
   it('luôn ghi lại kết quả để theo dõi xu hướng, kể cả khi không lệch', async () => {

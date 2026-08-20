@@ -180,7 +180,7 @@ describe('tầng SUBTASK_TITLE_TOKEN — bóc token trong tiêu đề Sub-task',
       ],
     });
     const resolver = new GroupKeyResolver(bad);
-    expect(() => resolver.resolve({ parentPhase: 'x', leafTitle: '[PAY][TeamA][Design][Login]_Create' })).toThrow(/không hợp lệ/);
+    expect(() => resolver.resolve({ parentPhase: 'x', leafTitle: '[PAY][TeamA][Design][Login]_Create' })).toThrow(/invalid token/);
   });
 });
 
@@ -392,6 +392,6 @@ describe('nguồn khoá chưa hỗ trợ — fail-fast', () => {
       ],
     });
     const resolver = new GroupKeyResolver(config);
-    expect(() => resolver.resolve({ parentPhase: 'x', leafTitle: 'y' })).toThrow(/chưa hỗ trợ/);
+    expect(() => resolver.resolve({ parentPhase: 'x', leafTitle: 'y' })).toThrow(/not supported yet/);
   });
 });

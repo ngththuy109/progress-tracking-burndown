@@ -138,7 +138,7 @@ export async function syncEpic(
 
   const state = await deps.epics.read(epicKey);
   if (state === null) {
-    throw new Error(`Epic ${epicKey} không có trong sổ theo dõi — không đồng bộ.`);
+    throw new Error(`Epic ${epicKey} is not in the tracking registry — not syncing.`);
   }
 
   const rereadAll = options.ignoreWatermark === true;
@@ -220,8 +220,8 @@ export async function syncEpic(
           {
             code: 'EPIC_DELETED_IN_JIRA',
             message:
-              `Epic ${epicKey} không còn trên Jira (đã bị xoá). Đã đánh dấu ${removed} issue ` +
-              `là đã gỡ và GIỮ NGUYÊN lịch sử cũ. Bỏ theo dõi Epic này nếu không cần nữa.`,
+              `Epic ${epicKey} no longer exists on Jira (it was deleted). Marked ${removed} issues ` +
+              `as removed and KEPT the old history. Untrack this Epic if it is no longer needed.`,
           },
         ],
         errorMessage: null,

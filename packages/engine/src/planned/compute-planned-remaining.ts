@@ -79,8 +79,8 @@ export function computePlannedRemaining(
       skippedPhases.push({
         phaseCode: phase.phaseCode,
         reason:
-          'Chưa có Sub-task nào đủ hai ngày kế hoạch với ngày làm việc hợp lệ — mọi ' +
-          'Sub-task đều thiếu wbs_start_date/wbs_end_date hoặc rơi trọn vào ngày nghỉ.',
+          'No Sub-task has both planned dates with valid workdays — every ' +
+          'Sub-task is missing wbs_start_date/wbs_end_date or falls entirely on days off.',
       });
       continue;
     }

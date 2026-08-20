@@ -48,8 +48,8 @@ export function resolveOriginalEstimateAt(
     // biết giá trị quá khứ — dùng giá trị hiện tại và NÓI RA (C-10).
     onWarning?.(
       'ESTIMATE_HISTORY_MISSING',
-      `${sub.key}: không có lịch sử ${ORIGINAL_ESTIMATE_FIELD}, dùng giá trị hiện tại ` +
-        `${sub.originalEstimateSeconds}s cho mọi mốc quá khứ.`,
+      `${sub.key}: no ${ORIGINAL_ESTIMATE_FIELD} history; using the current value ` +
+        `${sub.originalEstimateSeconds}s for every past point.`,
     );
     return { seconds: sub.originalEstimateSeconds, fromCurrentValue: true };
   }

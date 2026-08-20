@@ -146,7 +146,7 @@ describe('dải ngày dựng lại', () => {
 
     expect(err).toBeInstanceOf(RebuildRangeError);
     // Nói cả điều sai lẫn hai cách khắc phục (C-9).
-    expect(err?.message).toContain('chưa có dữ liệu');
+    expect(err?.message).toContain('has no data yet');
     expect(err?.message).toContain('"from"');
   });
 

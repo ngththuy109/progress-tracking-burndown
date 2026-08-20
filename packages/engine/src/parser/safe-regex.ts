@@ -65,7 +65,7 @@ export class SafeRegexRunner {
       re.lastIndex = 0;
       result = re.exec(input);
     } catch {
-      this.warn('REGEX_INVALID', pattern, 'Lỗi khi chạy regex.');
+      this.warn('REGEX_INVALID', pattern, 'The regex failed while running.');
       return null;
     }
 
@@ -75,10 +75,10 @@ export class SafeRegexRunner {
       this.warn(
         'REGEX_TIMEOUT',
         pattern,
-        `Regex chạy quá ${REGEX_TIMEOUT_MS}ms (lần ${n}). Coi như không khớp.`,
+        `The regex ran past ${REGEX_TIMEOUT_MS}ms (occurrence ${n}). Treated as no match.`,
       );
       if (n >= MAX_TIMEOUTS_BEFORE_DISABLE) {
-        this.warn('REGEX_DISABLED', pattern, `Đã timeout ${n} lần, tự vô hiệu hoá luật này.`);
+        this.warn('REGEX_DISABLED', pattern, `Timed out ${n} times; this rule disabled itself.`);
       }
       return null;
     }
@@ -93,7 +93,7 @@ export class SafeRegexRunner {
       this.warn(
         'REGEX_TOO_LONG',
         pattern,
-        `Regex dài ${pattern.length} ký tự, tối đa ${MAX_REGEX_LENGTH}.`,
+        `The regex is ${pattern.length} characters long; the maximum is ${MAX_REGEX_LENGTH}.`,
       );
       this.compiled.set(pattern, null);
       return null;
@@ -107,7 +107,7 @@ export class SafeRegexRunner {
       this.warn(
         'REGEX_INVALID',
         pattern,
-        `Regex không biên dịch được: ${err instanceof Error ? err.message : String(err)}`,
+        `The regex does not compile: ${err instanceof Error ? err.message : String(err)}`,
       );
       this.compiled.set(pattern, null);
       return null;

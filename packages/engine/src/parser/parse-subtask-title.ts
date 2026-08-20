@@ -78,8 +78,8 @@ export class SubtaskTitleParser {
       this.setupWarnings.push({
         code: 'NO_SUBTASK_PATTERN',
         message:
-          'Không có mẫu tiêu đề Sub-task nào dùng được. Toàn bộ Sub-task sẽ mang ' +
-          'trạng thái UNPARSED và bảng Signboard sẽ trống — kiểm tra lại cấu hình.',
+          'No usable Sub-task title pattern. Every Sub-task will be marked UNPARSED ' +
+          'and the Signboard will be empty — check the configuration.',
       });
     }
 
@@ -93,8 +93,8 @@ export class SubtaskTitleParser {
         this.setupWarnings.push({
           code: 'AMBIGUOUS_TASK_COLUMN',
           message:
-            `Hai cột "${existing}" và "${c.taskCode}" trùng nhau sau khi chuẩn hoá. ` +
-            `Đã giữ cột khai trước là "${existing}"; đổi tên một trong hai.`,
+            `Columns "${existing}" and "${c.taskCode}" collide after normalization. ` +
+            `Kept the first-declared column "${existing}"; rename one of the two.`,
         });
         continue;
       }
@@ -208,9 +208,9 @@ export class SubtaskTitleParser {
     warnings.push({
       code: 'PHASE_MISMATCH',
       message:
-        `Tiêu đề Sub-task "${title}" ghi Phase "${sbPhaseRaw}" (nhận ra là ${guessed}) ` +
-        `nhưng Task cha thuộc ${parentPhaseCode}. Đã lấy Phase của Task cha là ` +
-        `${parentPhaseCode}; sửa lại tiêu đề trên Jira cho khớp.`,
+        `Sub-task title "${title}" says Phase "${sbPhaseRaw}" (recognized as ${guessed}) ` +
+        `but the parent Task belongs to ${parentPhaseCode}. Used the parent Task's Phase ` +
+        `${parentPhaseCode}; fix the title in Jira so they match.`,
     });
   }
 }

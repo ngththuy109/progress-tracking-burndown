@@ -66,7 +66,7 @@ export function registerConfigPhaseRoutes(app: FastifyInstance, deps: ConfigPhas
       }
       // Lỗi ngoài dự kiến: KHÔNG trả nguyên văn ra ngoài — thông báo của Prisma
       // có thể chứa tên bảng, câu SQL, thậm chí giá trị dữ liệu.
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API cấu hình Phase');
+      app.log.error({ err }, 'Unexpected error in the Phase config API group');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };

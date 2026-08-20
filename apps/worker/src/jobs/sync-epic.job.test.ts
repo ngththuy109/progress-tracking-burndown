@@ -713,7 +713,7 @@ describe('vòng đời và nhật ký', () => {
 
   it('đồng bộ Epic không có trong sổ thì ném lỗi', async () => {
     await expect(run({ issues: sampleTree() }, 'KHONG-CO').result).rejects.toThrow(
-      /không có trong sổ theo dõi/,
+      /is not in the tracking registry/,
     );
   });
 });

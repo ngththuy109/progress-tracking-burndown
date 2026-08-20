@@ -199,19 +199,19 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
   // ANONYMOUS BIND và trả thành công. Không chặn ở đây thì ô mật khẩu bỏ
   // trống đăng nhập được thành BẤT KỲ AI (lỗ hổng kinh điển của form LDAP).
   if (deps.password.trim() === '') {
-    log?.('Từ chối mật khẩu rỗng/toàn khoảng trắng trước khi bind.');
+    log?.('Rejected an empty/whitespace-only password before binding.');
     return { error: 'LOGIN_FAILED' };
   }
   if (username === '') return { error: 'LOGIN_FAILED' };
 
   if (config.serverUrl === null || config.serverUrl.trim() === '') {
-    log?.('Cấu hình LDAP thiếu serverUrl.');
+    log?.('The LDAP config is missing serverUrl.');
     return { error: 'CONFIG_INVALID' };
   }
   const hasTemplate = config.userDnTemplate !== null && config.userDnTemplate.trim() !== '';
   const hasSearchBase = config.searchBase !== null && config.searchBase.trim() !== '';
   if (!hasTemplate && !hasSearchBase) {
-    log?.('Cấu hình LDAP phải khai userDnTemplate và/hoặc searchBase.');
+    log?.('The LDAP config must declare userDnTemplate and/or searchBase.');
     return { error: 'CONFIG_INVALID' };
   }
 
@@ -228,10 +228,10 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
         if (isLdapResultError(err)) {
           // Sai mật khẩu, DN không tồn tại… — với người dùng đều là "đăng nhập
           // sai", KHÔNG phân biệt (chống dò tên đăng nhập).
-          log?.(`Bind trực tiếp bị từ chối: ${errMessage(err)}`);
+          log?.(`Direct bind was rejected: ${errMessage(err)}`);
           return { error: 'LOGIN_FAILED' };
         }
-        log?.(`Không kết nối được LDAP: ${errMessage(err)}`);
+        log?.(`Could not reach LDAP: ${errMessage(err)}`);
         return { error: 'SERVER_UNREACHABLE' };
       }
 
@@ -255,7 +255,7 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
           });
           // 0 (không thấy) và >1 (filter nhập nhằng) đều là "đăng nhập sai".
           if (res.searchEntries.length !== 1) {
-            log?.(`Filter khớp ${res.searchEntries.length} entry cho một username — từ chối.`);
+            log?.(`The filter matched ${res.searchEntries.length} entries for one username — rejected.`);
             return { error: 'LOGIN_FAILED' };
           }
           entry = res.searchEntries[0];
@@ -269,17 +269,17 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
         }
       } catch (err) {
         if (isLdapResultError(err)) {
-          log?.(`Đọc email sau bind thất bại: ${errMessage(err)}`);
+          log?.(`Reading the email after bind failed: ${errMessage(err)}`);
           return { error: 'LOGIN_FAILED' };
         }
-        log?.(`Mất kết nối LDAP khi đọc email: ${errMessage(err)}`);
+        log?.(`Lost the LDAP connection while reading the email: ${errMessage(err)}`);
         return { error: 'SERVER_UNREACHABLE' };
       }
 
       const email = firstAttributeValue(entry, config.emailAttribute);
       if (email === null) {
         log?.(
-          `Không đọc được attribute email "${config.emailAttribute}" sau khi bind ${userDn} — không cấp phiên được.`,
+          `Could not read the email attribute "${config.emailAttribute}" after binding ${userDn} — cannot issue a session.`,
         );
         return { error: 'LOGIN_FAILED' };
       }
@@ -293,7 +293,7 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
   const bindDn = config.bindDn?.trim() ?? '';
   const bindPassword = config.bindPassword ?? '';
   if (bindDn === '' || bindPassword === '') {
-    log?.('Chế độ search-then-bind nhưng thiếu bindDn/bindPassword của tài khoản dịch vụ.');
+    log?.('Search-then-bind mode, but the service account bindDn/bindPassword is missing.');
     return { error: 'CONFIG_INVALID' };
   }
 
@@ -307,10 +307,10 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
       if (isLdapResultError(err)) {
         // Tài khoản dịch vụ sai là lỗi CẤU HÌNH, không phải lỗi của người đăng
         // nhập — trả CONFIG_INVALID để admin thấy 500 rõ, thay vì 401 đánh lạc.
-        log?.(`Bind tài khoản dịch vụ bị từ chối: ${errMessage(err)}`);
+        log?.(`The service account bind was rejected: ${errMessage(err)}`);
         return { error: 'CONFIG_INVALID' };
       }
-      log?.(`Không kết nối được LDAP: ${errMessage(err)}`);
+      log?.(`Could not reach LDAP: ${errMessage(err)}`);
       return { error: 'SERVER_UNREACHABLE' };
     }
 
@@ -328,24 +328,24 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
       entries = res.searchEntries;
     } catch (err) {
       if (isLdapResultError(err)) {
-        log?.(`Search user thất bại (base/filter hỏng?): ${errMessage(err)}`);
+        log?.(`The user search failed (broken base/filter?): ${errMessage(err)}`);
         return { error: 'CONFIG_INVALID' };
       }
-      log?.(`Mất kết nối LDAP khi search: ${errMessage(err)}`);
+      log?.(`Lost the LDAP connection during the search: ${errMessage(err)}`);
       return { error: 'SERVER_UNREACHABLE' };
     }
 
     // 0 kết quả (không có user) và >1 kết quả (filter nhập nhằng) đều là
     // "đăng nhập sai" với người dùng — chi tiết chỉ nằm trong log.
     if (entries.length !== 1) {
-      log?.(`Filter khớp ${entries.length} entry cho một username — từ chối.`);
+      log?.(`The filter matched ${entries.length} entries for one username — rejected.`);
       return { error: 'LOGIN_FAILED' };
     }
     userDn = entries[0]!.dn;
     const found = firstAttributeValue(entries[0], config.emailAttribute);
     if (found === null) {
       log?.(
-        `Entry ${userDn} không có attribute email "${config.emailAttribute}" — không cấp phiên được.`,
+        `Entry ${userDn} has no email attribute "${config.emailAttribute}" — cannot issue a session.`,
       );
       return { error: 'LOGIN_FAILED' };
     }
@@ -361,10 +361,10 @@ export async function authenticate(deps: AuthDeps): Promise<LdapAuthResult> {
     await userClient.bind(userDn, deps.password);
   } catch (err) {
     if (isLdapResultError(err)) {
-      log?.(`Bind của người dùng bị từ chối: ${errMessage(err)}`);
+      log?.(`The user's bind was rejected: ${errMessage(err)}`);
       return { error: 'LOGIN_FAILED' };
     }
-    log?.(`Không kết nối được LDAP khi bind người dùng: ${errMessage(err)}`);
+    log?.(`Could not reach LDAP while binding the user: ${errMessage(err)}`);
     return { error: 'SERVER_UNREACHABLE' };
   } finally {
     await quietUnbind(userClient);

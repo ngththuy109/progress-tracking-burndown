@@ -17,7 +17,7 @@ export function weekOf(date: DateOnly): { from: DateOnly; to: DateOnly } {
   const dt = DateTime.fromISO(date, { zone: 'utc' });
   if (!dt.isValid) {
     throw new InvalidDateError(
-      `Không đọc được ngày "${date}": ${dt.invalidReason ?? 'không rõ'}.`,
+      `Cannot parse the date "${date}": ${dt.invalidReason ?? 'unknown reason'}.`,
       date,
     );
   }

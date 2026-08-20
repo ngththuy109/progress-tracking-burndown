@@ -342,8 +342,8 @@ export async function rollbackToVersion(
 
   if (!old) {
     throw new Error(
-      `Không tìm thấy version ${args.version} của phạm vi ` +
-        `${args.scope}${args.projectKey ? `:${args.projectKey}` : ''}.`,
+      `Version ${args.version} of scope ` +
+        `${args.scope}${args.projectKey ? `:${args.projectKey}` : ''} was not found.`,
     );
   }
 
@@ -353,7 +353,7 @@ export async function rollbackToVersion(
       scope: args.scope,
       projectKey: args.projectKey,
       createdBy: args.createdBy,
-      note: `Quay lại nội dung của version ${args.version}`,
+      note: `Reverted to the content of version ${args.version}`,
       payload: {
         fallbackScanFullTitle: old.fallbackScanFullTitle,
         titlePatterns: old.titlePatterns.map((p) => ({

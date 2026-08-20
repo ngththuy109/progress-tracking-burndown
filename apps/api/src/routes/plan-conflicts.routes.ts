@@ -58,7 +58,7 @@ export function registerPlanConflictRoutes(app: FastifyInstance, deps: PlanConfl
         await reply.status(err.statusCode).send({ error: err.code, message: err.message });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở API kiểm tra plan-ngày nghỉ');
+      app.log.error({ err }, 'Unexpected error in the plan/days-off conflict API');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };

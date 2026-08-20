@@ -175,9 +175,9 @@ function fitSubtaskColumns(
     warnings.push({
       code: 'FIELD_TRUNCATED',
       message:
-        `Sub-task ${issueKey}: tiêu đề vượt quá giới hạn cột, đã cắt bớt khi lưu: ` +
-        `${truncated.join(', ')}. Bản ghi vẫn được lưu và số liệu Burndown không đổi; ` +
-        `rút gọn tiêu đề trên Jira nếu cần Signboard hiển thị đủ.`,
+        `Sub-task ${issueKey}: the title exceeds the column limit and was truncated on save: ` +
+        `${truncated.join(', ')}. The record was still saved and the Burndown numbers are unchanged; ` +
+        `shorten the title in Jira if the Signboard needs to show it in full.`,
     });
   }
 

@@ -79,9 +79,9 @@ export async function reconcileEpic(
       code: 'DATA_DRIFT',
       epicKey,
       message:
-        `Epic ${epicKey} lệch ${(result.driftRatio * 100).toFixed(2)}% so với Jira ` +
-        `(DB ${hours(result.totalDbS)} giờ, Jira ${hours(result.totalJiraS)} giờ, ` +
-        `${result.perIssue.length} issue lệch). Đã tự đẩy job chạy bù toàn bộ.`,
+        `Epic ${epicKey} is off by ${(result.driftRatio * 100).toFixed(2)}% versus Jira ` +
+        `(DB ${hours(result.totalDbS)}h, Jira ${hours(result.totalJiraS)}h, ` +
+        `${result.perIssue.length} issues differ). A full catch-up job was queued automatically.`,
     });
   }
 

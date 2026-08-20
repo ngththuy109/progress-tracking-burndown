@@ -36,7 +36,7 @@ export function endOfDayUtcMs(date: DateOnly, timezone: string): number {
   const dt = DateTime.fromISO(date, { zone: timezone });
   if (!dt.isValid) {
     throw new InvalidDateError(
-      `Không đọc được ngày "${date}" ở múi giờ "${timezone}": ${dt.invalidReason ?? 'không rõ'}.`,
+      `Cannot parse the date "${date}" in timezone "${timezone}": ${dt.invalidReason ?? 'unknown reason'}.`,
       date,
     );
   }
@@ -48,7 +48,7 @@ export function startOfDayUtcMs(date: DateOnly, timezone: string): number {
   const dt = DateTime.fromISO(date, { zone: timezone });
   if (!dt.isValid) {
     throw new InvalidDateError(
-      `Không đọc được ngày "${date}" ở múi giờ "${timezone}": ${dt.invalidReason ?? 'không rõ'}.`,
+      `Cannot parse the date "${date}" in timezone "${timezone}": ${dt.invalidReason ?? 'unknown reason'}.`,
       date,
     );
   }

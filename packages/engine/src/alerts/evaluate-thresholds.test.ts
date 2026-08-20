@@ -133,8 +133,8 @@ describe('nội dung cảnh báo', () => {
 
     for (const a of all) {
       expect(a.message.length, a.code).toBeGreaterThan(50);
-      // Câu nào cũng phải chứa một động từ hành động.
-      expect(/Xem|Kiểm tra|Mở|nhờ|bấm|theo dõi/i.test(a.message), `${a.code}: ${a.message}`).toBe(true);
+      // Câu nào cũng phải chứa một động từ hành động (message đã chuyển ngữ tiếng Anh).
+      expect(/check|open|see|ask|click|watch/i.test(a.message), `${a.code}: ${a.message}`).toBe(true);
     }
   });
 

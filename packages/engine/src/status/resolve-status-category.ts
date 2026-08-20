@@ -35,7 +35,7 @@ export function resolveStatusCategoryAt(
     if (next === undefined) {
       // Trạng thái vừa bị admin xoá khỏi Jira. Giữ nguyên trạng thái trước đó
       // và ghi cảnh báo — KHÔNG ném lỗi làm sập cả job (C-9).
-      onWarning?.('UNKNOWN_STATUS_ID', `Không tra được status ID "${ev.toValue}"`);
+      onWarning?.('UNKNOWN_STATUS_ID', `Cannot look up status ID "${ev.toValue}"`);
       continue;
     }
     current = next;

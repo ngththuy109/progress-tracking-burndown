@@ -129,7 +129,7 @@ export class GroupKeyResolver {
         default:
           // CUSTOM_FIELD để v2 (cần map field như wbs_*). Fail-fast — không đoán bừa.
           throw new Error(
-            `GroupKeyResolver: nguồn khoá "${t.sourceType}" (tầng ${t.code}) chưa hỗ trợ.`,
+            `GroupKeyResolver: key source "${t.sourceType}" (tier ${t.code}) is not supported yet.`,
           );
       }
     });
@@ -205,14 +205,14 @@ function resolveToken(
   input: ResolveGroupKeysInput,
 ): string {
   if (parser === null) {
-    throw new Error(`GroupKeyResolver: tầng ${tier.code} khai SUBTASK_TITLE_TOKEN nhưng thiếu parser.`);
+    throw new Error(`GroupKeyResolver: tier ${tier.code} declares SUBTASK_TITLE_TOKEN but has no parser.`);
   }
   const token = String(tier.sourceConfig?.['token'] ?? '').toLowerCase();
   const pick = TOKEN_FIELD[token];
   if (pick === undefined) {
     throw new Error(
-      `GroupKeyResolver: tầng ${tier.code} khai token "${token}" không hợp lệ ` +
-        `(chọn một trong: ${Object.keys(TOKEN_FIELD).join(', ')}).`,
+      `GroupKeyResolver: tier ${tier.code} declares an invalid token "${token}" ` +
+        `(pick one of: ${Object.keys(TOKEN_FIELD).join(', ')}).`,
     );
   }
   const raw = pick(parser.parse(input.leafTitle, input.parentPhase));

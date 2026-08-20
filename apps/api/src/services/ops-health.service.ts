@@ -72,11 +72,11 @@ function capMetric(args: {
 
 /** Năm số đo chất lượng dữ liệu, tính trên toàn bộ Sub-task đang hoạt động. */
 const DATA_METRICS: readonly { name: string; label: string; key: HealthMetricName }[] = [
-  { name: 'missingWbsDate', label: 'Sub-task thiếu ngày kế hoạch', key: 'missingWbsDateRatio' },
-  { name: 'missingEstimate', label: 'Sub-task thiếu ước lượng', key: 'missingEstimateRatio' },
-  { name: 'unclassifiedPhase', label: 'Task chưa phân loại', key: 'unclassifiedPhaseRatio' },
-  { name: 'unparsedSubtask', label: 'Sub-task sai định dạng', key: 'unparsedSubtaskRatio' },
-  { name: 'closedNoWorklog', label: 'Task đóng nhưng chưa log giờ', key: 'closedNoWorklogRatio' },
+  { name: 'missingWbsDate', label: 'Sub-tasks missing planned dates', key: 'missingWbsDateRatio' },
+  { name: 'missingEstimate', label: 'Sub-tasks missing estimates', key: 'missingEstimateRatio' },
+  { name: 'unclassifiedPhase', label: 'Unclassified Tasks', key: 'unclassifiedPhaseRatio' },
+  { name: 'unparsedSubtask', label: 'Malformed Sub-task titles', key: 'unparsedSubtaskRatio' },
+  { name: 'closedNoWorklog', label: 'Closed Tasks with no worklog', key: 'closedNoWorklogRatio' },
 ];
 
 export interface RawRun {
@@ -222,21 +222,21 @@ export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
       metrics: [
         capMetric({
           name: 'nightlyDuration',
-          label: 'Thời lượng job đêm gần nhất',
+          label: 'Latest nightly job duration',
           value: input.nightlyDurationMinutes,
           threshold: OPS_THRESHOLD.nightlyDurationMinutes,
-          unit: 'phút',
+          unit: 'min',
         }),
         capMetric({
           name: 'snapshotBehind',
-          label: 'Epic trễ snapshot',
+          label: 'Epics behind on snapshots',
           value: input.snapshotBehindCount,
           threshold: OPS_THRESHOLD.missingSnapshotDays,
           unit: 'Epic',
         }),
         capMetric({
           name: 'erroredEpics',
-          label: 'Epic đang lỗi',
+          label: 'Epics in error',
           value: input.erroredEpicCount,
           threshold: OPS_THRESHOLD.erroredEpics,
           unit: 'Epic',
@@ -249,10 +249,10 @@ export function buildOpsHealth(input: OpsHealthInput): OpsHealthResponse {
       metrics: [
         capMetric({
           name: 'rateLimitHits',
-          label: 'Lần bị Jira chặn (24h)',
+          label: 'Jira rate-limit hits (24h)',
           value: input.rateLimitHits24h,
           threshold: OPS_THRESHOLD.rateLimitHits24h,
-          unit: 'lần',
+          unit: 'hits',
         }),
       ],
     },

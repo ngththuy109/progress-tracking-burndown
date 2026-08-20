@@ -61,9 +61,9 @@ export async function resolveParticipantNames(
         {
           code: 'PARTICIPANT_NAMES_UNRESOLVED',
           message:
-            `Không tra được tên cho ${missing.size} accountId trong "Request participants" ` +
-            `(${err instanceof Error ? err.message : String(err)}). Cột PIC sẽ hiện accountId ` +
-            `thay vì tên. Kiểm tra tài khoản đồng bộ có quyền "Browse users and groups".`,
+            `Could not resolve names for ${missing.size} accountIds in "Request participants" ` +
+            `(${err instanceof Error ? err.message : String(err)}). The PIC column will show accountIds ` +
+            `instead of names. Check that the sync account has the "Browse users and groups" permission.`,
         },
       ],
     };

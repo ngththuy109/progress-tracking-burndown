@@ -160,7 +160,7 @@ export function authConfigFromEnv(env: NodeJS.ProcessEnv): AuthConfig {
   const rawRole = (env['AUTH_DEFAULT_ROLE']?.trim().toUpperCase() || 'VIEWER');
   if (!VALID_DEFAULT_ROLES.has(rawRole)) {
     throw new Error(
-      `AUTH_DEFAULT_ROLE="${rawRole}" không hợp lệ. Giá trị cho phép: ADMIN, PM, VIEWER, NONE.`,
+      `AUTH_DEFAULT_ROLE="${rawRole}" is not valid. Allowed values: ADMIN, PM, VIEWER, NONE.`,
     );
   }
   const defaultRole = rawRole === 'NONE' ? null : (rawRole as UserRole);

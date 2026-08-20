@@ -57,9 +57,9 @@ export function computeGroupRollups(args: ComputeGroupRollupArgs): GroupRollup[]
       statusIdMap,
       asOfMs,
       (planStart, planEnd) =>
-        `Nhóm ${label}: ngày bắt đầu kế hoạch (${planStart}) muộn hơn ngày kết thúc ` +
-        `(${planEnd}). Nhiều khả năng có lá điền nhầm wbs_*. ` +
-        `Tạm coi nhóm dài 1 ngày; hãy sửa trên Jira.`,
+        `Group ${label}: the planned start (${planStart}) is after the planned end ` +
+        `(${planEnd}). Most likely a leaf has wbs_* filled in wrong. ` +
+        `Treating the group as 1 day long for now; fix it in Jira.`,
     );
     out.push({ tierOrder: groupPath.length, groupPath, ...reduced });
   }

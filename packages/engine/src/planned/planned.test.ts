@@ -124,7 +124,7 @@ describe('thiếu dữ liệu kế hoạch', () => {
     const r = computePlannedRemaining(weekendOnly, TOTAL, '2026-03-20', cal());
     expect(r.seconds).toBe(TOTAL);
     expect(Number.isFinite(r.seconds)).toBe(true);
-    expect(r.skippedPhases[0]!.reason).toContain('rơi trọn vào ngày nghỉ');
+    expect(r.skippedPhases[0]!.reason).toContain('falls entirely on days off');
   });
 
   it('planWorkdays null cũng bị bỏ qua', () => {

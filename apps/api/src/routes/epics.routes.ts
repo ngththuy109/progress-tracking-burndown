@@ -39,7 +39,7 @@ export function registerEpicRoutes(app: FastifyInstance, deps: EpicRouteDeps): v
         });
         return;
       }
-      app.log.error({ err }, 'Lỗi ngoài dự kiến ở nhóm API sổ đăng ký Epic');
+      app.log.error({ err }, 'Unexpected error in the Epic registry API group');
       await reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Internal server error.' });
     }
   };

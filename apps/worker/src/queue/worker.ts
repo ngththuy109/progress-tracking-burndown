@@ -40,8 +40,8 @@ export type HandlerMap = Readonly<Record<string, JobHandler | undefined>>;
 export class UnknownJobError extends Error {
   constructor(readonly jobName: string) {
     super(
-      `Không có bộ xử lý nào cho job "${jobName}". Nhiều khả năng job cũ còn kẹt trong hàng đợi ` +
-        'sau khi đổi tên. Kiểm tra hàng đợi rồi xoá job đó, hoặc thêm bộ xử lý tương ứng.',
+      `No handler for job "${jobName}". Most likely an old job is still stuck in the queue ` +
+        'after a rename. Check the queue and delete that job, or add the matching handler.',
     );
     this.name = 'UnknownJobError';
   }

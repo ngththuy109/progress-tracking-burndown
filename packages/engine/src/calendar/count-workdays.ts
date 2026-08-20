@@ -17,7 +17,7 @@ function parse(date: DateOnly, timezone: string): DateTime {
   const dt = DateTime.fromISO(date, { zone: timezone });
   if (!dt.isValid) {
     throw new InvalidDateError(
-      `Không đọc được ngày "${date}" ở múi giờ "${timezone}": ${dt.invalidReason ?? 'không rõ'}.`,
+      `Cannot parse the date "${date}" in timezone "${timezone}": ${dt.invalidReason ?? 'unknown reason'}.`,
       date,
     );
   }
@@ -66,8 +66,8 @@ export function listWorkdays(
   while (cursor <= end) {
     if (guard++ > MAX_DAYS_IN_RANGE) {
       throw new InvalidDateError(
-        `Khoảng ${from} → ${to} dài quá ${MAX_DAYS_IN_RANGE} ngày. ` +
-          `Nhiều khả năng là lỗi dữ liệu chứ không phải khoảng thật.`,
+        `The range ${from} → ${to} is longer than ${MAX_DAYS_IN_RANGE} days. ` +
+          `Most likely a data error rather than a real range.`,
         `${from}..${to}`,
       );
     }
@@ -103,8 +103,8 @@ export function listCalendarDays(from: DateOnly, to: DateOnly, timezone: string)
   while (cursor <= end) {
     if (guard++ > MAX_DAYS_IN_RANGE) {
       throw new InvalidDateError(
-        `Khoảng ${from} → ${to} dài quá ${MAX_DAYS_IN_RANGE} ngày. ` +
-          `Nhiều khả năng là lỗi dữ liệu chứ không phải khoảng thật.`,
+        `The range ${from} → ${to} is longer than ${MAX_DAYS_IN_RANGE} days. ` +
+          `Most likely a data error rather than a real range.`,
         `${from}..${to}`,
       );
     }

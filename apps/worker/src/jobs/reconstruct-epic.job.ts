@@ -175,8 +175,8 @@ export async function reconstructEpic(
       if (skippedNullBoundary > 0) {
         deps.onWarning?.(
           'PLAN_SHIFT_NULL_BOUNDARY',
-          `${epicKey}: bỏ qua ${skippedNullBoundary} bản ghi dịch chuyển có mốc rỗng ` +
-            `(kế hoạch vừa xuất hiện, chưa phải dịch chuyển).`,
+          `${epicKey}: skipped ${skippedNullBoundary} shift records with an empty boundary ` +
+            `(the plan just appeared — that is not a shift).`,
         );
       }
     }
@@ -236,7 +236,7 @@ export async function reconstructEpic(
     if (lockLost) {
       deps.onWarning?.(
         'LOCK_LOST',
-        `${epicKey}: mất khoá giữa chừng, bỏ qua việc ghi và đánh dấu tính lại.`,
+        `${epicKey}: lost the lock mid-run; skipped the write and marked the Epic for recompute.`,
       );
       await deps.ports.markDirty(epicKey);
       return { status: 'SKIPPED_LOCKED', epicKey };
