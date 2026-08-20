@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Chọn kỳ: This week / Last week / Custom.
@@ -7,7 +7,19 @@ import { useState } from 'react';
  * phía trình duyệt rồi đẩy vào URL; máy chủ mới là nguồn chân lý cho việc gom
  * worklog theo múi giờ từng Epic, nên phần hiển thị khoảng lấy theo echo của máy
  * chủ (`rangeFrom`/`rangeTo`).
+ *
+ * "Custom" cho nhập KHOẢNG NGÀY TUỲ Ý: hai ô ngày chỉ sửa bản nháp tại chỗ, phải
+ * bấm "Search" (hoặc Enter) mới áp dụng. Trước đây mỗi lần chạm một ô là đổi URL
+ * ngay → đổi queryKey → cả màn hình chớp sang khung "đang tải" và bộ chọn biến
+ * mất giữa chừng, nên gần như không đặt nổi hai đầu của một khoảng. Tách "sửa" ra
+ * khỏi "tìm" chữa đúng chỗ đó; kiểm tra hợp lệ ngay tại trình duyệt để không bắn
+ * một request chắc chắn hỏng.
  */
+
+/** Chặn quét worklog cả năm do nhập khoảng vô lý — KHỚP `MAX_RANGE_DAYS` của API. */
+const MAX_RANGE_DAYS = 366;
+
+type Mode = 'this' | 'last' | 'custom';
 
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -25,6 +37,29 @@ export function weekOfLocal(d: Date): { from: string; to: string } {
   return { from: iso(monday), to: iso(sunday) };
 }
 
+/**
+ * Số ngày giữa hai chuỗi `YYYY-MM-DD` (bao gồm cả hai đầu ở tầng API, ở đây là
+ * hiệu thuần). Trả `null` khi một trong hai không đọc được thành ngày.
+ */
+function spanDays(from: string, to: string): number | null {
+  const a = Date.parse(from);
+  const b = Date.parse(to);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/** Câu báo lỗi cho một khoảng nháp, hoặc `null` khi hợp lệ để tìm. */
+export function customRangeError(from: string, to: string): string | null {
+  if (from === '' || to === '') return 'Pick both a start and an end date.';
+  // So chuỗi 'YYYY-MM-DD' là đúng cho thứ tự ngày.
+  if (to < from) return 'The end date must be on or after the start date.';
+  const span = spanDays(from, to);
+  if (span !== null && span > MAX_RANGE_DAYS) {
+    return `That range is longer than ${MAX_RANGE_DAYS} days — pick a shorter window.`;
+  }
+  return null;
+}
+
 export interface PeriodPickerProps {
   readonly from: string | null;
   readonly to: string | null;
@@ -40,21 +75,50 @@ export function PeriodPicker({ from, to, rangeFrom, rangeTo, partialPeriod, onCh
   const thisWeek = weekOfLocal(now);
   const lastWeek = weekOfLocal(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
 
-  const active: 'this' | 'last' | 'custom' =
-    (from === null && to === null) || (from === thisWeek.from && to === thisWeek.to)
+  // Kỳ ĐANG áp dụng: từ URL nếu có, không thì lấy echo của máy chủ.
+  const appliedFrom = from ?? rangeFrom;
+  const appliedTo = to ?? rangeTo;
+  const appliedMode: Mode =
+    (from === null && to === null) || (appliedFrom === thisWeek.from && appliedTo === thisWeek.to)
       ? 'this'
-      : from === lastWeek.from && to === lastWeek.to
+      : appliedFrom === lastWeek.from && appliedTo === lastWeek.to
         ? 'last'
         : 'custom';
 
-  const [customFrom, setCustomFrom] = useState(from ?? rangeFrom);
-  const [customTo, setCustomTo] = useState(to ?? rangeTo);
+  // Tab đang chọn + bản nháp của khoảng Custom. Là trạng thái GIAO DIỆN: bấm
+  // "Custom" mở panel mà chưa tìm; gõ ngày chỉ đổi nháp, chưa đổi URL.
+  const [mode, setMode] = useState<Mode>(appliedMode);
+  const [draftFrom, setDraftFrom] = useState(appliedFrom);
+  const [draftTo, setDraftTo] = useState(appliedTo);
+  const [error, setError] = useState<string | null>(null);
 
-  const tab = (key: 'this' | 'last' | 'custom', label: string, onClick: () => void) => (
+  // Khi kỳ ĐÃ ÁP DỤNG đổi (bấm preset, Search, hay back/forward trình duyệt), đồng
+  // bộ tab + nháp theo nó. Chỉ phụ thuộc khoảng đã áp dụng — KHÔNG phụ thuộc
+  // `mode` — nên bấm "Custom" (không đổi URL) không bị hiệu ứng này đóng lại.
+  useEffect(() => {
+    setMode(appliedMode);
+    setDraftFrom(appliedFrom);
+    setDraftTo(appliedTo);
+    setError(null);
+    // Chỉ chạy lại khi khoảng ĐÃ ÁP DỤNG đổi; `appliedMode` được suy ra từ chính
+    // hai giá trị này nên đọc từ closure là đủ và đúng.
+  }, [appliedFrom, appliedTo]);
+
+  const search = (): void => {
+    const message = customRangeError(draftFrom, draftTo);
+    if (message !== null) {
+      setError(message);
+      return;
+    }
+    setError(null);
+    onChange(draftFrom, draftTo);
+  };
+
+  const tab = (key: Mode, label: string, onClick: () => void) => (
     <button
       type="button"
-      className={`tab${active === key ? ' tab--active' : ''}`}
-      aria-pressed={active === key}
+      className={`tab${mode === key ? ' tab--active' : ''}`}
+      aria-pressed={mode === key}
       onClick={onClick}
     >
       {label}
@@ -65,37 +129,59 @@ export function PeriodPicker({ from, to, rangeFrom, rangeTo, partialPeriod, onCh
     <div className="scope" role="group" aria-label="Period">
       <span className="scope__label">Period:</span>
       <div className="tabs">
-        {tab('this', 'This week', () => onChange(thisWeek.from, thisWeek.to))}
-        {tab('last', 'Last week', () => onChange(lastWeek.from, lastWeek.to))}
-        {tab('custom', 'Custom', () => onChange(customFrom, customTo))}
+        {tab('this', 'This week', () => {
+          setMode('this');
+          onChange(thisWeek.from, thisWeek.to);
+        })}
+        {tab('last', 'Last week', () => {
+          setMode('last');
+          onChange(lastWeek.from, lastWeek.to);
+        })}
+        {tab('custom', 'Custom', () => {
+          setError(null);
+          setMode('custom');
+        })}
       </div>
 
-      {active === 'custom' && (
-        <span className="field" style={{ marginTop: 0, gap: 6 }}>
+      {mode === 'custom' && (
+        <form
+          className="field"
+          style={{ marginTop: 0, gap: 6 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            search();
+          }}
+        >
           <input
             className="input"
             type="date"
-            value={customFrom}
-            max={customTo}
+            value={draftFrom}
             aria-label="From date"
             onChange={(e) => {
-              setCustomFrom(e.target.value);
-              if (e.target.value !== '' && customTo !== '') onChange(e.target.value, customTo);
+              setDraftFrom(e.target.value);
+              setError(null);
             }}
           />
           <span aria-hidden="true">→</span>
           <input
             className="input"
             type="date"
-            value={customTo}
-            min={customFrom}
+            value={draftTo}
             aria-label="To date"
             onChange={(e) => {
-              setCustomTo(e.target.value);
-              if (customFrom !== '' && e.target.value !== '') onChange(customFrom, e.target.value);
+              setDraftTo(e.target.value);
+              setError(null);
             }}
           />
-        </span>
+          <button type="submit" className="button button--primary">
+            Search
+          </button>
+          {error !== null && (
+            <span className="notice notice--warning" role="alert">
+              {error}
+            </span>
+          )}
+        </form>
       )}
 
       <span className="muted">
