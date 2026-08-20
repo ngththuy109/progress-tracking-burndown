@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@app/db';
 import {
   deleteExemption,
+  listAllEpicCalendars,
   listExemptionsForEpics,
   listVisibleActiveEpics,
   upsertExemption,
@@ -17,6 +18,7 @@ import type { LogworkReadPort, LogworkWritePort, VisibleEpic } from '../routes/l
 import type {
   LoadedLogworkSubtask,
   LogworkParticipant,
+  WorklogDailyRow,
   WorklogSumRow,
 } from '../services/logwork.service.js';
 
@@ -84,6 +86,18 @@ export function createLogworkReadPort(prisma: PrismaClient): LogworkReadPort {
         projectKey: e.projectKey,
         calendarId: e.calendarId,
         expectedHoursPerDay: hoursByProject.get(e.projectKey) ?? null,
+      }));
+    },
+
+    async allTrackedEpics(): Promise<readonly VisibleEpic[]> {
+      // Mọi Epic đang theo dõi, mọi trạng thái, không lọc quyền. `expectedHoursPerDay`
+      // không dùng ở báo cáo lưới nên để `null` (khỏi truy vấn bảng project).
+      const epics = await listAllEpicCalendars(prisma);
+      return epics.map((e) => ({
+        epicKey: e.epicKey,
+        projectKey: e.projectKey,
+        calendarId: e.calendarId,
+        expectedHoursPerDay: null,
       }));
     },
 
@@ -214,6 +228,37 @@ export function createLogworkReadPort(prisma: PrismaClient): LogworkReadPort {
         issueKey: g.issueKey,
         authorId: g.authorId,
         seconds: n(g._sum.timeSpentS),
+      }));
+    },
+
+    async worklogDailyByAuthor(startMs, endMs, timezone): Promise<readonly WorklogDailyRow[]> {
+      // Gộp theo (tác giả, NGÀY ĐỊA PHƯƠNG) trên TOÀN bảng worklog — KHÔNG lọc
+      // epic_key (bắt cả Epic PAUSED/ERROR và worklog mồ côi). Prisma groupBy
+      // không truncate được timestamp về ngày ở một múi giờ, nên dùng SQL thô:
+      // `AT TIME ZONE` đổi timestamptz sang giờ địa phương rồi ::date; `to_char`
+      // trả thẳng chuỗi 'YYYY-MM-DD' để khỏi phụ thuộc cách driver parse kiểu
+      // `date`. Ngày này khớp cột do engine `listCalendarDays` sinh (cùng chuỗi
+      // IANA `timezone`). Lọc cửa sổ theo started_at dùng index `idx_worklog_started`.
+      const rows = await prisma.$queryRawUnsafe<
+        { author_id: string | null; local_date: string; seconds: bigint | number | null }[]
+      >(
+        `SELECT author_id,
+                to_char((started_at AT TIME ZONE $1)::date, 'YYYY-MM-DD') AS local_date,
+                SUM(time_spent_s)::bigint AS seconds
+           FROM worklog_entry
+          WHERE is_deleted = FALSE
+            AND author_id IS NOT NULL
+            AND started_at >= $2
+            AND started_at <= $3
+          GROUP BY author_id, local_date`,
+        timezone,
+        new Date(startMs),
+        new Date(endMs),
+      );
+      return rows.map((r) => ({
+        authorId: r.author_id,
+        localDate: r.local_date,
+        seconds: n(r.seconds),
       }));
     },
 

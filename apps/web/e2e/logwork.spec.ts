@@ -62,6 +62,24 @@ function report(opts: Opts, verified: boolean) {
   };
 }
 
+/** Lưới PIC × ngày: hai ngày, hai PIC — có ô thiếu (3h) và ô quá (9h) để kiểm tô màu. */
+function byPicReport() {
+  return {
+    from: '2026-08-10',
+    to: '2026-08-11',
+    dates: ['2026-08-10', '2026-08-11'],
+    rows: [
+      { accountId: 'u1', displayName: 'Nguyễn An', hoursByDate: [3, 9], totalHours: 12, warnCount: 2 },
+      { accountId: 'u2', displayName: 'Trần Bình', hoursByDate: [6, 0], totalHours: 6, warnCount: 0 },
+    ],
+    dailyTotals: [9, 9],
+    grandTotal: 18,
+    underLimitHours: 4,
+    overLimitHours: 8,
+    warnings: [],
+  };
+}
+
 async function installApi(page: Page, opts: Opts): Promise<void> {
   const state = { verified: opts.verified ?? false };
   await page.route(
@@ -72,6 +90,10 @@ async function installApi(page: Page, opts: Opts): Promise<void> {
       const json = (body: unknown) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
+      if (path === '/api/logwork/by-pic') {
+        await json(byPicReport());
+        return;
+      }
       if (path === '/api/logwork/exemptions') {
         state.verified = req.method() === 'POST';
         await json({ ok: true });
@@ -191,4 +213,38 @@ test('không có participant thì nêu rõ hai khả năng trong empty-state', a
 
   await expect(page.getByText('Request participants')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'No members in view' })).toBeVisible();
+});
+
+test('tab "By PIC / day" hiện lưới giờ theo ngày, tô ô thiếu (<=4h) và quá (>8h)', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('button', { name: 'By PIC / day' }).click();
+  await expect(page).toHaveURL(/view=grid/);
+
+  await expect(page.getByText('Hours logged per PIC per day')).toBeVisible();
+  await expect(page.getByText('Nguyễn An')).toBeVisible();
+  await expect(page.getByText('Trần Bình')).toBeVisible();
+
+  // Đúng một ô "thiếu" (3h) và một ô "quá" (9h) được tô.
+  await expect(page.locator('td.logwork-grid__cell--under')).toHaveText('3');
+  await expect(page.locator('td.logwork-grid__cell--over')).toHaveText('9');
+});
+
+test('đổi qua lại hai tab giữ nguyên kỳ; By member vẫn hoạt động', async ({ page }) => {
+  await installApi(page, { role: 'PM', hasParticipantData: true });
+  await page.goto('/logwork');
+
+  await page.getByRole('button', { name: 'Last week' }).click();
+  await expect(page).toHaveURL(/from=\d{4}-\d{2}-\d{2}/);
+
+  // Sang lưới: giữ from/to, thêm view=grid.
+  await page.getByRole('button', { name: 'By PIC / day' }).click();
+  await expect(page).toHaveURL(/from=\d{4}-\d{2}-\d{2}/);
+  await expect(page).toHaveURL(/view=grid/);
+
+  // Quay lại By member: bỏ view=grid, vẫn thấy card member.
+  await page.getByRole('button', { name: 'By member' }).click();
+  await expect(page).not.toHaveURL(/view=grid/);
+  await expect(page.getByText('Nguyễn An').first()).toBeVisible();
 });

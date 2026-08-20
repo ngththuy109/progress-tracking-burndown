@@ -11,6 +11,7 @@ import {
 import type {
   LoadedLogworkSubtask,
   LogworkExemptionRow,
+  WorklogDailyRow,
   WorklogSumRow,
 } from '../services/logwork.service.js';
 
@@ -31,17 +32,24 @@ const vnCalendar: WorkCalendar = {
 
 class FakeReads implements LogworkReadPort {
   epics: VisibleEpic[] = [{ epicKey: 'PAY-1', projectKey: 'PAY', calendarId: 'VN', expectedHoursPerDay: null }];
+  /** Mọi Epic đang theo dõi (by-pic dùng cái này, không lọc quyền). Mặc định = epics. */
+  allEpics: VisibleEpic[] = [{ epicKey: 'PAY-1', projectKey: 'PAY', calendarId: 'VN', expectedHoursPerDay: null }];
   cal: WorkCalendar = vnCalendar;
   subs: LoadedLogworkSubtask[] = [];
   sums: WorklogSumRow[] = [];
+  daily: WorklogDailyRow[] = [];
   exempt: LogworkExemptionRow[] = [];
   projectHoursMap = new Map<string, number | null>();
   visibleArg: readonly string[] | null | undefined = undefined;
   worklogCalls: { keys: readonly string[]; startMs: number; endMs: number }[] = [];
+  dailyCalls: { startMs: number; endMs: number; tz: string }[] = [];
 
   async visibleEpics(projectKeys: readonly string[] | null) {
     this.visibleArg = projectKeys;
     return this.epics;
+  }
+  async allTrackedEpics() {
+    return this.allEpics;
   }
   async calendars(ids: readonly string[]) {
     const m = new Map<string, WorkCalendar>();
@@ -54,6 +62,10 @@ class FakeReads implements LogworkReadPort {
   async worklogSums(keys: readonly string[], startMs: number, endMs: number) {
     this.worklogCalls.push({ keys, startMs, endMs });
     return this.sums;
+  }
+  async worklogDailyByAuthor(startMs: number, endMs: number, tz: string) {
+    this.dailyCalls.push({ startMs, endMs, tz });
+    return this.daily;
   }
   async exemptionsForEpics() {
     return this.exempt;
@@ -207,6 +219,132 @@ describe('GET /api/logwork', () => {
     expect(body.members).toEqual([]);
     expect(body.from).toBe('2026-08-17');
     expect(body.to).toBe('2026-08-23');
+  });
+});
+
+interface ByPicBody {
+  from: string;
+  to: string;
+  dates: string[];
+  rows: { accountId: string; displayName: string | null; hoursByDate: number[]; totalHours: number; warnCount: number }[];
+  dailyTotals: number[];
+  grandTotal: number;
+  underLimitHours: number;
+  overLimitHours: number;
+  warnings: string[];
+  error?: string;
+}
+
+async function getByPic(url: string): Promise<{ status: number; body: ByPicBody }> {
+  const res = await app.inject({ method: 'GET', url });
+  return { status: res.statusCode, body: res.json() as ByPicBody };
+}
+
+describe('GET /api/logwork/by-pic', () => {
+  it('không tham số → mặc định tuần chứa hôm nay, cột là từng ngày lịch', async () => {
+    const { status, body } = await getByPic('/api/logwork/by-pic');
+    expect(status).toBe(200);
+    expect(body.from).toBe('2026-08-17');
+    expect(body.to).toBe('2026-08-23');
+    // 7 ngày lịch (kể cả cuối tuần).
+    expect(body.dates).toEqual([
+      '2026-08-17',
+      '2026-08-18',
+      '2026-08-19',
+      '2026-08-20',
+      '2026-08-21',
+      '2026-08-22',
+      '2026-08-23',
+    ]);
+    expect(body.underLimitHours).toBe(4);
+    expect(body.overLimitHours).toBe(8);
+  });
+
+  it('cửa sổ worklog theo NGÀY tính đúng múi giờ Epic', async () => {
+    await getByPic('/api/logwork/by-pic');
+    expect(reads.dailyCalls).toHaveLength(1);
+    expect(reads.dailyCalls[0]?.tz).toBe(TZ);
+    expect(reads.dailyCalls[0]?.startMs).toBe(startOfDayUtcMs('2026-08-17', TZ));
+    expect(reads.dailyCalls[0]?.endMs).toBe(endOfDayUtcMs('2026-08-23', TZ));
+  });
+
+  it('bày giờ vào đúng cột ngày; tô cảnh báo <=4h / >8h; tổng hàng + cột', async () => {
+    reads.subs = [
+      {
+        issueKey: 'PAY-11',
+        epicKey: 'PAY-1',
+        summary: 'x',
+        parentKey: null,
+        phaseCode: 'DEV',
+        statusCategory: 'indeterminate',
+        originalEstimateSeconds: 3600,
+        participants: [
+          { accountId: 'a', displayName: 'Alice' },
+          { accountId: 'b', displayName: 'Bob' },
+        ],
+      },
+    ];
+    reads.daily = [
+      { authorId: 'a', localDate: '2026-08-17', seconds: 3 * 3600 }, // thiếu (<=4)
+      { authorId: 'a', localDate: '2026-08-18', seconds: 6 * 3600 }, // ổn
+      { authorId: 'a', localDate: '2026-08-19', seconds: 9 * 3600 }, // quá (>8)
+      { authorId: 'b', localDate: '2026-08-17', seconds: 8 * 3600 }, // 8 chẵn = ổn
+    ];
+
+    const { body } = await getByPic('/api/logwork/by-pic');
+    // Xếp theo tên: Alice rồi Bob.
+    expect(body.rows.map((r) => r.accountId)).toEqual(['a', 'b']);
+
+    const alice = body.rows[0]!;
+    expect(alice.displayName).toBe('Alice');
+    expect(alice.hoursByDate).toEqual([3, 6, 9, 0, 0, 0, 0]);
+    expect(alice.totalHours).toBe(18);
+    expect(alice.warnCount).toBe(2); // 17 (thiếu) + 19 (quá)
+
+    const bob = body.rows[1]!;
+    expect(bob.hoursByDate).toEqual([8, 0, 0, 0, 0, 0, 0]);
+    expect(bob.warnCount).toBe(0);
+
+    expect(body.dailyTotals).toEqual([11, 6, 9, 0, 0, 0, 0]);
+    expect(body.grandTotal).toBe(26);
+  });
+
+  it('worklog không rõ tác giả (authorId=null) không tạo hàng', async () => {
+    reads.daily = [{ authorId: null, localDate: '2026-08-17', seconds: 5 * 3600 }];
+    const { body } = await getByPic('/api/logwork/by-pic');
+    expect(body.rows).toEqual([]);
+    expect(body.grandTotal).toBe(0);
+  });
+
+  it('KHÔNG lọc quyền: PM project khác vẫn thấy toàn bộ (không gọi visibleEpics)', async () => {
+    principal = { userId: 'pm', role: 'PM', projects: ['OTHER'] };
+    reads.daily = [{ authorId: 'a', localDate: '2026-08-19', seconds: 6 * 3600 }];
+    const { status, body } = await getByPic('/api/logwork/by-pic');
+    expect(status).toBe(200);
+    expect(body.rows.map((r) => r.accountId)).toEqual(['a']);
+    // by-pic KHÔNG đi qua cổng lọc theo project.
+    expect(reads.visibleArg).toBeUndefined();
+  });
+
+  it('không Epic đang theo dõi nhưng còn worklog mồ côi → vẫn hiện', async () => {
+    reads.allEpics = [];
+    reads.daily = [{ authorId: 'a', localDate: '2026-08-19', seconds: 5 * 3600 }];
+    const { status, body } = await getByPic('/api/logwork/by-pic');
+    expect(status).toBe(200);
+    // Không Epic → múi giờ mặc định (Asia/Ho_Chi_Minh), tuần chứa hôm nay.
+    expect(body.from).toBe('2026-08-17');
+    expect(body.dates).toHaveLength(7);
+    expect(body.rows.map((r) => r.accountId)).toEqual(['a']);
+    expect(reads.dailyCalls).toHaveLength(1); // vẫn quét worklog dù không có Epic
+  });
+
+  it('thiếu người dùng → 401', async () => {
+    principal = null;
+    expect((await getByPic('/api/logwork/by-pic')).status).toBe(401);
+  });
+
+  it('to < from → 400', async () => {
+    expect((await getByPic('/api/logwork/by-pic?from=2026-08-16&to=2026-08-10')).status).toBe(400);
   });
 });
 

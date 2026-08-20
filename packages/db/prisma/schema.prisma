@@ -169,6 +169,9 @@ model WorklogEntry {
 
   @@index([issueKey, startedAt], map: "idx_worklog_issue_started")
   @@index([epicKey, startedAt], map: "idx_worklog_epic_started")
+  // Báo cáo lưới PIC × ngày quét worklog theo CỬA SỔ THỜI GIAN trên TOÀN bảng
+  // (không lọc epic_key), nên cần index dẫn đầu bằng started_at.
+  @@index([startedAt], map: "idx_worklog_started")
   @@map("worklog_entry")
 }
 

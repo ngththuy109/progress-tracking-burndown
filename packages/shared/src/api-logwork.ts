@@ -137,6 +137,96 @@ export interface LogworkResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Báo cáo LƯỚI: PIC × NGÀY — số giờ mỗi người log MỖI NGÀY trong kỳ đã chọn.
+//
+// Khác báo cáo theo member ở trên (gộp cả kỳ, kèm ticket + capacity): đây là bảng
+// pivot để nhìn PHÂN BỐ giờ theo ngày. Hàng là PIC (người CÓ log giờ trong kỳ —
+// đúng như màn member cũng gộp cả tác giả không in-charge), cột là từng ngày lịch
+// trong khoảng, ô là tổng giờ người đó log ngày đó.
+//
+// PHẠM VI khác hẳn màn member: gộp worklog của TOÀN BỘ Epic đã sync (mọi trạng
+// thái, kể cả worklog mồ côi) và KHÔNG lọc theo quyền người xem — mọi người dùng
+// đăng nhập đều thấy cùng một bức tranh toàn đội, mọi project.
+//
+// "Cảnh báo" một ô: log <= 4h (thiếu) hoặc > 8h (quá). Ngày KHÔNG log (0h) để
+// TRỐNG — không phải cảnh báo (không có "một lần log 0 giờ"; ai chưa log gì thì
+// màn theo-member đã lo). Xem `logworkDayWarning` — NGUỒN CHÂN LÝ DUY NHẤT cho cả
+// tô màu ô ở web lẫn đếm `warnCount` ở API, để hai bên không lệch ngưỡng.
+// ---------------------------------------------------------------------------
+
+/** Log <= ngần này giờ trong một ngày → cảnh báo "thiếu". */
+export const LOGWORK_UNDER_LIMIT_HOURS = 4;
+/** Log > ngần này giờ trong một ngày → cảnh báo "quá". */
+export const LOGWORK_OVER_LIMIT_HOURS = 8;
+
+export type LogworkDayWarning = 'under' | 'over' | null;
+
+/**
+ * Một ô (PIC, ngày) có đáng cảnh báo không, và thuộc loại nào.
+ *
+ * Ngưỡng theo yêu cầu PM: `<= 4h` là "thiếu", `> 8h` là "quá". `4h` chẵn tính là
+ * thiếu (`<=`), `8h` chẵn là BÌNH THƯỜNG (chỉ `>` mới quá). `0h` (chưa log) trả
+ * `null`: ngày trống không phải một lần log nên không tô — nếu không, mọi cuối
+ * tuần/ngày nghỉ sẽ đỏ rực dù không ai đi làm.
+ */
+export function logworkDayWarning(hours: number): LogworkDayWarning {
+  if (hours <= 0) return null;
+  if (hours <= LOGWORK_UNDER_LIMIT_HOURS) return 'under';
+  if (hours > LOGWORK_OVER_LIMIT_HOURS) return 'over';
+  return null;
+}
+
+export const logworkByPicRowSchema = z.object({
+  accountId: z.string(),
+  /** Tên hiển thị lấy từ participant JSON; `null` → web hiện accountId thay thế. */
+  displayName: z.string().nullable(),
+  /** Giờ log MỖI NGÀY, song song với `dates`; `0` = ngày đó không log. */
+  hoursByDate: z.array(z.number()),
+  /** Tổng giờ người này log trong cả kỳ (tổng của `hoursByDate`). */
+  totalHours: z.number(),
+  /** Số ngày bị cảnh báo (`logworkDayWarning` khác `null`) — để xếp hàng + tóm tắt. */
+  warnCount: z.number().int(),
+});
+
+export const logworkByPicResponseSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  /** Mọi ngày lịch trong `[from, to]` (theo múi giờ tham chiếu), tăng dần — là các CỘT. */
+  dates: z.array(z.string()),
+  rows: z.array(logworkByPicRowSchema),
+  /** Tổng giờ MỌI PIC theo từng ngày, song song với `dates` (hàng chân bảng). */
+  dailyTotals: z.array(z.number()),
+  /** Tổng giờ toàn kỳ, mọi PIC. */
+  grandTotal: z.number(),
+  /** `<= ` ngưỡng này giờ/ngày → cảnh báo thiếu (web đọc để tô + chú thích). */
+  underLimitHours: z.number(),
+  /** `> ` ngưỡng này giờ/ngày → cảnh báo quá. */
+  overLimitHours: z.number(),
+  /** Cảnh báo lịch (thiếu lịch/ngày lễ…) của lịch tham chiếu — gộp trùng. */
+  warnings: z.array(z.string()),
+});
+
+export interface LogworkByPicRow {
+  readonly accountId: string;
+  readonly displayName: string | null;
+  readonly hoursByDate: readonly number[];
+  readonly totalHours: number;
+  readonly warnCount: number;
+}
+
+export interface LogworkByPicResponse {
+  readonly from: string;
+  readonly to: string;
+  readonly dates: readonly string[];
+  readonly rows: readonly LogworkByPicRow[];
+  readonly dailyTotals: readonly number[];
+  readonly grandTotal: number;
+  readonly underLimitHours: number;
+  readonly overLimitHours: number;
+  readonly warnings: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
 // Cấu hình giờ/ngày kỳ vọng theo project (quyết định "behind") — GET/PUT settings.
 // ---------------------------------------------------------------------------
 

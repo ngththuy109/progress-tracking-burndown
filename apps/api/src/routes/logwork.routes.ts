@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type {
   DateOnly,
+  LogworkByPicResponse,
   LogworkResponse,
   LogworkSettingsResponse,
   Principal,
@@ -14,16 +15,19 @@ import {
 import {
   countWorkdays,
   endOfDayUtcMs,
+  listCalendarDays,
   localDateOf,
   startOfDayUtcMs,
   weekOf,
 } from '@app/engine';
 import { ApiError } from '../services/phase-config.service.js';
 import {
+  buildLogworkByPicReport,
   buildLogworkReport,
   type EpicCapacity,
   type LoadedLogworkSubtask,
   type LogworkExemptionRow,
+  type WorklogDailyRow,
   type WorklogSumRow,
 } from '../services/logwork.service.js';
 
@@ -54,6 +58,12 @@ export interface VisibleEpic {
 export interface LogworkReadPort {
   /** Epic ACTIVE người xem được phép thấy. `projectKeys=null` (ADMIN/VIEWER) = tất cả. */
   visibleEpics(projectKeys: readonly string[] | null): Promise<readonly VisibleEpic[]>;
+  /**
+   * MỌI Epic đang theo dõi — KHÔNG lọc trạng thái, KHÔNG lọc quyền. Cho báo cáo
+   * lưới PIC × ngày (chọn múi giờ tham chiếu + tra tên). `expectedHoursPerDay`
+   * không dùng ở đây nên luôn `null`.
+   */
+  allTrackedEpics(): Promise<readonly VisibleEpic[]>;
   /** Dựng `WorkCalendar` cho từng `calendarId` — LUÔN trả đủ (thiếu lịch → mặc định + cảnh báo). */
   calendars(calendarIds: readonly string[]): Promise<ReadonlyMap<string, WorkCalendar>>;
   /** MỘT truy vấn: mọi Sub-task đang mở của các Epic, kèm participant. */
@@ -64,6 +74,16 @@ export interface LogworkReadPort {
     startMs: number,
     endMs: number,
   ): Promise<readonly WorklogSumRow[]>;
+  /**
+   * Tổng giây log gộp theo (tác giả, NGÀY ĐỊA PHƯƠNG theo `timezone`) trong cửa
+   * sổ `[startMs, endMs]`, trên TOÀN BỘ worklog trong DB — KHÔNG lọc theo Epic
+   * (bắt cả Epic PAUSED/ERROR và worklog mồ côi). Nguồn cho báo cáo lưới.
+   */
+  worklogDailyByAuthor(
+    startMs: number,
+    endMs: number,
+    timezone: string,
+  ): Promise<readonly WorklogDailyRow[]>;
   /** Các bản "PM đã verify — thôi theo dõi" của những Epic đã cho. */
   exemptionsForEpics(epicKeys: readonly string[]): Promise<readonly LogworkExemptionRow[]>;
   /** Giờ/ngày cấu hình RIÊNG của từng project (`null` = chưa cấu hình). */
@@ -195,6 +215,54 @@ export function registerLogworkRoutes(app: FastifyInstance, deps: LogworkRouteDe
         subtasks,
         worklogSums,
         exemptions,
+      });
+    }),
+  );
+
+  // ---- Báo cáo LƯỚI: PIC × ngày (số giờ log mỗi người mỗi ngày) ----
+  //
+  // Cùng bộ chọn kỳ với `/api/logwork` nhưng chẻ worklog theo NGÀY. Hai điểm KHÁC
+  // màn member (theo yêu cầu):
+  //   - Gộp TOÀN BỘ worklog trong DB (mọi Epic đã sync, mọi trạng thái, cả
+  //     worklog mồ côi) — `worklogDailyByAuthor` KHÔNG lọc theo Epic.
+  //   - KHÔNG lọc theo quyền: chỉ cần đăng nhập; mọi vai trò thấy cùng bức tranh.
+  //
+  // Cột ngày + việc gom worklog vào ngày đều theo MỘT múi giờ tham chiếu (của
+  // Epic có múi giờ phổ biến nhất, mọi trạng thái) — bảng chỉ có một bộ cột nên
+  // phải có một mốc ngày nhất quán; worklog sát nửa đêm của Epic khác múi có thể
+  // lệch một ngày, đánh đổi chấp nhận được. Danh sách Epic chỉ để chọn múi giờ +
+  // tra tên, KHÔNG dùng để lọc worklog.
+  app.get('/api/logwork/by-pic', async (req, reply) =>
+    handle(reply, async (): Promise<LogworkByPicResponse> => {
+      requirePrincipal(req);
+
+      const epics = await deps.reads.allTrackedEpics();
+      const calendarIds = [...new Set(epics.map((e) => e.calendarId))];
+      const calendars = await deps.reads.calendars(calendarIds);
+      const calOf = (e: VisibleEpic): WorkCalendar =>
+        calendars.get(e.calendarId) ?? fallbackCalendar(e.calendarId);
+
+      // Không Epic nào → `mostCommonTimezone` trả mặc định; VẪN quét worklog vì có
+      // thể còn worklog mồ côi.
+      const refTz = mostCommonTimezone(epics, calOf);
+      const { from, to } = resolvePeriod(req, refTz, deps.now());
+
+      const warnings = new Set<string>();
+      for (const e of epics) for (const w of calOf(e).warnings) warnings.add(w);
+
+      const [dailyRows, subtasks] = await Promise.all([
+        deps.reads.worklogDailyByAuthor(startOfDayUtcMs(from, refTz), endOfDayUtcMs(to, refTz), refTz),
+        // Chỉ cần participant để tra TÊN cho accountId (dùng lại cổng sẵn có).
+        deps.reads.openSubtasks(epics.map((e) => e.epicKey)),
+      ]);
+
+      return buildLogworkByPicReport({
+        from,
+        to,
+        dates: listCalendarDays(from, to, refTz),
+        dailyRows,
+        names: resolveParticipantNames(subtasks),
+        warnings: [...warnings],
       });
     }),
   );
@@ -401,3 +469,19 @@ function emptyReport(from: DateOnly, to: DateOnly, partialPeriod: boolean): Logw
     warnings: [],
   };
 }
+
+/**
+ * accountId → tên hiển thị, gom từ participant của Sub-task mở. Bản KHÔNG rỗng
+ * ĐẦU TIÊN thắng (một người có thể xuất hiện nhiều nơi, chỗ có tên chỗ chỉ có
+ * id) — cùng quy ước với `buildLogworkReport`.
+ */
+function resolveParticipantNames(subtasks: readonly LoadedLogworkSubtask[]): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const s of subtasks) {
+    for (const p of s.participants) {
+      if (p.displayName !== null && !names.has(p.accountId)) names.set(p.accountId, p.displayName);
+    }
+  }
+  return names;
+}
+

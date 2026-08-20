@@ -1126,3 +1126,114 @@ a.cell-card__key:hover {
   flex-direction: column;
   gap: 4px;
 }
+
+/* --- Lưới Log work: PIC × ngày ------------------------------------------- */
+
+/* Bảng co theo NỘI DUNG (không ép 100% như `.table`) để nhiều cột ngày thì
+   `.table-wrap` cuộn ngang, ít cột thì gọn về trái. */
+.logwork-grid {
+  width: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cột PIC ghim trái — nền đục để phủ nội dung khi cuộn ngang; vạch phải tách
+   khỏi vùng số. */
+.logwork-grid__sticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-right: 2px solid var(--border);
+  text-align: left;
+}
+.logwork-grid__corner {
+  vertical-align: bottom;
+}
+.logwork-grid__pic {
+  min-width: 9rem;
+  max-width: 16rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Đầu cột ngày — hai dòng (thứ + ngày), không xuống dòng, căn giữa. */
+.logwork-grid__day {
+  text-align: center;
+  white-space: nowrap;
+  min-width: 3.25rem;
+}
+.logwork-grid__weekday {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+.logwork-grid__date {
+  display: block;
+}
+
+/* Cuối tuần: nền mờ để mắt tách được nhịp tuần (chỉ trang trí — không ảnh hưởng
+   việc tô cảnh báo, vốn chỉ theo số giờ). */
+.logwork-grid__day--weekend {
+  background: var(--tone-neutral-bg);
+}
+
+/* Ô số giờ — căn giữa; ô trống lùi ra sau. */
+.logwork-grid__cell {
+  text-align: center;
+  white-space: nowrap;
+}
+.logwork-grid__cell--empty {
+  color: var(--border);
+}
+/* Cảnh báo THIẾU (`<= 4h`) và QUÁ (`> 8h`) — cùng bộ màu với Badge/notice. */
+.logwork-grid__cell--under {
+  background: var(--tone-warning-bg);
+  color: var(--tone-warning);
+  font-weight: 600;
+}
+.logwork-grid__cell--over {
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger);
+  font-weight: 600;
+}
+
+/* Cột Total (phải) + hàng Total (chân) — đóng khung bằng vạch, chữ đậm. */
+.logwork-grid__total-head,
+.logwork-grid__row-total {
+  text-align: right;
+  border-left: 2px solid var(--border);
+  font-weight: 600;
+}
+.logwork-grid__foot,
+.logwork-grid__foot-label {
+  border-top: 2px solid var(--border);
+  font-weight: 600;
+}
+.logwork-grid__foot {
+  text-align: center;
+}
+.logwork-grid__foot--grand {
+  text-align: right;
+  border-left: 2px solid var(--border);
+}
+
+/* Ô màu nhỏ trong chú thích. */
+.logwork-grid__swatch {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 3px;
+  vertical-align: -1px;
+  margin: 0 2px;
+}
+.logwork-grid__swatch--under {
+  background: var(--tone-warning-bg);
+  border: 1px solid var(--tone-warning);
+}
+.logwork-grid__swatch--over {
+  background: var(--tone-danger-bg);
+  border: 1px solid var(--tone-danger);
+}

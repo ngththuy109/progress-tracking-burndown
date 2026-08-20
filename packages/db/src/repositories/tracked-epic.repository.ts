@@ -94,6 +94,21 @@ export async function listVisibleActiveEpics(
 }
 
 /**
+ * MỌI Epic đang theo dõi — KHÔNG lọc trạng thái, KHÔNG lọc quyền.
+ *
+ * Cho báo cáo lưới PIC × ngày, vốn gộp worklog của toàn bộ dữ liệu đã sync (kể
+ * cả Epic PAUSED/ERROR). Chỉ dùng để chọn múi giờ tham chiếu + tra tên; việc gom
+ * worklog KHÔNG lọc theo tập này (còn bắt cả worklog mồ côi của Epic đã bỏ theo
+ * dõi nếu dữ liệu vẫn còn).
+ */
+export async function listAllEpicCalendars(prisma: PrismaClient): Promise<VisibleEpicRow[]> {
+  return prisma.trackedEpic.findMany({
+    select: { epicKey: true, projectKey: true, calendarId: true },
+    orderBy: { epicKey: 'asc' },
+  });
+}
+
+/**
  * Trường nào cũng có thể vắng mặt. Viết `| undefined` tường minh vì dự án bật
  * `exactOptionalPropertyTypes`: ở chế độ đó `status?: string` nghĩa là "được
  * phép vắng mặt" chứ KHÔNG phải "được phép bằng undefined".
